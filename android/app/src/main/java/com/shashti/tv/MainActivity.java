@@ -11,7 +11,9 @@ import android.os.Bundle;
 import android.os.Message;
 import android.os.Environment;
 import android.provider.MediaStore;
+import android.os.SystemClock;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
@@ -45,6 +47,8 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> fileCallback;
     private WebViewAssetLoader assets;
     private AdBlock adblock;
+    private CursorView cursor;
+    private int repeat = 0;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -53,6 +57,9 @@ public class MainActivity extends Activity {
         root = new FrameLayout(this);
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        cursor = new CursorView(this);
+        cursor.setVisibility(View.GONE);
+        root.addView(cursor, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
 
         assets = new WebViewAssetLoader.Builder()
@@ -190,6 +197,71 @@ public class MainActivity extends Activity {
     private boolean atHome() {
         String u = web.getUrl();
         return u == null || u.startsWith("https://appassets.androidplatform.net/");
+    }
+
+    /** Remote control on websites: arrows move a pointer, OK taps, edges scroll. */
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent e) {
+        boolean pointer = customView == null && !atHome();
+        cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        if (!pointer) return super.dispatchKeyEvent(e);
+        int code = e.getKeyCode();
+        float d = getResources().getDisplayMetrics().density;
+        int w = root.getWidth(), h = root.getHeight();
+        switch (code) {
+            case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_DPAD_RIGHT: {
+                if (e.getAction() == KeyEvent.ACTION_UP) { repeat = 0; return true; }
+                if (e.getAction() != KeyEvent.ACTION_DOWN) return true;
+                repeat = e.getRepeatCount() == 0 ? 0 : repeat + 1;
+                float step = d * Math.min(8 + repeat * 3, 45);
+                if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
+                float margin = 30 * d;
+                if (code == KeyEvent.KEYCODE_DPAD_UP) {
+                    if (cursor.y - step < margin) scrollPage(-step * 2.5f); else cursor.y -= step;
+                } else if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                    if (cursor.y + step > h - margin) scrollPage(step * 2.5f); else cursor.y += step;
+                } else if (code == KeyEvent.KEYCODE_DPAD_LEFT) {
+                    cursor.x = Math.max(0, cursor.x - step);
+                } else {
+                    cursor.x = Math.min(w - 4 * d, cursor.x + step);
+                }
+                cursor.invalidate();
+                return true;
+            }
+            case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER: case KeyEvent.KEYCODE_NUMPAD_ENTER: {
+                if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) tapAtCursor();
+                return true;
+            }
+            case KeyEvent.KEYCODE_PAGE_DOWN: case KeyEvent.KEYCODE_CHANNEL_DOWN:
+                if (e.getAction() == KeyEvent.ACTION_DOWN) scrollPage(h * 0.8f);
+                return true;
+            case KeyEvent.KEYCODE_PAGE_UP: case KeyEvent.KEYCODE_CHANNEL_UP:
+                if (e.getAction() == KeyEvent.ACTION_DOWN) scrollPage(-h * 0.8f);
+                return true;
+        }
+        return super.dispatchKeyEvent(e);
+    }
+
+    private void scrollPage(float dy) {
+        float d = getResources().getDisplayMetrics().density;
+        int css = Math.round(dy / d);
+        // scroll the page and, if it scrolls inside a box, the element under the pointer
+        web.evaluateJavascript("(function(){var y=" + css + ",x=" + Math.round(cursor.x / d) + ",yy=" + Math.round(cursor.y / d) + ";" +
+            "var el=document.elementFromPoint(x,yy),b=window.scrollY;window.scrollBy(0,y);if(window.scrollY!==b)return;" +
+            "while(el&&el!==document.body){var s=getComputedStyle(el).overflowY;if((s=='auto'||s=='scroll')&&el.scrollHeight>el.clientHeight){el.scrollBy(0,y);return}el=el.parentElement}})()", null);
+    }
+
+    private void tapAtCursor() {
+        long t = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
+        MotionEvent up = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, cursor.x, cursor.y, 0);
+        down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        web.dispatchTouchEvent(down);
+        web.dispatchTouchEvent(up);
+        down.recycle();
+        up.recycle();
     }
 
     @Override
