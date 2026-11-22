@@ -59,10 +59,13 @@ public class MainActivity extends Activity {
         android.widget.TextView b = new android.widget.TextView(this);
         b.setText(text);
         b.setTextColor(0xFFFFFFFF);
-        b.setTextSize(18);
-        b.setPadding(28, 12, 28, 12);
+        b.setTextSize(22);
+        b.setGravity(android.view.Gravity.CENTER);
+        int sz = (int) (52 * getResources().getDisplayMetrics().density);
+        b.setWidth(sz); b.setHeight(sz);
         android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(color); bg.setCornerRadius(40);
+        bg.setColor(color); bg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        bg.setStroke((int) (2 * getResources().getDisplayMetrics().density), 0xAAFFFFFF);
         b.setBackground(bg);
         return b;
     }
@@ -70,8 +73,8 @@ public class MainActivity extends Activity {
     private boolean onButton(View b) {
         int[] p = new int[2], q = new int[2];
         b.getLocationOnScreen(p); root.getLocationOnScreen(q);
-        float x = p[0] - q[0], y = p[1] - q[1];
-        return cursor.x >= x && cursor.x <= x + b.getWidth() && cursor.y >= y && cursor.y <= y + b.getHeight();
+        float x = p[0] - q[0], y = p[1] - q[1], pad = 14 * getResources().getDisplayMetrics().density;
+        return cursor.x >= x - pad && cursor.x <= x + b.getWidth() + pad && cursor.y >= y - pad && cursor.y <= y + b.getHeight() + pad;
     }
     private int repeat = 0;
     private boolean longPressed = false;
@@ -120,17 +123,18 @@ public class MainActivity extends Activity {
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
         // on-screen buttons in the top-left corner: previous page / home (press OK on them with the pointer)
         navBar = new android.widget.LinearLayout(this);
-        navBar.setOrientation(android.widget.LinearLayout.HORIZONTAL);
-        backBtn = navButton("⬅ رجوع", 0xCCE50914);
-        homeBtn = navButton("🏠 الرئيسية", 0xCC333333);
+        navBar.setOrientation(android.widget.LinearLayout.VERTICAL);
+        backBtn = navButton("⬅", 0xCCE50914);
+        homeBtn = navButton("🏠", 0xCC333333);
         navBar.addView(backBtn);
         android.widget.LinearLayout.LayoutParams gap = new android.widget.LinearLayout.LayoutParams(-2, -2);
-        gap.setMargins(12, 0, 0, 0);
+        gap.setMargins(0, (int) (14 * getResources().getDisplayMetrics().density), 0, 0);
         navBar.addView(homeBtn, gap);
         navBar.setVisibility(View.GONE);
         FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(-2, -2);
-        bl.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.LEFT;
-        bl.setMargins(16, 0, 0, 16);
+        // small round buttons on the left edge, middle height: inside the TV's safe area and away from site menus
+        bl.gravity = android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.LEFT;
+        bl.setMargins((int) (30 * getResources().getDisplayMetrics().density), 0, 0, 0);
         root.addView(navBar, bl);
         backBtn.setOnClickListener(v -> goBackPage());
         homeBtn.setOnClickListener(v -> web.loadUrl(HOME));
