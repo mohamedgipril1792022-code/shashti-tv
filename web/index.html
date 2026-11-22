@@ -100,7 +100,7 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'١٤',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٥:١٠ م'};
+const VERSION={n:'١٥',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٥:٢٠ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -231,7 +231,15 @@ function fileToIcon(file){return new Promise((res,rej)=>{
 
 /* ---------- modal ---------- */
 let lastFocus=null;
-function openModal(html){lastFocus=document.activeElement;$('#box').innerHTML=html;$('#modal').classList.add('open');setTimeout(()=>{const f=$('#box input,#box select,#box button');f&&f.focus()},30)}
+function guardInputs(root){root.querySelectorAll('input:not([type=file]),textarea').forEach(i=>{
+  if(i.dataset.g)return;i.dataset.g='1';i.readOnly=true;
+  const arm=()=>{if(i.readOnly){i.readOnly=false;i.blur();setTimeout(()=>{i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}},15)}};
+  i.addEventListener('pointerdown',()=>{i.readOnly=false});
+  i.addEventListener('click',arm);
+  i.addEventListener('keydown',e=>{if((e.key==='Enter'||e.keyCode===23)&&i.readOnly){e.preventDefault();arm()}});
+  i.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==i)i.readOnly=true},60));
+})}
+function openModal(html){lastFocus=document.activeElement;$('#box').innerHTML=html;guardInputs($('#box'));$('#modal').classList.add('open');setTimeout(()=>{const f=$('#box input,#box select,#box button');f&&f.focus()},30)}
 function closeModal(){$('#modal').classList.remove('open');$('#box').innerHTML='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
 function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
@@ -249,7 +257,7 @@ function iconPicker(cur,name){
    <div class="hint">اختار أي صورة من الفون (بوستر أو لوجو) — هتتقص مربع تلقائي.</div></div></div>`;
 }
 function wirePicker(state){
-  const draw=()=>{const pv=$('#pv');pv.innerHTML='';pv.appendChild(tileEl({name:state.nameFn(),icon:state.icon}))};
+  const draw=()=>{const pv=$('#pv');pv.innerHTML='';const t=tileEl({name:state.nameFn(),icon:state.icon});t.removeAttribute('data-nav');t.removeAttribute('href');t.tabIndex=-1;pv.appendChild(t)};
   draw();
   $('#fi').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{state.icon=await fileToIcon(f);draw()}catch(_){toast('تعذّر قراءة الصورة')}};
   $('#rmImg').onclick=()=>{state.icon='';draw()};
@@ -259,17 +267,21 @@ function wirePicker(state){
 function openSite(s){
   const isNew=!s;s=s||{};
   openModal(`<h3>${isNew?'إضافة موقع':'تعديل الموقع'}</h3>
+   <label>🔎 دوّر على الموقع في جوجل</label><input id="gsq" type="search" placeholder="اكتب اسم الموقع" data-nav>
+   <a class="fbtn g" id="gs2" data-nav target="_blank" rel="noopener" href="https://www.google.com/">🔎 ابحث في جوجل</a>
+   <div class="hint">افتح الموقع من النتايج. في تطبيق الـTV: دوس Menu (أو OK ضغطة طويلة) ← «أضف الموقع ده» ويتحط الرابط لوحده.</div>
    <label>الاسم اللي يظهر على الأيقونة</label><input id="fn" placeholder="اسم الموقع" value="${esc(s.name)}" data-nav>
    <label>الرابط (URL)</label><input id="fu" dir="ltr" inputmode="url" placeholder="https://example.com" value="${esc(s.url)}" data-nav>
-   <a class="fbtn g" id="gs2" data-nav target="_blank" rel="noopener" href="https://www.google.com/">🔎 مش عارف الرابط؟ ابحث بالاسم في جوجل</a>
-   <div class="hint">افتح الموقع من النتايج، انسخ الرابط من شريط العنوان، وارجع الصقه في خانة الرابط.</div>
    ${iconPicker()}
    <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
   const st={icon:s.icon||'',nameFn:()=>$('#fn').value.trim()||hostOf(normUrl($('#fu').value))||'موقع'};
   const draw=wirePicker(st);
-  const gl=()=>{const n=$('#fn').value.trim();$('#gs2').href=n?'https://www.google.com/search?q='+encodeURIComponent(n):'https://www.google.com/'};gl();
+  const gq=()=>$('#gsq').value.trim()||$('#fn').value.trim();
+  const gl=()=>{const n=gq();$('#gs2').href=n?'https://www.google.com/search?q='+encodeURIComponent(n):'https://www.google.com/'};gl();
+  $('#gsq').oninput=()=>{gl()};
+  $('#gsq').addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('#gsq').readOnly&&gq()){e.preventDefault();$('#gs2').click()}});
   $('#fn').oninput=()=>{draw();gl()};$('#fu').oninput=draw;
-  $('#gs2').onclick=e=>{if(!$('#fn').value.trim()){e.preventDefault();toast('اكتب اسم الموقع الأول');$('#fn').focus()}};
+  $('#gs2').onclick=e=>{if(!gq()){e.preventDefault();toast('اكتب اسم الموقع الأول');$('#gsq').focus()}else if(!$('#fn').value.trim()){$('#fn').value=$('#gsq').value.trim();draw()}};
   $('#cc').onclick=closeModal;
   if(!isNew)$('#dl').onclick=()=>confirmBox('تحذف «'+s.name+'»؟',()=>{del(s.id);del('v-'+s.id)});
   $('#sv').onclick=()=>{
@@ -382,20 +394,28 @@ document.addEventListener('keydown',e=>{
   const dirs={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
   const d=dirs[e.key];if(!d)return;
   const tg=e.target;
-  if(tg.matches&&tg.matches('input:not([type=file]),select')&&d[1]===0)return;
+  const editing=tg.matches&&((tg.matches('input:not([type=file])')&&!tg.readOnly)||tg.matches('select'));
+  if(editing&&d[1]===0)return;
   if(tg.matches&&tg.matches('select')&&d[0]===0&&!e.altKey){/* allow up/down to leave select */}
   const scope=open?'#box [data-nav]':'body > header [data-nav], .search [data-nav], main [data-nav], footer [data-nav]';
   const els=[...document.querySelectorAll(scope)].filter(el=>el.offsetParent!==null);
   if(!els.length)return;
   const cur=document.activeElement;
   if(!els.includes(cur)){e.preventDefault();els[0].focus();return}
+  if(open){ // dialogs: strictly top to bottom, in order
+    const i=els.indexOf(cur),next=(d[1]>0||d[0]<0)?i+1:i-1;
+    e.preventDefault();if(next>=0&&next<els.length){els[next].focus();els[next].scrollIntoView({block:'nearest'})}
+    return;
+  }
   const r=cur.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
   let best=null,bs=Infinity;
-  for(const el of els){if(el===cur)continue;const q=el.getBoundingClientRect();
+  const ver=$('#ver');
+  for(const el of els){if(el===cur||el===ver)continue;const q=el.getBoundingClientRect();
     const dx=q.left+q.width/2-cx,dy=q.top+q.height/2-cy;
     const along=dx*d[0]+dy*d[1];if(along<=4)continue;
     const perp=Math.abs(dx*d[1])+Math.abs(dy*d[0]);
     const sc=along+perp*2.5;if(sc<bs){bs=sc;best=el}}
+  if(!best&&d[1]>0&&cur!==ver)best=ver; // version label only after everything else
   if(best){e.preventDefault();best.focus({preventScroll:true});best.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}
 });
 
@@ -433,6 +453,7 @@ window.quickAdd=function(kind,url,title){
 };
 $('#bk').onclick=exportData;$('#rs').onclick=importData;
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+guardInputs(document);
 loadLocal();render();
 setInterval(()=>{if(!$('#modal').classList.contains('open'))render()},60000);
 </script>
