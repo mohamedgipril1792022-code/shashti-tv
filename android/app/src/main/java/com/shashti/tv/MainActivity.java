@@ -106,10 +106,15 @@ public class MainActivity extends Activity {
                 if (!"http".equals(sc) && !"https".equals(sc)) return true; // ignore intent://, market:// ...
                 String host = r.getUrl().getHost();
                 if (adblock.isAd(host)) { blockedToast(); return true; }
-                if (adblock.enabled() && r.isForMainFrame() && !atHome() && Build.VERSION.SDK_INT >= 24
-                        && !r.isRedirect() && !r.hasGesture()) {
+                if (adblock.enabled() && r.isForMainFrame() && !atHome() && Build.VERSION.SDK_INT >= 24 && !r.isRedirect()) {
                     String cur = Uri.parse(web.getUrl()).getHost();
-                    if (!AdBlock.sameSite(cur, host)) { blockedToast(); return true; } // silent jump to another site
+                    boolean fromSearch = cur != null && (cur.contains("google.") || cur.contains("bing.") || cur.contains("duckduckgo."));
+                    if (!fromSearch && !AdBlock.sameSite(cur, host)) {
+                        // a click on the player that jumps to another site is almost always an ad
+                        lastBlocked = r.getUrl().toString();
+                        blockedToast();
+                        return true;
+                    }
                 }
                 return false;
             }
@@ -169,6 +174,7 @@ public class MainActivity extends Activity {
 
     private void openPopup(String url, boolean gesture) {
         String host = Uri.parse(url).getHost();
+        if (!adblock.isAd(host)) lastBlocked = url;
         if (atHome()) { // links from the launcher itself
             web.loadUrl(url);
             return;
@@ -180,6 +186,7 @@ public class MainActivity extends Activity {
     }
 
     private long lastToast = 0;
+    private String lastBlocked = null;
     private void blockedToast() {
         adblock.blocked++;
         long now = System.currentTimeMillis();
@@ -193,11 +200,23 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط"};
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "↪ افتح آخر صفحة اتمنعت", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)")};
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(items, (dlg, which) -> {
                 if (which == 0) { web.loadUrl(HOME); return; }
+                if (which == 4) {
+                    if (lastBlocked == null) { Toast.makeText(this, "مفيش صفحة اتمنعت", Toast.LENGTH_SHORT).show(); return; }
+                    String go = lastBlocked; lastBlocked = null;
+                    adblock.setEnabled(false); web.loadUrl(go); adblock.setEnabled(true);
+                    return;
+                }
+                if (which == 5) {
+                    adblock.setEnabled(!adblock.enabled());
+                    Toast.makeText(this, adblock.enabled() ? "🛡 مانع الإعلانات اشتغل" : "مانع الإعلانات اتقفل", Toast.LENGTH_SHORT).show();
+                    web.reload();
+                    return;
+                }
                 if (which == 3) {
                     android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
                     cm.setPrimaryClip(android.content.ClipData.newPlainText("url", url));
