@@ -393,6 +393,24 @@ public class MainActivity extends Activity {
             }
             return true;
         }
+        // full-screen video: ◀ ▶ seek (faster when held), OK play/pause
+        if (customView != null) {
+            if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_MEDIA_REWIND || code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) {
+                if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                    int r = e.getRepeatCount();
+                    if (r == 0 || r % 3 == 0) {
+                        int step = r == 0 ? 10 : r < 30 ? 30 : 60;
+                        boolean back = code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_MEDIA_REWIND;
+                        media("seek", back ? -step : step);
+                    }
+                }
+                return true;
+            }
+            if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || code == KeyEvent.KEYCODE_SPACE) {
+                if (e.getAction() == KeyEvent.ACTION_UP) media("toggle", 0);
+                return true;
+            }
+        }
         boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
         navBar.setVisibility(pointer ? View.VISIBLE : View.GONE);
@@ -429,6 +447,16 @@ public class MainActivity extends Activity {
     private static final String BACK_JS = "(function(){var f=window.__shFs;if(f){f.el.setAttribute('style',f.st);window.__shFs=null;document.documentElement.style.overflow='';return 'fs'}if(window.__sajoCloseAd){if(__sajoCloseAd())return 'ad';var n=0;for(var i=0;i<frames.length;i++){try{frames[i].postMessage({sajoCloseAd:1},'*');n++}catch(e){}}return n?'ask':''}var vw=innerWidth,vh=innerHeight,va=vw*vh,fs=document.fullscreenElement||document.webkitFullscreenElement;function isPlayer(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;var fr=e.tagName==='IFRAME'?[e]:e.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){var x=fr[i];if(x.hasAttribute('allowfullscreen')||x.hasAttribute('webkitallowfullscreen')||/fullscreen/i.test(x.getAttribute('allow')||'')||/embed|player|video|stream/i.test(x.src||''))return true}return false}function cands(e){var l=[];for(var n=e;n&&n!==document.body&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n),p=st.position;if(p!=='fixed'&&!(p==='absolute'&&(parseInt(st.zIndex)||0)>=1000))continue;var r=n.getBoundingClientRect();var a=Math.max(0,Math.min(r.right,vw)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,0));if(a<va*0.04)continue;if(r.top<=4&&r.height<vh*0.2&&r.width>vw*0.8)continue;l.unshift(n)}return l}var pts=[[.5,.5],[.3,.45],[.7,.45],[.5,.75],[.3,.7],[.7,.7],[.5,.92],[.5,.3]];for(var i=0;i<pts.length;i++){var x=vw*pts[i][0],y=vh*pts[i][1];var st=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];var top=st[0];if(!top)continue;var l=cands(top);for(var j=0;j<l.length;j++){var c=l[j];if(fs&&(c.contains(fs)||fs.contains(c)))continue;if(isPlayer(c))continue;c.remove();document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';return 'ad'}}return ''})()";
 
     private volatile boolean adClosedInFrame = false;
+    private Toast mediaToast;
+
+    private void media(String cmd, int d) {
+        web.evaluateJavascript("window.__sajoMedia&&__sajoMedia('" + cmd + "'," + d + ")", null);
+    }
+
+    private static String hms(double t) {
+        int s = (int) Math.max(0, t), h = s / 3600, m = s / 60 % 60;
+        return h > 0 ? String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, s % 60) : String.format(java.util.Locale.US, "%d:%02d", m, s % 60);
+    }
 
     private void zapAtCursor() {
         float d = getResources().getDisplayMetrics().density;
@@ -841,6 +869,15 @@ public class MainActivity extends Activity {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
+        @JavascriptInterface
+        public void mediaInfo(String cmd, double cur, double dur, boolean paused) {
+            runOnUiThread(() -> {
+                String t = (cmd.equals("toggle") ? (paused ? "⏸ " : "▶ ") : "⏩ ") + hms(cur) + (dur > 0 ? " / " + hms(dur) : "");
+                if (mediaToast != null) mediaToast.cancel();
+                mediaToast = Toast.makeText(MainActivity.this, t, Toast.LENGTH_SHORT);
+                mediaToast.show();
+            });
+        }
         @JavascriptInterface
         public void zapped(String r) { zapResult(r == null ? "" : r); }
         @JavascriptInterface
