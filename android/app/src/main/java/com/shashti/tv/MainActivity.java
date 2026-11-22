@@ -532,8 +532,23 @@ public class MainActivity extends Activity {
     private void zapAtCursor2() {
         float d = getResources().getDisplayMetrics().density;
         if (cursor.x < 0) { Toast.makeText(this, "حرّك الماوس على الإعلان الأول", Toast.LENGTH_SHORT).show(); return; }
+        zapReplied = false;
         web.evaluateJavascript("window.__sajoZap?__sajoZap(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + "):'none'",
-            v -> { if (v != null && !v.contains("frame")) zapResult(v); });
+            v -> {
+                if (v != null && (v.contains("ok") || v.contains("video"))) { zapReplied = true; zapResult(v); }
+                // nothing found right under the pointer (or the frame didn't answer): look for any ad over the video
+                else web.postDelayed(() -> { if (!zapReplied) zapFallback(); }, v != null && v.contains("frame") ? 600 : 0);
+            });
+    }
+
+    private volatile boolean zapReplied = false;
+
+    private void zapFallback() {
+        adClosedInFrame = false;
+        web.evaluateJavascript(ASK_FRAMES_JS, v -> web.postDelayed(() -> {
+            boolean ok = adClosedInFrame || (v != null && v.contains("ad"));
+            Toast.makeText(this, ok ? "🧹 اتشال" : "مفيش إعلان لقيته — جرّب تحط الماوس على الإعلان نفسه", Toast.LENGTH_SHORT).show();
+        }, 400));
     }
 
     private void zapResult(String v) {
@@ -967,7 +982,9 @@ public class MainActivity extends Activity {
             });
         }
         @JavascriptInterface
-        public void zapped(String r) { zapResult(r == null ? "" : r); }
+        public void zapped(String r) {
+            if (r != null && (r.contains("ok") || r.contains("video"))) { zapReplied = true; zapResult(r); }
+        }
         @JavascriptInterface
         public String sl(String host) { return adblock.stealthConfig(pageHost, host); }
         @JavascriptInterface
