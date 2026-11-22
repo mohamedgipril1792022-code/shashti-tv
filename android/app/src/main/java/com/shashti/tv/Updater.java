@@ -60,7 +60,7 @@ public class Updater {
     }
 
     private static void download(Activity a) {
-        Toast.makeText(a, "⬇ بنزّل التحديث…", Toast.LENGTH_LONG).show();
+        Toast.makeText(a, "⬇ بنزّل التحديث… ثواني والتثبيت هيفتح لوحده", Toast.LENGTH_LONG).show();
         new Thread(() -> {
             try {
                 byte[] apk = get(APK_URL);
@@ -73,9 +73,20 @@ public class Updater {
         }).start();
     }
 
+    private static File pending = null;
+
+    /** Back from the "allow installs" screen: carry on with the install by itself. */
+    static void resume(Activity a) {
+        if (pending == null) return;
+        if (Build.VERSION.SDK_INT >= 26 && !a.getPackageManager().canRequestPackageInstalls()) return;
+        File f = pending; pending = null;
+        install(a, f);
+    }
+
     private static void install(Activity a, File f) {
         if (Build.VERSION.SDK_INT >= 26 && !a.getPackageManager().canRequestPackageInstalls()) {
-            Toast.makeText(a, "اسمح للتطبيق إنه يثبّت التحديثات، وبعدين ارجع ودوس تحديث تاني", Toast.LENGTH_LONG).show();
+            pending = f;
+            Toast.makeText(a, "اسمح للتطبيق إنه يثبّت التحديثات وارجع — التثبيت هيكمّل لوحده", Toast.LENGTH_LONG).show();
             a.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + a.getPackageName())));
             return;
         }
