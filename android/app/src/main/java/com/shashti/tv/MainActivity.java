@@ -590,11 +590,11 @@ public class MainActivity extends Activity {
                     web.postDelayed(() -> {
                         if (adClosedInFrame) Toast.makeText(this, "🛡 اتقفل إعلان", Toast.LENGTH_SHORT).show();
                         // no ad: leave the full-screen player first, then go back
-                        else web.evaluateJavascript(UNSTRETCH_JS, r -> { if (r != null && r.contains("fs")) setStretched(false); else goBackPage(); });
+                        else web.evaluateJavascript(UNSTRETCH_JS, r -> { if ((r != null && r.contains("fs")) || stretched) setStretched(false); else goBackPage(); });
                     }, 350);
                 }
                 else if (v != null && v.contains("ad")) Toast.makeText(this, "🛡 اتقفل إعلان", Toast.LENGTH_SHORT).show();
-                else if (v != null && v.contains("fs")) setStretched(false);
+                else if ((v != null && v.contains("fs")) || stretched) setStretched(false);
                 else goBackPage();
             }));
             return;
@@ -901,7 +901,8 @@ public class MainActivity extends Activity {
             "🔍 المشغّل مش شغال؟ شوف اللي اتمنع في الصفحة دي",
             "🧾 سجل أخطاء الصفحة",
             "🧹 شيل الإعلان اللي تحت الماوس",
-            "🔬 افحص اللي تحت الماوس (صوّرهولي)"
+            "🔬 افحص اللي تحت الماوس (صوّرهولي)",
+            "🎬 تحكم في الفيديو بالريموت (◀ ▶ تقديم · OK تشغيل)"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -957,6 +958,7 @@ public class MainActivity extends Activity {
                     case 12: showLog(); break;
                     case 13: zapAtCursor(); break;
                     case 14: probeAtCursor(); break;
+                    case 15: setStretched(true); showMediaBar("🎬 التحكم في الفيديو — ◀ ترجيع · OK تشغيل/إيقاف · تقديم ▶ · Back خروج"); media("info", 0); break;
                 }
             })
             .show();
