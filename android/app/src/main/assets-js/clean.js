@@ -24,6 +24,8 @@
         return r.width>0 && r.width<90 && r.height<90 && (/^(×|✕|✖|x|close|إغلاق|اغلاق|skip|تخطي)$/i.test(t) || /close|dismiss|btn-x/i.test(cl));
       })[0];
       if (x) { x.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); return true; }
+      // no ✕ at all: ask the page around this frame to remove the frame itself
+      try { parent.postMessage({shashti:'removeMe'}, '*'); return true; } catch(e) {}
       return false;
     }
     c.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});
@@ -39,7 +41,17 @@
     return true;
   }
   window.addEventListener('message', function(ev){
-    var d=ev.data; if (!d || d.shashti!=='close') return;
+    var d=ev.data;
+    if (d && d.shashti==='removeMe') {   // a frame showing a lock/scam page asked to be removed
+      var fs=document.querySelectorAll('iframe');
+      for (var k=0;k<fs.length;k++){ if (fs[k].contentWindow===ev.source) {
+        var t=fs[k]; for (var e=t; e && e!==document.body; e=e.parentElement){ if (getComputedStyle(e).position==='fixed') { t=e; break; } }
+        if (t.tagName==='IFRAME' && t.hasAttribute('allowfullscreen')) return; // never the real player
+        t.remove(); try { window.Android && Android.closedInFrame(); } catch(x) {}
+      } }
+      return;
+    }
+    if (!d || d.shashti!=='close') return;
     var fr=document.querySelectorAll('iframe');
     for (var i=0;i<fr.length;i++){ try { fr[i].contentWindow.postMessage({shashti:'close'}, '*'); } catch(x) {} }
     if (window!==top && closeHere()) { try { window.Android && Android.closedInFrame(); } catch(x) {} }
