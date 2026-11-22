@@ -148,7 +148,20 @@ public class MainActivity extends Activity {
 
     private void openPopup(String url, boolean gesture) {
         String host = Uri.parse(url).getHost();
-        if (atHome()) { web.loadUrl(url); return; } // links from the launcher itself
+        if (atHome()) { // links from the launcher itself
+            if (host != null && host.contains("google.") && url.contains("/search")) {
+                try {
+                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                    i.addCategory(Intent.CATEGORY_BROWSABLE);
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                    Toast.makeText(this, "انسخ رابط الموقع من المتصفح وارجع للبرنامج", Toast.LENGTH_LONG).show();
+                    return;
+                } catch (Exception noBrowser) { /* no browser on the box: open inside the app */ }
+            }
+            web.loadUrl(url);
+            return;
+        }
         if (!adblock.enabled()) { web.loadUrl(url); return; }
         String cur = Uri.parse(web.getUrl()).getHost();
         if (gesture && !adblock.isAd(host) && AdBlock.sameSite(cur, host)) { web.loadUrl(url); return; }
