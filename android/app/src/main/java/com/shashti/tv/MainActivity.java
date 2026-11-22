@@ -187,11 +187,17 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة"};
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط"};
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(items, (dlg, which) -> {
                 if (which == 0) { web.loadUrl(HOME); return; }
+                if (which == 3) {
+                    android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("url", url));
+                    Toast.makeText(this, "📋 اتنسخ: " + url, Toast.LENGTH_LONG).show();
+                    return;
+                }
                 String kind = which == 1 ? "site" : "cont";
                 String target = which == 1 ? Uri.parse(url).getScheme() + "://" + Uri.parse(url).getHost() + "/" : url;
                 pendingAdd = "quickAdd(" + org.json.JSONObject.quote(kind) + "," + org.json.JSONObject.quote(target) + "," + org.json.JSONObject.quote(title) + ")";
