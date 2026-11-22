@@ -129,8 +129,8 @@ public class MainActivity extends Activity {
         navBar.addView(homeBtn, gap);
         navBar.setVisibility(View.GONE);
         FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(-2, -2);
-        bl.gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
-        bl.setMargins(16, 16, 0, 0);
+        bl.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.LEFT;
+        bl.setMargins(16, 0, 0, 16);
         root.addView(navBar, bl);
         backBtn.setOnClickListener(v -> goBackPage());
         homeBtn.setOnClickListener(v -> web.loadUrl(HOME));
@@ -573,8 +573,15 @@ public class MainActivity extends Activity {
         final float d = getResources().getDisplayMetrics().density;
         if (!refresherOn) { refresherOn = true; web.post(boxRefresher); }
         if (cursor.x < 0) { cursor.x = root.getWidth() / 2f; cursor.y = root.getHeight() / 2f; }
-        float[][] bx = boxes;
-        if (bx.length == 0 || System.currentTimeMillis() - boxesAt > 8000) { refreshBoxes(); freeMove(code, 0); return; }
+        float[][] bx0 = boxes;
+        if (bx0.length == 0 || System.currentTimeMillis() - boxesAt > 8000) { refreshBoxes(); freeMove(code, 0); return; }
+        float[][] bx = java.util.Arrays.copyOf(bx0, bx0.length + 2);
+        int k = bx0.length;
+        for (View nb : new View[]{backBtn, homeBtn}) {
+            int[] p = new int[2], q = new int[2];
+            nb.getLocationOnScreen(p); root.getLocationOnScreen(q);
+            bx[k++] = new float[]{scrX + (p[0] - q[0]) / d, scrY + (p[1] - q[1]) / d, nb.getWidth() / d, nb.getHeight() / d};
+        }
         int dx = code == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
         int dy = code == KeyEvent.KEYCODE_DPAD_UP ? -1 : code == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : 0;
         float vw = root.getWidth() / d, vh = root.getHeight() / d;
@@ -600,8 +607,9 @@ public class MainActivity extends Activity {
             if (sc < bs) { bs = sc; best = b; }
         }
         if (best == null) {
-            if (dy != 0) { scrollPage(dy * root.getHeight() * 0.6f); web.postDelayed(this::refreshBoxes, 350); }
-            else freeMove(code, 0);
+            boolean atTop = scrY <= 1, atBottom = scrY + vh >= docH - 2;
+            if ((dy < 0 && !atTop) || (dy > 0 && !atBottom)) { scrollPage(dy * root.getHeight() * 0.6f); web.postDelayed(this::refreshBoxes, 350); }
+            else freeMove(code, 0);   // top/bottom of the page or sideways: let the pointer move on its own
             return;
         }
         float ex = best[0] + Math.min(best[2], vw) / 2, ey = best[1] + Math.min(best[3], vh * 0.8f) / 2;
