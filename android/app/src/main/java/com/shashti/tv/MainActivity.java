@@ -456,9 +456,9 @@ public class MainActivity extends Activity {
                 if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
                 float margin = 30 * d;
                 if (code == KeyEvent.KEYCODE_DPAD_UP) {
-                    if (cursor.y - step < margin) scrollPage(-step * 2.5f); else cursor.y -= step;
+                    if (cursor.y - step < margin) scrollPage(-Math.min(step * 1.5f, 90 * d)); else cursor.y -= step;
                 } else if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    if (cursor.y + step > h - margin) scrollPage(step * 2.5f); else cursor.y += step;
+                    if (cursor.y + step > h - margin) scrollPage(Math.min(step * 1.5f, 90 * d)); else cursor.y += step;
                 } else if (code == KeyEvent.KEYCODE_DPAD_LEFT) {
                     cursor.x = Math.max(0, cursor.x - step);
                 } else {
@@ -552,7 +552,7 @@ public class MainActivity extends Activity {
         float targetY = ey - scrY;
         if (targetY < 40 || targetY > vh - 40) {                                 // off screen: bring it to the middle
             float newY = Math.max(0, Math.min(ey - vh / 2, Math.max(0, docH - vh)));
-            web.evaluateJavascript("window.scrollTo(" + Math.round(scrX) + "," + Math.round(newY) + ")", null);
+            web.evaluateJavascript("window.scrollTo({left:" + Math.round(scrX) + ",top:" + Math.round(newY) + ",behavior:'instant'})", null);
             scrY = newY;
             targetY = ey - newY;
             { web.removeCallbacks(boxesLater); web.postDelayed(boxesLater, 350); }
@@ -576,6 +576,10 @@ public class MainActivity extends Activity {
     private void scrollPage(float dy) {
         web.removeCallbacks(boxesLater);
         web.postDelayed(boxesLater, 500);
+        // the page itself scrolls natively: instant and smooth while an arrow is held (no JS, no fighting
+        // the site's own smooth-scroll animation, which made the screen shake)
+        int dir = dy > 0 ? 1 : -1;
+        if (dy != 0 && pendingScroll == 0 && !scrolling && web.canScrollVertically(dir)) { web.scrollBy(0, Math.round(dy)); return; }
         pendingScroll += dy;
         if (scrolling) return;
         scrolling = true;
@@ -584,8 +588,8 @@ public class MainActivity extends Activity {
         pendingScroll = 0;
         // scroll the page and, if it scrolls inside a box, the element under the pointer
         web.evaluateJavascript("(function(){var y=" + css + ",x=" + Math.round(cursor.x / d) + ",yy=" + Math.round(cursor.y / d) + ";" +
-            "var el=document.elementFromPoint(x,yy),b=window.scrollY;window.scrollBy(0,y);if(window.scrollY!==b)return;" +
-            "while(el&&el!==document.body){var s=getComputedStyle(el).overflowY;if((s=='auto'||s=='scroll')&&el.scrollHeight>el.clientHeight){el.scrollBy(0,y);return}el=el.parentElement}})()",
+            "var el=document.elementFromPoint(x,yy),b=window.scrollY;window.scrollBy({top:y,behavior:'instant'});if(window.scrollY!==b)return;" +
+            "while(el&&el!==document.body){var s=getComputedStyle(el).overflowY;if((s=='auto'||s=='scroll')&&el.scrollHeight>el.clientHeight){el.scrollBy({top:y,behavior:'instant'});return}el=el.parentElement}})()",
             v -> { scrolling = false; if (pendingScroll != 0) scrollPage(0); });
     }
 
