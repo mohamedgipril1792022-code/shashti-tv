@@ -131,12 +131,17 @@ public class MainActivity extends Activity {
             public boolean onCreateWindow(WebView view, boolean dialog, boolean gesture, Message msg) {
                 // catch the popup's address, then decide: open it here or drop it
                 WebView tmp = new WebView(MainActivity.this);
+                final boolean[] done = {false};
                 tmp.setWebViewClient(new WebViewClient() {
                     @Override
                     public boolean shouldOverrideUrlLoading(WebView t, WebResourceRequest r) {
-                        openPopup(r.getUrl().toString(), gesture);
-                        t.destroy();
+                        if (!done[0]) { done[0] = true; openPopup(r.getUrl().toString(), gesture); }
                         return true;
+                    }
+                    @Override
+                    public void onPageStarted(WebView t, String u, android.graphics.Bitmap f) {
+                        // some WebView versions load the first address without asking above
+                        if (!done[0] && u != null && u.startsWith("http")) { done[0] = true; t.stopLoading(); openPopup(u, gesture); }
                     }
                 });
                 ((WebView.WebViewTransport) msg.obj).setWebView(tmp);

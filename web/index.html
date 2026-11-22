@@ -100,7 +100,7 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'١١',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٤:٥٥ م'};
+const VERSION={n:'١٢',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٥:٠٠ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -421,6 +421,8 @@ function drawAb(){const b=$('#ab');if(!AND)return;b.hidden=false;let on=true;try
   b.textContent=on?'🛡 مانع الإعلانات: شغال':'🛡 مانع الإعلانات: مقفول';b.classList.toggle('red',on)}
 $('#ab').onclick=()=>{try{const on=!Android.adblockOn();Android.setAdblock(on);drawAb();toast(on?'مانع الإعلانات اشتغل':'مانع الإعلانات اتقفل')}catch(e){}};
 drawAb();
+// inside the TV app: open links in the same screen (new windows are unreliable in Android WebView)
+if(window.Android){document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[target]');if(a)a.removeAttribute('target')},true)}
 window.quickAdd=function(kind,url,title){
   title=(title||'').split(/[|\-–—]/)[0].trim().slice(0,40);
   if(kind==='site'){const ex=sites().find(x=>hostOf(x.url)===hostOf(url));if(ex){toast('«'+ex.name+'» موجود عندك بالفعل');return}
