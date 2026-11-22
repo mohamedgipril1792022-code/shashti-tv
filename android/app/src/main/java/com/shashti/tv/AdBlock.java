@@ -21,6 +21,9 @@ public class AdBlock {
     private static final String[][] FILTER_LISTS = {
         {"https://easylist.to/easylist/easylist.txt", "easylist.txt", "0"},
         {"https://easylist-downloads.adblockplus.org/Liste_AR.txt", "liste_ar.txt", "1"},
+        // the lists Brave and uBlock Origin use on top of EasyList
+        {"https://ublockorigin.github.io/uAssets/filters/filters.txt", "ubo_filters.txt", "0"},
+        {"https://easylist.to/easylist/easyprivacy.txt", "easyprivacy.txt", "0"},
     };
     /** site -> CSS selectors to hide there (from the lists). */
     private final java.util.Map<String, StringBuilder> cosmetic = new java.util.concurrent.ConcurrentHashMap<>();
@@ -149,7 +152,8 @@ public class AdBlock {
                 int hh = line.indexOf("##");
                 if (hh >= 0) {
                     String sel = line.substring(hh + 2).trim();
-                    if (sel.isEmpty() || sel.contains(":-abp-") || sel.contains(":has-text") || sel.contains(":xpath") || sel.contains("{")) continue;
+                    if (sel.isEmpty() || sel.startsWith("+js") || sel.startsWith("^") || sel.contains(":-abp-") || sel.contains(":has-text") || sel.contains(":xpath")
+                            || sel.contains(":style(") || sel.contains(":remove") || sel.contains(":matches-") || sel.contains(":upward") || sel.contains(":watch-attr") || sel.contains("{")) continue;
                     String doms = line.substring(0, hh).trim();
                     if (doms.isEmpty()) {
                         if (generic) synchronized (genericCss) { if (genericCss.length() > 0) genericCss.append(','); genericCss.append(sel); }
