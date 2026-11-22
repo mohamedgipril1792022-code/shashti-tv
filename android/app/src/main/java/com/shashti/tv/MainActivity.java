@@ -400,7 +400,8 @@ public class MainActivity extends Activity {
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if (e.getAction() != KeyEvent.ACTION_DOWN) return true;
+                if (e.getAction() != KeyEvent.ACTION_DOWN) { hoverAtCursorNow(); return true; }
+                lastKeyAt = SystemClock.uptimeMillis();
                 if (e.getRepeatCount() == 0) pressStart = SystemClock.uptimeMillis();
                 // one press jumps to the next box (link/button); holding the arrow = free mouse
                 if (e.getRepeatCount() == 0 && snapMode()) snapTo(code); else freeMove(code, e.getRepeatCount());
@@ -468,7 +469,7 @@ public class MainActivity extends Activity {
 
     private boolean snapMode() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("snap", true); }
 
-    private static final String COLLECT_JS = "(function(){var vw=innerWidth,vh=innerHeight,sx=scrollX,sy=scrollY,out=[],seen=[];var sel='a[href],button,input:not([type=hidden]),select,textarea,summary,video,iframe,[role=button],[role=link],[role=tab],[role=menuitem],[onclick],[tabindex]:not([tabindex=\"-1\"]),label[for]';function ok(e,r){if(r.width<8||r.height<8)return false;if(r.bottom+sy<0)return false;var st=getComputedStyle(e);return st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0.1}function add(e){var r=e.getBoundingClientRect();if(!ok(e,r))return; for(var i=0;i<seen.length;i++){var p=seen[i];if(p.contains(e)||e.contains(p)){var q=p.getBoundingClientRect();if(Math.abs(q.width-r.width)<12&&Math.abs(q.height-r.height)<12)return}} seen.push(e);out.push([Math.round(r.left+sx),Math.round(r.top+sy),Math.round(r.width),Math.round(r.height)])}var a=document.querySelectorAll(sel);for(var i=0;i<a.length&&out.length<1200;i++)add(a[i]);var b=document.querySelectorAll('div,span,li,img,article,section,figure,h2,h3');for(var j=0;j<b.length&&j<4000&&out.length<1500;j++){var e=b[j];if(e.closest(sel))continue;try{if(getComputedStyle(e).cursor==='pointer')add(e)}catch(x){}}return JSON.stringify({sx:sx,sy:sy,vw:vw,vh:vh,dh:document.documentElement.scrollHeight,it:out})})()";
+    private static final String COLLECT_JS = "(function(){var vw=innerWidth,vh=innerHeight,sx=scrollX,sy=scrollY,out=[],seen=[];var sel='a[href],button,input:not([type=hidden]),select,textarea,summary,video,iframe,[role=button],[role=link],[role=tab],[role=menuitem],[onclick],[tabindex]:not([tabindex=\"-1\"]),label[for]';function ok(e,r){if(r.width<8||r.height<8)return false;if(r.bottom+sy<0)return false;var st=getComputedStyle(e);return st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0.1}function add(e){var r=e.getBoundingClientRect();if(!ok(e,r))return; for(var i=0;i<seen.length;i++){var p=seen[i];if(p.contains(e)||e.contains(p)){var q=p.getBoundingClientRect();if(Math.abs(q.width-r.width)<12&&Math.abs(q.height-r.height)<12)return}} seen.push(e);out.push([Math.round(r.left+sx),Math.round(r.top+sy),Math.round(r.width),Math.round(r.height)])}var a=document.querySelectorAll(sel);for(var i=0;i<a.length&&out.length<1200;i++)add(a[i]);var b=document.querySelectorAll('div,span,li,img,article,section,figure,h2,h3');for(var j=0;j<b.length&&j<1500&&out.length<1500;j++){var e=b[j];if(e.closest(sel))continue;try{if(getComputedStyle(e).cursor==='pointer')add(e)}catch(x){}}return JSON.stringify({sx:sx,sy:sy,vw:vw,vh:vh,dh:document.documentElement.scrollHeight,it:out})})()";
     private volatile float[][] boxes = new float[0][];
     private volatile float scrX = 0, scrY = 0, docH = 0;
     private volatile long boxesAt = 0;
@@ -495,11 +496,13 @@ public class MainActivity extends Activity {
 
     private final Runnable boxRefresher = new Runnable() {
         @Override public void run() {
-            if (!atHome() && customView == null) refreshBoxes();
+            // not while an arrow is held (the page is busy moving)
+            if (!atHome() && customView == null && SystemClock.uptimeMillis() - lastKeyAt > 600) refreshBoxes();
             web.postDelayed(this, 2500);
         }
     };
     private boolean refresherOn = false;
+    private volatile long lastKeyAt = 0;
 
     private void snapTo(int code) {
         final float d = getResources().getDisplayMetrics().density;
@@ -540,7 +543,7 @@ public class MainActivity extends Activity {
         }
         if (best == null) {
             boolean atTop = scrY <= 1, atBottom = scrY + vh >= docH - 2;
-            if ((dy < 0 && !atTop) || (dy > 0 && !atBottom)) { scrollPage(dy * root.getHeight() * 0.6f); web.postDelayed(this::refreshBoxes, 350); }
+            if ((dy < 0 && !atTop) || (dy > 0 && !atBottom)) { scrollPage(dy * root.getHeight() * 0.6f); { web.removeCallbacks(boxesLater); web.postDelayed(boxesLater, 350); } }
             else freeMove(code, 0);   // top/bottom of the page or sideways: let the pointer move on its own
             return;
         }
@@ -551,7 +554,7 @@ public class MainActivity extends Activity {
             web.evaluateJavascript("window.scrollTo(" + Math.round(scrX) + "," + Math.round(newY) + ")", null);
             scrY = newY;
             targetY = ey - newY;
-            web.postDelayed(this::refreshBoxes, 350);
+            { web.removeCallbacks(boxesLater); web.postDelayed(boxesLater, 350); }
         }
         cursor.x = Math.max(4 * d, Math.min((ex - scrX) * d, root.getWidth() - 8 * d));
         cursor.y = Math.max(4 * d, Math.min(targetY * d, root.getHeight() - 8 * d));
@@ -562,23 +565,40 @@ public class MainActivity extends Activity {
             Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", null);
     }
 
+    // holding an arrow sends ~30 presses a second: scrolling, hovering and re-reading the page's boxes are
+    // coalesced so a heavy page never gets more than it can do (it used to freeze)
+    private final Runnable boxesLater = this::refreshBoxes;
+    private float pendingScroll = 0;
+    private boolean scrolling = false;
+    private long lastHover = 0;
+
     private void scrollPage(float dy) {
-        web.postDelayed(this::refreshBoxes, 300);
+        web.removeCallbacks(boxesLater);
+        web.postDelayed(boxesLater, 500);
+        pendingScroll += dy;
+        if (scrolling) return;
+        scrolling = true;
         float d = getResources().getDisplayMetrics().density;
-        int css = Math.round(dy / d);
+        int css = Math.round(pendingScroll / d);
+        pendingScroll = 0;
         // scroll the page and, if it scrolls inside a box, the element under the pointer
         web.evaluateJavascript("(function(){var y=" + css + ",x=" + Math.round(cursor.x / d) + ",yy=" + Math.round(cursor.y / d) + ";" +
             "var el=document.elementFromPoint(x,yy),b=window.scrollY;window.scrollBy(0,y);if(window.scrollY!==b)return;" +
-            "while(el&&el!==document.body){var s=getComputedStyle(el).overflowY;if((s=='auto'||s=='scroll')&&el.scrollHeight>el.clientHeight){el.scrollBy(0,y);return}el=el.parentElement}})()", null);
+            "while(el&&el!==document.body){var s=getComputedStyle(el).overflowY;if((s=='auto'||s=='scroll')&&el.scrollHeight>el.clientHeight){el.scrollBy(0,y);return}el=el.parentElement}})()",
+            v -> { scrolling = false; if (pendingScroll != 0) scrollPage(0); });
     }
 
     private void hoverAtCursor() {
         long t = SystemClock.uptimeMillis();
+        if (t - lastHover < 120) return;
+        lastHover = t;
         MotionEvent m = MotionEvent.obtain(t, t, MotionEvent.ACTION_HOVER_MOVE, cursor.x, cursor.y, 0);
         m.setSource(android.view.InputDevice.SOURCE_MOUSE);
         web.dispatchGenericMotionEvent(m);
         m.recycle();
     }
+
+    private void hoverAtCursorNow() { lastHover = 0; hoverAtCursor(); }
 
     private volatile long playerTapAt = 0;
 
@@ -604,7 +624,7 @@ public class MainActivity extends Activity {
             web.dispatchTouchEvent(up);
             down.recycle();
             up.recycle();
-            web.postDelayed(this::refreshBoxes, 800);
+            { web.removeCallbacks(boxesLater); web.postDelayed(boxesLater, 800); }
         });
     }
 
