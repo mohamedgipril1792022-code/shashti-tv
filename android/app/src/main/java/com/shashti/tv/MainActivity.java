@@ -195,6 +195,7 @@ public class MainActivity extends Activity {
             }
             @Override
             public void onPageStarted(WebView v, String u, android.graphics.Bitmap f) {
+                mediaPlaying = false;
                 currentSite = (u == null || u.startsWith("https://appassets.androidplatform.net/")) ? null : Uri.parse(u).getHost();
                 injectListCss(v);
             }
@@ -779,10 +780,7 @@ public class MainActivity extends Activity {
                     if (!getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false)) {
                         // default: keep blocking, just close the box (page first, then inside the player)
                         // default: touch nothing on its own (closing by itself sometimes removed the player); just hint
-                        if (page.equals(wallPage)) return;
-                        wallPage = page;
-                        Toast.makeText(this, "لو فيه صندوق مغطي المشغّل دوس Back عشان تقفله", Toast.LENGTH_LONG).show();
-                        return;
+                        return; // never hint or act on its own: a playing video was sometimes mistaken for a box
                     }
                     if (page.equals(checkedPage)) return;
                     checkedPage = page;
@@ -929,7 +927,15 @@ public class MainActivity extends Activity {
         } catch (Exception ignored) { }
     }
 
+    private volatile long mediaPlayingAt = 0;
+    private volatile boolean mediaPlaying = false;
+
     private void backAfterFullscreenCheck() {
+            if (mediaPlaying && System.currentTimeMillis() - mediaPlayingAt < 6 * 60 * 60 * 1000L) {
+                long now = System.currentTimeMillis();
+                if (now - backArmedAt > 2500) { backArmedAt = now; Toast.makeText(this, "▶ الفيديو شغال — دوس Back تاني لو عايز تخرج", Toast.LENGTH_SHORT).show(); return; }
+                backArmedAt = 0; mediaPlaying = false; goBackPage(); return;
+            }
             {
                 if (simple()) { goBackPage(); return; }
                 // a box covering the page? Back presses its ✕ (or removes it) instead of leaving the page
@@ -1010,6 +1016,9 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void openExternal(String url) { runOnUiThread(() -> MainActivity.this.openExternal(url)); }
+
+        @JavascriptInterface
+        public void mediaState(boolean playing) { mediaPlaying = playing; mediaPlayingAt = System.currentTimeMillis(); }
 
         @JavascriptInterface
         public void closedInFrame() { frameClosed = true; }

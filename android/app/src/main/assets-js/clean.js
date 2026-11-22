@@ -1,5 +1,9 @@
 (function(){
   if (window.__shashtiClean) return; window.__shashtiClean = 1;
+  // tell the app when a video (in any frame) plays or stops, so Back never disturbs a running video
+  ['playing','pause','ended'].forEach(function(t){
+    document.addEventListener(t, function(e){ if (e.target && e.target.tagName==='VIDEO') { try { window.Android && Android.mediaState(t==='playing'); } catch(x) {} } }, true);
+  });
   // Back on the remote: close a box inside this frame (e.g. a box drawn inside the player)
   function closeHere(){
     if (!document.body) return false;
