@@ -130,12 +130,28 @@ public class AdBlock {
     /** null = let through, "" = block, otherwise a replacement resource name (see {@link #resource}). */
     public String match(String url, String pageHost, int type) {
         if (!active(pageHost)) return null;
+        if (playerFile(url)) return null;
         String r = engine.match(url, pageHost, type);
         if (r == null) return null;
         String h = FilterEngine.hostOf(url.toLowerCase(java.util.Locale.ROOT));
         if (hostAllowed(pageHost, h)) return null;
         synchronized (log) { log.remove(h); log.add(h); if (log.size() > 60) log.remove(log.iterator().next()); }
         return r;
+    }
+
+    private static final String[] PLAYER_HOSTS = {"jwpcdn.com", "jwplayer.com", "jwpsrv.com", "jwplatform.com", "jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com"};
+    private static final java.util.regex.Pattern PLAYER_PATH = java.util.regex.Pattern.compile(
+        "/(jwplayer[^/]*|jw[0-9.]*\\.js|provider\\.[a-z0-9.]+\\.js|hls(\\.light)?(\\.min)?\\.js|video(\\.min)?\\.js|videojs[^/]*|plyr[^/]*|clappr[^/]*|dash\\.all[^/]*|shaka-player[^/]*|flowplayer[^/]*|mediaelement[^/]*|artplayer[^/]*|dplayer[^/]*|fluidplayer[^/]*)(\\?|$)");
+
+    /** The video player's own library (JW Player, hls.js, video.js...): never touched, even if a list matches it —
+     *  JW Player stops with "failed to load (101102/104153)" when one of its parts is missing. Its ads come from ad servers, still blocked. */
+    static boolean playerFile(String url) {
+        String u = url.toLowerCase(java.util.Locale.ROOT);
+        String h = FilterEngine.hostOf(u);
+        for (String p : PLAYER_HOSTS) if (h.equals(p) || h.endsWith("." + p)) return h.contains("jw") || PLAYER_PATH.matcher(u).find();
+        int q = u.indexOf('?');
+        String path = q > 0 ? u.substring(0, q) : u;
+        return PLAYER_PATH.matcher(path.substring(path.lastIndexOf('/'))).find();
     }
 
     // ---- what was blocked on the current page, and letting one server through on one site
