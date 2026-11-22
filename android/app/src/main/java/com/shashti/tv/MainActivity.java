@@ -487,7 +487,9 @@ public class MainActivity extends Activity {
     private void zapUnderCursor() {
         float d = getResources().getDisplayMetrics().density;
         String js = "(function(x,y){var el=document.elementFromPoint(x,y);if(!el||el===document.body||el===document.documentElement)return '';" +
-            "function media(e){return e.tagName==='VIDEO'||e.tagName==='IFRAME'||!!e.querySelector('video,iframe')}" +
+            "function fx(e){for(;e&&e!==document.body;e=e.parentElement){if(getComputedStyle(e).position==='fixed')return true}return false}" +
+            "function pl(f){return !fx(f)}" + // an iframe that floats over the page is an overlay, not a player
+            "function media(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;if(e.tagName==='IFRAME')return pl(e);return [].slice.call(e.querySelectorAll('iframe')).some(pl)}" +
             "if(media(el))return 'PLAYER';" +
             "var t=el,best=null;while(t&&t!==document.body){if(media(t))break;var s=getComputedStyle(t);if(s.position==='fixed'||s.position==='absolute'&&(parseInt(s.zIndex)||0)>=10)best=t;t=t.parentElement}" +
             "var box=best||el;if(media(box))return 'PLAYER';" +
@@ -526,9 +528,23 @@ public class MainActivity extends Activity {
         "var player=[].slice.call(document.querySelectorAll('video,iframe')).some(function(e){var r=e.getBoundingClientRect();return r.width>0&&r.bottom>0&&r.top<vh&&big(r,0.12)});" +
         "var wall=[].slice.call(document.querySelectorAll('body *')).some(function(e){var s=getComputedStyle(e);if(s.position!=='fixed'&&s.position!=='absolute')return false;" +
         "if((parseInt(s.zIndex)||0)<100||s.visibility==='hidden'||s.display==='none'||parseFloat(s.opacity)<0.3)return false;var r=e.getBoundingClientRect();if(!big(r,0.35))return false;" +
-        "if(e.querySelector('video,iframe'))return false;return !!(e.innerText.trim()||e.querySelector('img,canvas,svg'))});" +
+        "if(e.querySelector('video'))return false;if(e.tagName==='IFRAME'||e.querySelector('iframe'))return s.position==='fixed';return !!(e.innerText.trim()||e.querySelector('img,canvas,svg'))});" +
         "return player&&!wall?'player':(wall?'wall':'none')})()";
     private String checkedPage = null;
+
+    private static final String CLOSE_OVERLAY =
+        "(function(){var vw=innerWidth,vh=innerHeight;" +
+        "function fx(e){for(;e&&e!==document.body;e=e.parentElement){if(getComputedStyle(e).position==='fixed')return true}return false}" +
+        "function player(e){return e.tagName==='VIDEO'||!!e.querySelector('video')||[].slice.call(e.querySelectorAll('iframe')).some(function(f){return !fx(f)})}" +
+        "var cands=[].slice.call(document.querySelectorAll('body *')).filter(function(e){var s=getComputedStyle(e);if(s.position!=='fixed'&&s.position!=='absolute')return false;" +
+        "if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)<0.3||(parseInt(s.zIndex)||0)<50)return false;var r=e.getBoundingClientRect();" +
+        "return r.width*r.height>vw*vh*0.3&&!player(e)});" +
+        "if(!cands.length)return 'none';cands.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});var o=cands[0];" +
+        "var btns=[].slice.call(o.querySelectorAll('button,a,span,div,i,svg,[role=button]')).filter(function(b){var t=(b.innerText||b.getAttribute('aria-label')||b.getAttribute('title')||'').trim().toLowerCase();" +
+        "var c=((b.className&&b.className.baseVal!==undefined)?b.className.baseVal:(b.className||''))+' '+(b.id||'');var r=b.getBoundingClientRect();" +
+        "return r.width>0&&r.width<90&&r.height<90&&(/^(×|✕|✖|x|close|إغلاق|اغلاق|skip|تخطي)$/i.test(t)||/close|dismiss|modal-x|btn-x/i.test(c))});" +
+        "if(btns.length){btns[0].click();setTimeout(function(){if(o.isConnected&&getComputedStyle(o).display!=='none')o.remove()},400);return 'closed'}" +
+        "o.remove();document.documentElement.style.overflow='';document.body.style.overflow='';return 'closed'})()";
 
     private void watchForPlayer() {
         if (atHome() || customView != null || !blocking()) return;
@@ -591,7 +607,11 @@ public class MainActivity extends Activity {
         if (code == KeyEvent.KEYCODE_BACK) {
             if (customView != null) { exitFullscreen(); return true; }
             if (!atHome()) {
-                if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME);
+                // a box covering the page? Back presses its ✕ (or removes it) instead of leaving the page
+                web.evaluateJavascript(CLOSE_OVERLAY, v -> {
+                    if (v != null && v.contains("closed")) { Toast.makeText(this, "✕ اتقفل", Toast.LENGTH_SHORT).show(); return; }
+                    if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME);
+                });
                 return true;
             }
             // on the launcher page: let the page close its own dialogs first
