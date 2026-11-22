@@ -462,7 +462,8 @@ public class MainActivity extends Activity {
                 int w = root.getWidth(), h = root.getHeight();
                 long held = SystemClock.uptimeMillis() - pressStart;
                 // short tap = fine move; holding speeds up smoothly
-                float step = d * (repeatCount == 0 ? 34 : Math.min(30 + held / 8f, 140));
+                // starts fine (to land on a small × button) and speeds up the longer the arrow is held
+                float step = d * (repeatCount == 0 ? 14 : Math.min(6 + held / 6f, 140));
                 if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
                 float margin = 30 * d;
                 if (code == KeyEvent.KEYCODE_DPAD_UP) {
