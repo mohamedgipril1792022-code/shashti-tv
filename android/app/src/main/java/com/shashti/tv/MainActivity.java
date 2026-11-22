@@ -290,7 +290,7 @@ public class MainActivity extends Activity {
                 if (e.getAction() == KeyEvent.ACTION_UP) { repeat = 0; return true; }
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return true;
                 repeat = e.getRepeatCount() == 0 ? 0 : repeat + 1;
-                float step = d * Math.min(8 + repeat * 3, 45);
+                float step = d * Math.min(18 + repeat * 6, 90);
                 if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
                 float margin = 30 * d;
                 if (code == KeyEvent.KEYCODE_DPAD_UP) {
