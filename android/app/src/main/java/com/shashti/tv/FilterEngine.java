@@ -32,12 +32,16 @@ public class FilterEngine {
         int party = 0;           // 0 any, 1 third-party only, 2 first-party only
         String[] incDomains, excDomains;
         boolean important;
+        String redirect;         // replacement resource (uBO redirect=)
+        boolean redirectOnly;    // redirect-rule=: only says what to serve when something else blocks
         String hostAnchor;       // fast path: pattern is exactly ||host^
     }
 
     private final Map<String, List<Rule>> blockIdx = new HashMap<>();
     private final Map<String, List<Rule>> allowIdx = new HashMap<>();
     private final List<Rule> blockAny = new ArrayList<>();
+    private final Map<String, List<Rule>> redirIdx = new HashMap<>();
+    private final List<Rule> redirAny = new ArrayList<>();
     private final List<Rule> allowAny = new ArrayList<>();
     private final Set<String> blockHosts = new HashSet<>();      // ||host^ with no options: fastest path
     // cosmetic
@@ -120,8 +124,8 @@ public class FilterEngine {
             if (h.matches("[a-z0-9.\\-]+")) r.hostAnchor = h;
         }
         String tok = bestToken(r.pattern);
-        Map<String, List<Rule>> idx = exception ? allowIdx : blockIdx;
-        if (tok == null) (exception ? allowAny : blockAny).add(r);
+        Map<String, List<Rule>> idx = r.redirectOnly ? redirIdx : exception ? allowIdx : blockIdx;
+        if (tok == null) (r.redirectOnly ? redirAny : exception ? allowAny : blockAny).add(r);
         else idx.computeIfAbsent(tok, k -> new ArrayList<>(2)).add(r);
     }
 
@@ -155,7 +159,12 @@ public class FilterEngine {
                         if (!in.isEmpty()) r.incDomains = in.toArray(new String[0]);
                         if (!ex.isEmpty()) r.excDomains = ex.toArray(new String[0]);
                     } else if (k.startsWith("redirect=") || k.startsWith("redirect-rule=") || k.equals("empty") || k.equals("mp4")) {
-                        // block (we have no replacement resources)
+                        if (exception) return false;      // @@...$redirect only cancels a redirect: not supported
+                        String n = k.equals("empty") ? "empty" : k.equals("mp4") ? "noop-1s.mp4" : k.substring(k.indexOf('=') + 1);
+                        int c = n.lastIndexOf(':');
+                        if (c > 0 && n.substring(c + 1).matches("-?\\d+")) n = n.substring(0, c);
+                        r.redirect = n;
+                        if (k.startsWith("redirect-rule=")) r.redirectOnly = true;
                     } else {
                         return false; // csp=, removeparam=, header=, permissions=, websocket, ping, etc.
                     }
@@ -214,8 +223,11 @@ public class FilterEngine {
      * @param type     one of the type constants
      * @return true when the request should be blocked
      */
-    public boolean shouldBlock(String url, String pageHost, int type) {
-        if (url == null) return false;
+    public boolean shouldBlock(String url, String pageHost, int type) { return match(url, pageHost, type) != null; }
+
+    /** @return null = let it through, "" = block, otherwise the name of the replacement resource to serve */
+    public String match(String url, String pageHost, int type) {
+        if (url == null) return null;
         String u = url.toLowerCase(Locale.ROOT);
         String host = hostOf(u);
         boolean third = pageHost == null || !sameSite(host, pageHost);
@@ -228,13 +240,15 @@ public class FilterEngine {
             toks = tokens(u);
             block = find(blockIdx, blockAny, toks, u, host, pageHost, type, third);
         }
-        if (block == null) return false;
-        if (block.important) return true;
+        if (block == null) return null;
         if (toks == null) toks = tokens(u);
-        // exceptions are checked without the type limit: the WebView does not say what a request is,
-        // and a missed exception breaks players (e.g. a player library whose exception says $script)
-        return find(allowIdx, allowAny, toks, u, host, pageHost, ANY_TYPE, third) == null;
+        // exceptions are checked without the type limit (the WebView does not say what a request is)
+        if (!block.important && find(allowIdx, allowAny, toks, u, host, pageHost, ANY_TYPE, third) != null) return null;
+        String red = block.redirect;
+        if (red == null) { Rule rr = find(redirIdx, redirAny, toks, u, host, pageHost, type, third); if (rr != null) red = rr.redirect; }
+        return red == null ? "" : red;
     }
+
 
     private static final Rule HOST_RULE = new Rule();
     private static final int ANY_TYPE = ALL_NORMAL | POPUP | DOCUMENT;

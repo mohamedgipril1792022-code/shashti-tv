@@ -122,14 +122,17 @@ public class MainActivity extends Activity {
                 if (a != null) return a;
                 String page = pageHost;
                 if (page == null || r.isForMainFrame()) return null;
-                if (adblock.shouldBlock(r.getUrl().toString(), page, typeOf(r)))
-                    return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
-                return null;
+                String m = adblock.match(r.getUrl().toString(), page, typeOf(r));
+                if (m == null) return null;
+                // a neutered stand-in (empty ad script, empty VAST...) keeps players that expect the ad code working
+                WebResourceResponse rep = adblock.resource(m);
+                return rep != null ? rep : new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
             }
             @Override
             public void onPageStarted(WebView v, String u, android.graphics.Bitmap f) {
                 pageHost = (u == null || u.startsWith("https://appassets.androidplatform.net/")) ? null : Uri.parse(u).getHost();
                 boxes = new float[0][];
+                adblock.clearLog();
             }
             @Override
             public void onPageFinished(WebView v, String u) {
@@ -387,12 +390,17 @@ public class MainActivity extends Activity {
         return super.dispatchKeyEvent(e);
     }
 
+    // never touches a video or a player frame (allowfullscreen / embed), and only things laid over the page
+    private static final String BACK_JS = "(function(){var f=window.__shFs;if(f){f.el.setAttribute('style',f.st);window.__shFs=null;document.documentElement.style.overflow='';return 'fs'}var vw=innerWidth,vh=innerHeight,va=vw*vh,fs=document.fullscreenElement||document.webkitFullscreenElement;function isPlayer(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;var fr=e.tagName==='IFRAME'?[e]:e.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){var x=fr[i];if(x.hasAttribute('allowfullscreen')||x.hasAttribute('webkitallowfullscreen')||/fullscreen/i.test(x.getAttribute('allow')||'')||/embed|player|video|stream/i.test(x.src||''))return true}return false}function cands(e){var l=[];for(var n=e;n&&n!==document.body&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n),p=st.position;if(p!=='fixed'&&!(p==='absolute'&&(parseInt(st.zIndex)||0)>=1000))continue;var r=n.getBoundingClientRect();var a=Math.max(0,Math.min(r.right,vw)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,0));if(a<va*0.04)continue;if(r.top<=4&&r.height<vh*0.2&&r.width>vw*0.8)continue;l.unshift(n)}return l}var pts=[[.5,.5],[.3,.45],[.7,.45],[.5,.75],[.3,.7],[.7,.7],[.5,.92],[.5,.3]];for(var i=0;i<pts.length;i++){var x=vw*pts[i][0],y=vh*pts[i][1];var st=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];var top=st[0];if(!top)continue;var l=cands(top);for(var j=0;j<l.length;j++){var c=l[j];if(fs&&(c.contains(fs)||fs.contains(c)))continue;if(isPlayer(c))continue;c.remove();document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';return 'ad'}}return ''})()";
+
     private void onBack() {
         if (customView != null) { exitFullscreen(); return; }
         if (!atHome()) {
             // the player stretched with a double OK comes back first
-            web.evaluateJavascript("(function(){var f=window.__shFs;if(!f)return '';f.el.setAttribute('style',f.st);window.__shFs=null;document.documentElement.style.overflow='';return 'fs'})()", v -> {
-                if (v == null || !v.contains("fs")) goBackPage();
+            // 1) the player stretched with a double OK comes back, 2) an ad laid over the page closes, 3) previous page
+            web.evaluateJavascript(BACK_JS, v -> {
+                if (v != null && v.contains("ad")) Toast.makeText(this, "🛡 اتقفل إعلان", Toast.LENGTH_SHORT).show();
+                else if (v == null || !v.contains("fs")) goBackPage();
             });
             return;
         }
@@ -590,6 +598,28 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ Menu on a website
 
+    /** The servers blocked on this page; picking one lets it through on this site only. */
+    private void showBlocked() {
+        final String page = pageHost;
+        if (page == null) return;
+        final java.util.List<String> hosts = new java.util.ArrayList<>(adblock.blockedHosts());
+        for (String h : adblock.allowedHostsFor(page)) if (!hosts.contains(h)) hosts.add(h);
+        if (hosts.isEmpty()) {
+            Toast.makeText(this, adblock.isAllowed(page) ? "المنع مقفول على الموقع ده أصلًا" : "مفيش حاجة اتمنعت في الصفحة دي", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String[] items = new String[hosts.size()];
+        for (int i = 0; i < items.length; i++) items[i] = (adblock.hostAllowed(page, hosts.get(i)) ? "✅ " : "🛡 ") + hosts.get(i);
+        new android.app.AlertDialog.Builder(this)
+            .setTitle("اختار سيرفر عشان تسمح بيه هنا (✅ = مسموح)")
+            .setItems(items, (d, w) -> {
+                adblock.toggleHost(page, hosts.get(w));
+                Toast.makeText(this, (adblock.hostAllowed(page, hosts.get(w)) ? "✅ اتسمح بـ " : "🛡 رجع المنع على ") + hosts.get(w), Toast.LENGTH_SHORT).show();
+                web.reload();
+            })
+            .setNegativeButton("رجوع", null).show();
+    }
+
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
@@ -605,7 +635,8 @@ public class MainActivity extends Activity {
             adblock.isAllowed(pageHost) ? "🛡 رجّع المنع على الموقع ده" : "✅ اقفل المنع على الموقع ده بس",
             snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)",
             "🌐 افتح الصفحة دي في متصفح تاني",
-            "ℹ معلومات"
+            "ℹ معلومات",
+            "🔍 المشغّل مش شغال؟ شوف اللي اتمنع في الصفحة دي"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -652,11 +683,12 @@ public class MainActivity extends Activity {
                         try { if (Build.VERSION.SDK_INT >= 26) wv = WebView.getCurrentWebViewPackage().versionName; } catch (Exception ignored) { }
                         new android.app.AlertDialog.Builder(this).setTitle("ℹ معلومات")
                             .setMessage("Sajo TV نسخة " + Updater.myCode(this) + "\nأندرويد " + Build.VERSION.RELEASE + "\nWebView " + wv +
-                                "\nقواعد منع الإعلانات: " + (adblock.ready ? adblock.rules() + " قاعدة (EasyList + EasyPrivacy + uBlock + القايمة العربية)" : "لسه بتتحمّل…") +
+                                "\nقواعد منع الإعلانات: " + (adblock.ready ? adblock.rules() + " قاعدة (EasyList + uBlock + القايمة العربية)" : "لسه بتتحمّل…") +
                                 "\nالإخفاء جوه المشغّلات: " + (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) ? "شغال ✅" : "مش مدعوم ❌ (حدّث Android System WebView)"))
                             .setPositiveButton("تمام", null).show();
                         break;
                     }
+                    case 11: showBlocked(); break;
                 }
             })
             .show();

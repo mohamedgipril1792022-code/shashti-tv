@@ -8,7 +8,14 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -26,12 +33,16 @@ public class AdBlock {
 
     private final SharedPreferences prefs;
     private final File dir;
+    private final Context ctx;
+    private Map<String, String> aliases;
+    private final LinkedHashSet<String> log = new LinkedHashSet<>();
     private volatile FilterEngine engine = new FilterEngine();
     public volatile boolean ready = false;
 
     public AdBlock(Context c) {
         prefs = c.getSharedPreferences("adblock", Context.MODE_PRIVATE);
         dir = c.getFilesDir();
+        ctx = c.getApplicationContext();
         new Thread(this::loadLists).start();
     }
 
@@ -78,8 +89,68 @@ public class AdBlock {
 
     private boolean active(String pageHost) { return enabled() && ready && !isAllowed(pageHost); }
 
-    public boolean shouldBlock(String url, String pageHost, int type) {
-        return active(pageHost) && engine.shouldBlock(url, pageHost, type);
+    public boolean shouldBlock(String url, String pageHost, int type) { return match(url, pageHost, type) != null; }
+
+    /** null = let through, "" = block, otherwise a replacement resource name (see {@link #resource}). */
+    public String match(String url, String pageHost, int type) {
+        if (!active(pageHost)) return null;
+        String r = engine.match(url, pageHost, type);
+        if (r == null) return null;
+        String h = FilterEngine.hostOf(url.toLowerCase(java.util.Locale.ROOT));
+        if (hostAllowed(pageHost, h)) return null;
+        synchronized (log) { log.remove(h); log.add(h); if (log.size() > 60) log.remove(log.iterator().next()); }
+        return r;
+    }
+
+    // ---- what was blocked on the current page, and letting one server through on one site
+
+    public void clearLog() { synchronized (log) { log.clear(); } }
+    public List<String> blockedHosts() { synchronized (log) { List<String> l = new ArrayList<>(log); java.util.Collections.reverse(l); return l; } }
+
+    private Set<String> allowedHosts() { return prefs.getStringSet("ah", new HashSet<>()); }
+    public boolean hostAllowed(String pageHost, String host) {
+        return pageHost != null && allowedHosts().contains(FilterEngine.base(pageHost) + "|" + host);
+    }
+    public List<String> allowedHostsFor(String pageHost) {
+        List<String> l = new ArrayList<>();
+        String p = FilterEngine.base(pageHost) + "|";
+        for (String s : allowedHosts()) if (s.startsWith(p)) l.add(s.substring(p.length()));
+        return l;
+    }
+    public void toggleHost(String pageHost, String host) {
+        Set<String> a = new HashSet<>(allowedHosts());
+        String k = FilterEngine.base(pageHost) + "|" + host;
+        if (!a.remove(k)) a.add(k);
+        prefs.edit().putStringSet("ah", a).apply();
+    }
+
+    // ---- replacement resources (uBlock Origin's neutered scripts, empty VAST, silent media...)
+
+    /** @return the asset to serve instead of a blocked request, or null to send an empty answer */
+    public android.webkit.WebResourceResponse resource(String name) {
+        if (name == null || name.isEmpty() || name.equals("empty") || name.equals("none")) return null;
+        try {
+            if (aliases == null) {
+                Map<String, String> m = new HashMap<>();
+                try (BufferedReader br = new BufferedReader(new InputStreamReader(ctx.getAssets().open("redirect/aliases.txt"), "UTF-8"))) {
+                    String line;
+                    while ((line = br.readLine()) != null) { int t = line.indexOf('\t'); if (t > 0) m.put(line.substring(0, t), line.substring(t + 1)); }
+                }
+                aliases = m;
+            }
+            String f = aliases.get(name);
+            if (f == null) return null;
+            String mime = f.endsWith(".js") ? "application/javascript" : f.endsWith(".xml") ? "text/xml"
+                    : f.endsWith(".json") ? "application/json" : f.endsWith(".gif") ? "image/gif"
+                    : f.endsWith(".png") ? "image/png" : f.endsWith(".mp3") ? "audio/mpeg"
+                    : f.endsWith(".mp4") ? "video/mp4" : f.endsWith(".css") ? "text/css"
+                    : f.endsWith(".html") ? "text/html" : "text/plain";
+            android.webkit.WebResourceResponse r = new android.webkit.WebResourceResponse(mime, "utf-8", ctx.getAssets().open("redirect/" + f));
+            Map<String, String> hd = new HashMap<>();
+            hd.put("Access-Control-Allow-Origin", "*");
+            r.setResponseHeaders(hd);
+            return r;
+        } catch (Exception e) { return null; }
     }
 
     /** CSS rule hiding the list's ad elements on this host ("" when none). */
