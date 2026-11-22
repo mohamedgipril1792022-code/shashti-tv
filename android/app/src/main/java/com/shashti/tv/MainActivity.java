@@ -49,6 +49,7 @@ public class MainActivity extends Activity {
     private AdBlock adblock;
     private CursorView cursor;
     private int repeat = 0;
+    private boolean longPressed = false;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -252,7 +253,13 @@ public class MainActivity extends Activity {
                 return true;
             }
             case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER: case KeyEvent.KEYCODE_NUMPAD_ENTER: {
-                if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) tapAtCursor();
+                if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (e.getRepeatCount() == 0) longPressed = false;
+                    else if (!longPressed && e.getRepeatCount() >= 8) { longPressed = true; showSiteMenu(); }
+                } else if (e.getAction() == KeyEvent.ACTION_UP) {
+                    if (!longPressed) tapAtCursor();
+                    longPressed = false;
+                }
                 return true;
             }
             case KeyEvent.KEYCODE_PAGE_DOWN: case KeyEvent.KEYCODE_CHANNEL_DOWN:
