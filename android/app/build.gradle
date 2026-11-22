@@ -7,8 +7,8 @@ android {
         applicationId 'com.shashti.tv'
         minSdk 21
         targetSdk 34
-        versionCode 54
-        versionName '54'
+        versionCode 55
+        versionName '55'
     }
     signingConfigs {
         shashti {
@@ -22,7 +22,6 @@ android {
         release { minifyEnabled false; signingConfig signingConfigs.shashti }
         debug { signingConfig signingConfigs.shashti }
     }
-    sourceSets { main { assets.srcDirs += ['src/main/assets-js'] } }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
