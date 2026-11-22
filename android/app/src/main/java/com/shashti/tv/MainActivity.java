@@ -112,8 +112,11 @@ public class MainActivity extends Activity {
             WebSettingsCompat.setRequestedWithHeaderOriginAllowList(s, Collections.<String>emptySet());
 
         web.addJavascriptInterface(new Bridge(), "Android");
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, CSS_JS, Collections.singleton("*"));
+            String st = asset("stealth.js");
+            if (st != null) WebViewCompat.addDocumentStartJavaScript(web, st, Collections.singleton("*"));
+        }
 
         web.setWebViewClient(new WebViewClient() {
             @Override
@@ -124,9 +127,18 @@ public class MainActivity extends Activity {
                 if (page == null || r.isForMainFrame()) return null;
                 String m = adblock.match(r.getUrl().toString(), page, typeOf(r));
                 if (m == null) return null;
-                // a neutered stand-in (empty ad script, empty VAST...) keeps players that expect the ad code working
+                // a neutered stand-in (empty ad script, empty VAST...) keeps players that expect the ad code working,
+                // and an answer that looks successful keeps anti-adblock checks from noticing
                 WebResourceResponse rep = adblock.resource(m);
-                return rep != null ? rep : new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
+                if (rep == null) rep = adblock.resource(stubFor(typeOf(r), r.getUrl().toString()));
+                if (rep == null) rep = new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
+                java.util.Map<String, String> hd = new java.util.HashMap<>();
+                String origin = r.getRequestHeaders() == null ? null : r.getRequestHeaders().get("Origin");
+                hd.put("Access-Control-Allow-Origin", origin != null ? origin : "*");
+                if (origin != null) hd.put("Access-Control-Allow-Credentials", "true");
+                hd.put("Cache-Control", "no-store");
+                rep.setResponseHeaders(hd);
+                return rep;
             }
             @Override
             public void onReceivedError(WebView v, WebResourceRequest r, android.webkit.WebResourceError e) {
@@ -642,6 +654,27 @@ public class MainActivity extends Activity {
             .setNegativeButton("رجوع", null).show();
     }
 
+    private static String stubFor(int type, String url) {
+        String u = url.toLowerCase(java.util.Locale.ROOT);
+        int q = u.indexOf('?'); if (q > 0) u = u.substring(0, q);
+        if (type == FilterEngine.SCRIPT || u.endsWith(".js")) return "noop.js";
+        if (type == FilterEngine.IMAGE) return "1x1.gif";
+        if (type == FilterEngine.SUBDOCUMENT) return "noop.html";
+        if (type == FilterEngine.STYLESHEET || u.endsWith(".css")) return "noop.css";
+        if (type == FilterEngine.MEDIA) return u.endsWith(".mp3") ? "noop-0.1s.mp3" : "noop-1s.mp4";
+        if (u.endsWith(".xml") || u.contains("vast") || u.contains("vmap")) return "noop-vast4.xml";
+        return null;
+    }
+
+    private String asset(String name) {
+        try (java.io.InputStream in = getAssets().open(name)) {
+            java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+            byte[] b = new byte[8192]; int n;
+            while ((n = in.read(b)) > 0) o.write(b, 0, n);
+            return o.toString("UTF-8");
+        } catch (Exception e) { return null; }
+    }
+
     private final java.util.ArrayList<String> pageLog = new java.util.ArrayList<>();
     private void logLine(String l) {
         if (l.length() > 220) l = l.substring(0, 220) + "…";
@@ -755,6 +788,8 @@ public class MainActivity extends Activity {
 
     private class Bridge {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
+        @JavascriptInterface
+        public String sl(String host) { return adblock.stealthConfig(pageHost, host); }
         @JavascriptInterface
         public String css(String host) { return pageHost == null ? "" : adblock.css(host, pageHost); }
 

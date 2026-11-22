@@ -28,6 +28,15 @@ public class AdBlock {
     private static final String[][] LISTS = {
         {"https://easylist.to/easylist/easylist.txt", "easylist.txt", "1"},
         {"https://ublockorigin.github.io/uAssets/filters/filters.txt", "ubo_filters.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/filters-2020.txt", "ubo_2020.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/filters-2021.txt", "ubo_2021.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/filters-2022.txt", "ubo_2022.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/filters-2023.txt", "ubo_2023.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/filters-2024.txt", "ubo_2024.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/filters-2025.txt", "ubo_2025.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/filters-2026.txt", "ubo_2026.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt", "ubo_quick.txt", "1"},
+        {"https://ublockorigin.github.io/uAssets/filters/unbreak.txt", "ubo_unbreak.txt", "1"},
         {"https://easylist-downloads.adblockplus.org/Liste_AR.txt", "liste_ar.txt", "1"},
     };
 
@@ -85,6 +94,33 @@ public class AdBlock {
         String b = FilterEngine.base(host);
         if (!a.remove(b)) a.add(b);
         prefs.edit().putStringSet("allow2", a).apply();
+    }
+
+    /** Settings for the document-start script in every frame: null when blocking is off here. */
+    public String stealthConfig(String pageHost, String frameHost) {
+        if (pageHost == null || !active(pageHost)) return "null";
+        org.json.JSONArray js = new org.json.JSONArray();
+        for (String raw : engine.scriptlets(frameHost)) js.put(new org.json.JSONArray(splitArgs(raw)));
+        return "{\"stealth\":true,\"js\":" + js + "}";
+    }
+
+    /** "name, a\\, b, 'c'" -> [name, "a, b", c] */
+    static List<String> splitArgs(String raw) {
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (c == '\\' && i + 1 < raw.length() && raw.charAt(i + 1) == ',') { cur.append(','); i++; }
+            else if (c == ',') { out.add(unq(cur.toString().trim())); cur.setLength(0); }
+            else cur.append(c);
+        }
+        out.add(unq(cur.toString().trim()));
+        return out;
+    }
+    private static String unq(String s) {
+        if (s.length() >= 2 && (s.charAt(0) == '\'' || s.charAt(0) == '"' || s.charAt(0) == '`') && s.charAt(s.length() - 1) == s.charAt(0))
+            return s.substring(1, s.length() - 1);
+        return s;
     }
 
     private boolean active(String pageHost) { return enabled() && ready && !isAllowed(pageHost); }

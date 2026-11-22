@@ -46,6 +46,8 @@ public class FilterEngine {
     private final Set<String> blockHosts = new HashSet<>();      // ||host^ with no options: fastest path
     // cosmetic
     private final Map<String, List<String>> siteHide = new HashMap<>();
+    private final Map<String, List<String>> siteJs = new HashMap<>();      // uBO scriptlets: host -> "name, arg, ..."
+    private final Map<String, Set<String>> siteJsOff = new HashMap<>();    // #@#+js(...) exceptions ("" = all)
     private final Map<String, Set<String>> siteUnhide = new HashMap<>();
     private final List<String> genericHide = new ArrayList<>();
     private final Set<String> genericUnhide = new HashSet<>();
@@ -79,6 +81,7 @@ public class FilterEngine {
     private void addCosmetic(String line, int sep, boolean generic) {
         boolean exception = line.startsWith("#@#", sep);
         String sel = line.substring(sep + (exception ? 3 : 2)).trim();
+        if (sel.startsWith("+js(") && sel.endsWith(")")) { addScriptlet(line.substring(0, sep).trim(), sel.substring(4, sel.length() - 1).trim(), exception); return; }
         if (sel.isEmpty() || sel.startsWith("+js") || sel.startsWith("^") || sel.contains(":-abp-") || sel.contains(":has-text")
                 || sel.contains(":xpath") || sel.contains(":style(") || sel.contains(":remove") || sel.contains(":matches-")
                 || sel.contains(":upward") || sel.contains(":watch-attr") || sel.contains(":min-text-length") || sel.contains("{")) return;
@@ -90,12 +93,57 @@ public class FilterEngine {
         }
         for (String d : doms.split(",")) {
             d = d.trim().toLowerCase(Locale.ROOT);
-            if (d.isEmpty() || d.contains("*") || d.contains("/")) continue;
-            if (d.startsWith("~")) continue; // "everywhere except" rules: skipped (rare, and wrong-site hiding is worse)
+            if (!okDomain(d)) continue;
             if (exception) siteUnhide.computeIfAbsent(d, k -> new HashSet<>()).add(sel);
             else siteHide.computeIfAbsent(d, k -> new ArrayList<>()).add(sel);
         }
         ruleCount++;
+    }
+
+    private static boolean okDomain(String d) {
+        if (d.isEmpty() || d.contains("/") || d.startsWith("~")) return false; // "everywhere except" rules: skipped
+        int st = d.indexOf('*');
+        return st < 0 || (st == d.length() - 1 && d.endsWith(".*") && d.indexOf('*') == st); // name.* = any ending
+    }
+
+    private void addScriptlet(String doms, String args, boolean exception) {
+        if (doms.isEmpty()) {          // uBO never runs generic scriptlets; a generic exception switches one off everywhere
+            return;
+        }
+        for (String d : doms.split(",")) {
+            d = d.trim().toLowerCase(Locale.ROOT);
+            if (!okDomain(d)) continue;
+            if (exception) siteJsOff.computeIfAbsent(d, k -> new HashSet<>()).add(args);
+            else siteJs.computeIfAbsent(d, k -> new ArrayList<>()).add(args);
+        }
+        ruleCount++;
+    }
+
+    /** host, its parents, and their "name.*" forms (uBO entities). */
+    static List<String> keys(String host) {
+        List<String> out = new ArrayList<>();
+        for (String h = host; h != null; h = parent(h)) {
+            out.add(h);
+            String b = base(h);
+            int dot = b.indexOf('.');
+            if (dot > 0 && h.length() > b.length() - dot) out.add(h.substring(0, h.length() - (b.length() - dot)) + ".*");
+        }
+        return out;
+    }
+
+    /** Scriptlets for this host: each "name, arg1, arg2". */
+    public synchronized List<String> scriptlets(String host) {
+        List<String> out = new ArrayList<>();
+        if (host == null) return out;
+        List<String> ks = keys(host.toLowerCase(Locale.ROOT));
+        Set<String> off = new HashSet<>();
+        for (String k : ks) { Set<String> x = siteJsOff.get(k); if (x != null) off.addAll(x); }
+        if (off.contains("")) return out;
+        for (String k : ks) {
+            List<String> l = siteJs.get(k);
+            if (l != null) for (String a : l) if (!off.contains(a) && !out.contains(a)) out.add(a);
+        }
+        return out;
     }
 
     private void addNetwork(String line) {
@@ -245,6 +293,7 @@ public class FilterEngine {
         // exceptions are checked without the type limit (the WebView does not say what a request is)
         if (!block.important && find(allowIdx, allowAny, toks, u, host, pageHost, ANY_TYPE, third) != null) return null;
         String red = block.redirect;
+        if (red == null) red = findRedirect(blockIdx, blockAny, toks, u, host, pageHost, type, third);
         if (red == null) { Rule rr = find(redirIdx, redirAny, toks, u, host, pageHost, type, third); if (rr != null) red = rr.redirect; }
         return red == null ? "" : red;
     }
@@ -260,6 +309,16 @@ public class FilterEngine {
             for (Rule r : l) if (matches(r, u, host, pageHost, type, third)) return r;
         }
         for (Rule r : any) if (matches(r, u, host, pageHost, type, third)) return r;
+        return null;
+    }
+
+    /** a fast-path host block has no resource of its own; a more precise rule may name one (e.g. adsbygoogle.js) */
+    private String findRedirect(Map<String, List<Rule>> idx, List<Rule> any, Set<String> toks, String u, String host, String pageHost, int type, boolean third) {
+        for (String t : toks) {
+            List<Rule> l = idx.get(t);
+            if (l != null) for (Rule r : l) if (r.redirect != null && matches(r, u, host, pageHost, type, third)) return r.redirect;
+        }
+        for (Rule r : any) if (r.redirect != null && matches(r, u, host, pageHost, type, third)) return r.redirect;
         return null;
     }
 
@@ -329,9 +388,10 @@ public class FilterEngine {
         host = host.toLowerCase(Locale.ROOT);
         for (String h = host; h != null; h = parent(h)) if (noElemhide.contains(h)) return "";
         Set<String> unhide = new HashSet<>(genericUnhide);
-        for (String h = host; h != null; h = parent(h)) { Set<String> x = siteUnhide.get(h); if (x != null) unhide.addAll(x); }
+        List<String> ks = keys(host);
+        for (String h : ks) { Set<String> x = siteUnhide.get(h); if (x != null) unhide.addAll(x); }
         StringBuilder out = new StringBuilder();
-        for (String h = host; h != null; h = parent(h)) {
+        for (String h : ks) {
             List<String> l = siteHide.get(h);
             if (l != null) for (String s : l) if (!unhide.contains(s)) append(out, s);
         }
