@@ -215,7 +215,8 @@ public class MainActivity extends Activity {
         }
         if (!blocking()) { web.loadUrl(url); return; }
         String cur = Uri.parse(web.getUrl()).getHost();
-        if (gesture && !adblock.isAd(host) && AdBlock.sameSite(cur, host)) { web.loadUrl(url); return; }
+        // a window you opened by clicking (e.g. a "watch" button) opens here; ad hosts and click-less pop-ups stay blocked
+        if ((gesture || AdBlock.sameSite(cur, host)) && !adblock.isAd(host)) { web.loadUrl(url); return; }
         blockedToast();
     }
 

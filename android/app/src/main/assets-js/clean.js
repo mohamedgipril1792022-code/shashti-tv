@@ -6,7 +6,10 @@
     if ((window.__SHASHTI_ALLOW || []).indexOf(th) >= 0) return;
   } catch(e) {}
   // pop-ups and pop-unders
-  try { window.open = function(){ return null; }; } catch(e) {}
+  try { // pop-ups without a click are dropped; a real click still opens its window
+    var _open = window.open;
+    window.open = function(){ var ua = navigator.userActivation; if (ua && !ua.isActive) return null; return _open.apply(window, arguments); };
+  } catch(e) {}
   function big(r){ return r.width*r.height > innerWidth*innerHeight*0.35; }
   function sweep(){
     var all = document.body ? document.body.querySelectorAll('div,a,span,ins,section') : [];
