@@ -456,9 +456,9 @@ public class MainActivity extends Activity {
                 if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
                 float margin = 30 * d;
                 if (code == KeyEvent.KEYCODE_DPAD_UP) {
-                    if (cursor.y - step < margin) scrollPage(-Math.min(step * 1.5f, 90 * d)); else cursor.y -= step;
+                    if (cursor.y - step < margin) scrollPage(-Math.min(step * 3f, 300 * d)); else cursor.y -= step;
                 } else if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
-                    if (cursor.y + step > h - margin) scrollPage(Math.min(step * 1.5f, 90 * d)); else cursor.y += step;
+                    if (cursor.y + step > h - margin) scrollPage(Math.min(step * 3f, 300 * d)); else cursor.y += step;
                 } else if (code == KeyEvent.KEYCODE_DPAD_LEFT) {
                     cursor.x = Math.max(0, cursor.x - step);
                 } else {
