@@ -81,7 +81,6 @@ public class MainActivity extends Activity {
     }
 
     private boolean blocking() { return adblock.enabled() && !adblock.isAllowed(currentSite); }
-    }
 
     @Override
     protected void onCreate(Bundle b) {
