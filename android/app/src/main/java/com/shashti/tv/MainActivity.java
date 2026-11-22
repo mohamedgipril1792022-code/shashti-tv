@@ -143,11 +143,11 @@ public class MainActivity extends Activity {
                 if (!"http".equals(sc) && !"https".equals(sc)) return true; // ignore intent://, market:// ...
                 String host = r.getUrl().getHost();
                 if (!blocking() || atHome()) return false;
-                if (adblock.isAd(host)) { lastBlocked = r.getUrl().toString(); blockedToast(); return true; }
+                if (adblock.isAd(host)) { lastBlocked = r.getUrl().toString(); sendAway(lastBlocked); return true; }
                 // a jump to another site that you did not click is an ad redirect; clicks are always allowed
                 if (r.isForMainFrame() && Build.VERSION.SDK_INT >= 24 && !r.isRedirect() && !r.hasGesture()) {
                     String cur = Uri.parse(web.getUrl()).getHost();
-                    if (!AdBlock.sameSite(cur, host)) { lastBlocked = r.getUrl().toString(); blockedToast(); return true; }
+                    if (!AdBlock.sameSite(cur, host)) { lastBlocked = r.getUrl().toString(); sendAway(lastBlocked); return true; }
                 }
                 return false;
             }
@@ -217,10 +217,34 @@ public class MainActivity extends Activity {
         String cur = Uri.parse(web.getUrl()).getHost();
         // a window you opened by clicking (e.g. a "watch" button) opens here; ad hosts and click-less pop-ups stay blocked
         if ((gesture || AdBlock.sameSite(cur, host)) && !adblock.isAd(host)) { web.loadUrl(url); return; }
-        blockedToast();
+        sendAway(url);
     }
 
     private long lastToast = 0;
+    private long lastAway = 0;
+
+    private boolean adsOutside() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("outside", true); }
+
+    /** Ads the user does not want here: open them in the device browser and come straight back. */
+    private void sendAway(String url) {
+        long now = System.currentTimeMillis();
+        if (!adsOutside() || now - lastAway < 5000) { blockedToast(); return; }
+        lastAway = now;
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            i.addCategory(Intent.CATEGORY_BROWSABLE);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            web.postDelayed(() -> {
+                try {
+                    Intent back = new Intent(this, MainActivity.class);
+                    back.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT | Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                    startActivity(back);
+                } catch (Exception ignored) { }
+            }, 700);
+            Toast.makeText(this, "📤 إعلان اتفتح في المتصفح بالخلفية", Toast.LENGTH_SHORT).show();
+        } catch (Exception noBrowser) { blockedToast(); }
+    }
     private String lastBlocked = null;
     private void blockedToast() {
         adblock.blocked++;
@@ -235,7 +259,7 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "↪ افتح آخر صفحة اتمنعت", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)"};
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "↪ افتح آخر صفحة اتمنعت", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📤 الإعلانات: بتفتح في المتصفح بالخلفية (اقفلها خالص)" : "🚫 الإعلانات: بتتقفل (افتحها في المتصفح بالخلفية)"};
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(items, (dlg, which) -> {
@@ -251,6 +275,12 @@ public class MainActivity extends Activity {
                     applyCleaner();
                     Toast.makeText(this, adblock.enabled() ? "🛡 مانع الإعلانات اشتغل" : "مانع الإعلانات اتقفل", Toast.LENGTH_SHORT).show();
                     web.reload();
+                    return;
+                }
+                if (which == 7) {
+                    boolean o = !adsOutside();
+                    getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("outside", o).apply();
+                    Toast.makeText(this, o ? "📤 الإعلانات هتفتح في المتصفح بالخلفية" : "🚫 الإعلانات هتتقفل", Toast.LENGTH_SHORT).show();
                     return;
                 }
                 if (which == 6) {

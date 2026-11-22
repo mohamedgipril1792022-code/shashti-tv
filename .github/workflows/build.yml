@@ -35,7 +35,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest
-          name: شاشتي TV
+          name: Sajo TV
           body: "حمّل shashti-tv.apk وثبّته على الـTV box."
           files: shashti-tv.apk
           make_latest: true
