@@ -145,7 +145,14 @@ public class MainActivity extends Activity {
                 String sc = r.getUrl().getScheme();
                 if (!"http".equals(sc) && !"https".equals(sc)) return true; // ignore intent://, market:// ...
                 String host = r.getUrl().getHost();
-                if (!blocking() || atHome()) return false;
+                if (atHome()) return false;
+                if (r.isForMainFrame() && System.currentTimeMillis() - playerTapAt < 2500) {
+                    String cur0 = Uri.parse(web.getUrl()).getHost();
+                    if (!(AdBlock.sameSite(cur0, host) && !r.isRedirect() && r.getUrl().toString().equals(web.getUrl()))) {
+                        lastBlocked = r.getUrl().toString(); sendAway(lastBlocked); return true;
+                    }
+                }
+                if (!blocking()) return false;
                 if (adblock.isAd(host)) { lastBlocked = r.getUrl().toString(); sendAway(lastBlocked); return true; }
                 // a jump to another site from inside a site goes to the silent background tab (Menu can show it)
                 if (r.isForMainFrame() && Build.VERSION.SDK_INT >= 24 && !r.isRedirect()) {
@@ -219,8 +226,8 @@ public class MainActivity extends Activity {
             return;
         }
         String cur = Uri.parse(web.getUrl()).getHost();
-        // a new window on the same site (player, episode page) opens right here
-        if (AdBlock.sameSite(cur, host) && !adblock.isAd(host)) { web.loadUrl(url); return; }
+        // a new window on the same site (episode page) opens right here — unless it came from a click on the player
+        if (System.currentTimeMillis() - playerTapAt > 2500 && AdBlock.sameSite(cur, host) && !adblock.isAd(host)) { web.loadUrl(url); return; }
         // anything else (usually the ad that opens with the first click) goes to a silent background tab,
         // so the page you are watching stays on screen; Menu can still show it if it was wanted
         sendAway(url);
@@ -600,7 +607,18 @@ public class MainActivity extends Activity {
         m.recycle();
     }
 
+    private volatile long playerTapAt = 0;
+
     private void tapAtCursor() {
+        float dd = getResources().getDisplayMetrics().density;
+        web.evaluateJavascript("(function(x,y){var e=document.elementFromPoint(x,y);for(;e;e=e.parentElement){if(e.tagName==='IFRAME'||e.tagName==='VIDEO')return 'P'}return ''})("
+                + Math.round(cursor.x / dd) + "," + Math.round(cursor.y / dd) + ")", v -> {
+            if (v != null && v.contains("P")) playerTapAt = System.currentTimeMillis();
+            doTap();
+        });
+    }
+
+    private void doTap() {
         long t = SystemClock.uptimeMillis();
         MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
         MotionEvent up = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, cursor.x, cursor.y, 0);
