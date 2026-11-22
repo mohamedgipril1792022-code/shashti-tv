@@ -93,14 +93,14 @@ footer{text-align:center;margin-top:30px}
   <h2>⭐ مواقعي</h2>
   <div class="grid" id="siteGrid"></div>
 </main>
-<footer><button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button><br><button id="ver" data-nav></button></footer>
+<footer><button class="hbtn" id="ab" data-nav hidden></button> <button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button><br><button id="ver" data-nav></button></footer>
 
 <div id="modal"><div class="box" id="box"></div></div>
 <div id="push"><div class="box" id="pbox"></div></div>
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'٥',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٣:٤٠ م'};
+const VERSION={n:'٦',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٤:٢٠ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -416,6 +416,11 @@ function importData(){
       let n=0;j.items.forEach(o=>{if(o&&o.id&&['site','visit','cont'].includes(o.kind)){items.set(o.id,o);n++}});
       saveLocal();render();closeModal();toast(`اتسترجع ${n} عنصر`)}catch(_){toast('الملف ده مش نسخة احتياطية من شاشتي')}};
 }
+const AND=!!(window.Android&&Android.adblockOn);
+function drawAb(){const b=$('#ab');if(!AND)return;b.hidden=false;let on=true;try{on=Android.adblockOn()}catch(e){}
+  b.textContent=on?'🛡 مانع الإعلانات: شغال':'🛡 مانع الإعلانات: مقفول';b.classList.toggle('red',on)}
+$('#ab').onclick=()=>{try{const on=!Android.adblockOn();Android.setAdblock(on);drawAb();toast(on?'مانع الإعلانات اشتغل':'مانع الإعلانات اتقفل')}catch(e){}};
+drawAb();
 $('#bk').onclick=exportData;$('#rs').onclick=importData;
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 loadLocal();render();

@@ -8,6 +8,7 @@ import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Message;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.view.KeyEvent;
@@ -27,6 +28,7 @@ import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
@@ -42,6 +44,7 @@ public class MainActivity extends Activity {
     private WebChromeClient.CustomViewCallback customCallback;
     private ValueCallback<Uri[]> fileCallback;
     private WebViewAssetLoader assets;
+    private AdBlock adblock;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -56,6 +59,7 @@ public class MainActivity extends Activity {
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
                 .build();
 
+        adblock = new AdBlock(this);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
@@ -63,8 +67,8 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
-        s.setSupportMultipleWindows(false); // target=_blank opens in the same view
-        s.setJavaScriptCanOpenWindowsAutomatically(false);
+        s.setSupportMultipleWindows(true); // popups go through onCreateWindow below
+        s.setJavaScriptCanOpenWindowsAutomatically(true);
         if (Build.VERSION.SDK_INT >= 21) s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
 
         web.addJavascriptInterface(new Bridge(), "Android");
@@ -72,13 +76,26 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
-                return assets.shouldInterceptRequest(r.getUrl());
+                WebResourceResponse a = assets.shouldInterceptRequest(r.getUrl());
+                if (a != null) return a;
+                if (adblock.isAd(r.getUrl().getHost())) {
+                    adblock.blocked++;
+                    return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
+                }
+                return null;
             }
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 String sc = r.getUrl().getScheme();
-                if ("http".equals(sc) || "https".equals(sc)) return false;
-                return true; // ignore intent://, market:// and other app links
+                if (!"http".equals(sc) && !"https".equals(sc)) return true; // ignore intent://, market:// ...
+                String host = r.getUrl().getHost();
+                if (adblock.isAd(host)) { blockedToast(); return true; }
+                if (adblock.enabled() && r.isForMainFrame() && !atHome() && Build.VERSION.SDK_INT >= 24
+                        && !r.isRedirect() && !r.hasGesture()) {
+                    String cur = Uri.parse(web.getUrl()).getHost();
+                    if (!AdBlock.sameSite(cur, host)) { blockedToast(); return true; } // silent jump to another site
+                }
+                return false;
             }
         });
 
@@ -93,6 +110,23 @@ public class MainActivity extends Activity {
             }
             @Override
             public void onHideCustomView() { exitFullscreen(); }
+
+            @Override
+            public boolean onCreateWindow(WebView view, boolean dialog, boolean gesture, Message msg) {
+                // catch the popup's address, then decide: open it here or drop it
+                WebView tmp = new WebView(MainActivity.this);
+                tmp.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView t, WebResourceRequest r) {
+                        openPopup(r.getUrl().toString(), gesture);
+                        t.destroy();
+                        return true;
+                    }
+                });
+                ((WebView.WebViewTransport) msg.obj).setWebView(tmp);
+                msg.sendToTarget();
+                return true;
+            }
 
             @Override
             public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p) {
@@ -110,6 +144,25 @@ public class MainActivity extends Activity {
         });
 
         if (b != null) web.restoreState(b); else web.loadUrl(HOME);
+    }
+
+    private void openPopup(String url, boolean gesture) {
+        String host = Uri.parse(url).getHost();
+        if (atHome()) { web.loadUrl(url); return; } // links from the launcher itself
+        if (!adblock.enabled()) { web.loadUrl(url); return; }
+        String cur = Uri.parse(web.getUrl()).getHost();
+        if (gesture && !adblock.isAd(host) && AdBlock.sameSite(cur, host)) { web.loadUrl(url); return; }
+        blockedToast();
+    }
+
+    private long lastToast = 0;
+    private void blockedToast() {
+        adblock.blocked++;
+        long now = System.currentTimeMillis();
+        if (now - lastToast > 4000) {
+            lastToast = now;
+            runOnUiThread(() -> Toast.makeText(this, "🛡 اتمنع إعلان", Toast.LENGTH_SHORT).show());
+        }
     }
 
     private void exitFullscreen() {
@@ -192,6 +245,15 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public boolean adblockOn() { return adblock.enabled(); }
+
+        @JavascriptInterface
+        public void setAdblock(boolean on) { adblock.setEnabled(on); }
+
+        @JavascriptInterface
+        public int blockedCount() { return adblock.blocked; }
 
         @JavascriptInterface
         public void goHome() { runOnUiThread(() -> web.loadUrl(HOME)); }
