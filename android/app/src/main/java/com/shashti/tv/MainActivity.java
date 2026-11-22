@@ -107,7 +107,7 @@ public class MainActivity extends Activity {
     }
 
     /** Simple mode: block ad addresses and pop-ups only — nothing that edits or clicks pages by itself. */
-    private boolean simple() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("simple", true); }
+    private boolean simple() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("simple", false); }
 
     private boolean blocking() { return adblock.enabled() && !adblock.isAllowed(currentSite); }
 
@@ -185,6 +185,8 @@ public class MainActivity extends Activity {
             }
             @Override
             public void onPageFinished(WebView v, String u) {
+                boxes = new float[0][];
+                v.postDelayed(MainActivity.this::refreshBoxes, 600);
                 // older WebViews without document-start scripts: clean the main page at least
                 if (cleaner == null && !simple() && blocking() && !atHome() && !cleanJs.isEmpty()) v.evaluateJavascript(cleanerScript(), null);
                 if (pendingAdd != null && atHome()) {
@@ -533,26 +535,91 @@ public class MainActivity extends Activity {
         "if(!best)return '';var e=best[0];window.__shPrev=e;window.__shPrevO=e.style.outline;e.style.outline='3px solid #e50914';e.style.outlineOffset='2px';" +
         "return Math.round(best[1])+','+Math.round(best[2])})";
 
+    // ---- box-to-box: the page's clickable boxes are measured in the background, so each press jumps instantly ----
+    private static final String COLLECT_JS = "(function(){var vw=innerWidth,vh=innerHeight,sx=scrollX,sy=scrollY,out=[],seen=[];var sel='a[href],button,input:not([type=hidden]),select,textarea,summary,video,iframe,[role=button],[role=link],[role=tab],[role=menuitem],[onclick],[tabindex]:not([tabindex=\"-1\"]),label[for]';function ok(e,r){if(r.width<8||r.height<8)return false;if(r.bottom+sy<0)return false;var st=getComputedStyle(e);return st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0.1}function add(e){var r=e.getBoundingClientRect();if(!ok(e,r))return; for(var i=0;i<seen.length;i++){var p=seen[i];if(p.contains(e)||e.contains(p)){var q=p.getBoundingClientRect();if(Math.abs(q.width-r.width)<12&&Math.abs(q.height-r.height)<12)return}} seen.push(e);out.push([Math.round(r.left+sx),Math.round(r.top+sy),Math.round(r.width),Math.round(r.height)])}var a=document.querySelectorAll(sel);for(var i=0;i<a.length&&out.length<1200;i++)add(a[i]);var b=document.querySelectorAll('div,span,li,img,article,section,figure,h2,h3');for(var j=0;j<b.length&&j<4000&&out.length<1500;j++){var e=b[j];if(e.closest(sel))continue;try{if(getComputedStyle(e).cursor==='pointer')add(e)}catch(x){}}return JSON.stringify({sx:sx,sy:sy,vw:vw,vh:vh,dh:document.documentElement.scrollHeight,it:out})})()";
+    private volatile float[][] boxes = new float[0][];
+    private volatile float scrX = 0, scrY = 0, docH = 0;
+    private volatile long boxesAt = 0;
+    private boolean collecting = false;
+
+    private void refreshBoxes() {
+        if (collecting || atHome()) return;
+        collecting = true;
+        web.evaluateJavascript(COLLECT_JS, v -> {
+            collecting = false;
+            try {
+                org.json.JSONObject j = new org.json.JSONObject(new org.json.JSONTokener(v).nextValue().toString());
+                org.json.JSONArray it = j.getJSONArray("it");
+                float[][] b = new float[it.length()][];
+                for (int i = 0; i < it.length(); i++) {
+                    org.json.JSONArray q = it.getJSONArray(i);
+                    b[i] = new float[]{(float) q.getDouble(0), (float) q.getDouble(1), (float) q.getDouble(2), (float) q.getDouble(3)};
+                }
+                boxes = b; scrX = (float) j.getDouble("sx"); scrY = (float) j.getDouble("sy"); docH = (float) j.getDouble("dh");
+                boxesAt = System.currentTimeMillis();
+            } catch (Exception ignored) { }
+        });
+    }
+
+    private final Runnable boxRefresher = new Runnable() {
+        @Override public void run() {
+            if (!atHome() && customView == null) refreshBoxes();
+            web.postDelayed(this, 2500);
+        }
+    };
+    private boolean refresherOn = false;
+
     private void snapTo(int code) {
         final float d = getResources().getDisplayMetrics().density;
+        if (!refresherOn) { refresherOn = true; web.post(boxRefresher); }
         if (cursor.x < 0) { cursor.x = root.getWidth() / 2f; cursor.y = root.getHeight() / 2f; }
+        float[][] bx = boxes;
+        if (bx.length == 0 || System.currentTimeMillis() - boxesAt > 8000) { refreshBoxes(); freeMove(code, 0); return; }
         int dx = code == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
         int dy = code == KeyEvent.KEYCODE_DPAD_UP ? -1 : code == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : 0;
-        String js = SNAP_JS + "(" + dx + "," + dy + "," + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")";
-        web.evaluateJavascript(js, v -> {
-            String xy = v == null ? "" : v.replace("\"", "");
-            if (xy.contains(",")) {
-                String[] p = xy.split(",");
-                cursor.x = Float.parseFloat(p[0]) * d;
-                cursor.y = Float.parseFloat(p[1]) * d;
-                cursor.invalidate();
-                hoverAtCursor();
-            } else if (dy != 0) {
-                scrollPage(dy * root.getHeight() * 0.45f); // nothing more in that direction on screen: scroll
+        float vw = root.getWidth() / d, vh = root.getHeight() / d;
+        float cx = scrX + cursor.x / d, cy = scrY + cursor.y / d;   // pointer in page coordinates
+        float[] best = null; double bs = Double.MAX_VALUE;
+        for (float[] b : bx) {
+            float l = b[0], t = b[1], rr = b[0] + b[2], bb = b[1] + b[3];
+            if (cx >= l && cx <= rr && cy >= t && cy <= bb) continue;            // the box we are on
+            float ex = (l + rr) / 2, ey = (t + bb) / 2;
+            double along, perp;
+            if (dy != 0) {
+                along = dy > 0 ? t - cy : cy - bb;
+                if (along < -b[3] / 2 || (dy > 0 ? ey <= cy + 4 : ey >= cy - 4)) continue;
+                perp = cx < l ? l - cx : cx > rr ? cx - rr : 0;                   // 0 when the box is straight below/above
             } else {
-                freeMove(code, 0);
+                along = dx > 0 ? l - cx : cx - rr;
+                if (dx > 0 ? ex <= cx + 4 : ex >= cx - 4) continue;
+                perp = cy < t ? t - cy : cy > bb ? cy - bb : 0;
             }
-        });
+            double sc = Math.max(along, 0) + perp * 3;
+            boolean onScreen = bb > scrY && t < scrY + vh;
+            if (!onScreen) sc += 400;                                            // prefer what is visible
+            if (sc < bs) { bs = sc; best = b; }
+        }
+        if (best == null) {
+            if (dy != 0) { scrollPage(dy * root.getHeight() * 0.6f); web.postDelayed(this::refreshBoxes, 350); }
+            else freeMove(code, 0);
+            return;
+        }
+        float ex = best[0] + Math.min(best[2], vw) / 2, ey = best[1] + Math.min(best[3], vh * 0.8f) / 2;
+        float targetY = ey - scrY;
+        if (targetY < 40 || targetY > vh - 40) {                                 // off screen: bring it to the middle
+            float newY = Math.max(0, Math.min(ey - vh / 2, Math.max(0, docH - vh)));
+            web.evaluateJavascript("window.scrollTo(" + Math.round(scrX) + "," + Math.round(newY) + ")", null);
+            scrY = newY;
+            targetY = ey - newY;
+            web.postDelayed(this::refreshBoxes, 350);
+        }
+        cursor.x = Math.max(4 * d, Math.min((ex - scrX) * d, root.getWidth() - 8 * d));
+        cursor.y = Math.max(4 * d, Math.min(targetY * d, root.getHeight() - 8 * d));
+        cursor.invalidate();
+        hoverAtCursor();
+        web.evaluateJavascript("(function(x,y){var e=document.elementFromPoint(x,y);if(window.__shPrev){window.__shPrev.style.outline=window.__shPrevO||'';window.__shPrev=null}" +
+            "if(!e)return;window.__shPrev=e;window.__shPrevO=e.style.outline;e.style.outline='3px solid #e50914'})(" +
+            Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", null);
     }
 
     private boolean dispatchRest(KeyEvent e) {
@@ -580,6 +647,7 @@ public class MainActivity extends Activity {
     }
 
     private void scrollPage(float dy) {
+        web.postDelayed(this::refreshBoxes, 300);
         float d = getResources().getDisplayMetrics().density;
         int css = Math.round(dy / d);
         // scroll the page and, if it scrolls inside a box, the element under the pointer
