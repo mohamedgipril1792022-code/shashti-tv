@@ -1,0 +1,41 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.shashti.tv'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.shashti.tv'
+        minSdk 21
+        targetSdk 34
+        versionCode 5
+        versionName '5'
+    }
+    signingConfigs {
+        shashti {
+            storeFile file('shashti.keystore')
+            storePassword 'shashti123'
+            keyAlias 'shashti'
+            keyPassword 'shashti123'
+        }
+    }
+    buildTypes {
+        release { minifyEnabled false; signingConfig signingConfigs.shashti }
+        debug { signingConfig signingConfigs.shashti }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+}
+
+// copy the web app into the APK assets before every build
+tasks.register('copyWeb', Copy) {
+    from "${rootDir}/../web"
+    include 'index.html', 'icon-192.png'
+    into "${projectDir}/src/main/assets"
+}
+preBuild.dependsOn copyWeb

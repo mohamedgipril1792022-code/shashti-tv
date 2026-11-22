@@ -1,0 +1,58 @@
+name: Build APK and website
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Build APK
+        working-directory: android
+        run: gradle assembleRelease --no-daemon
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk shashti-tv.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shashti-tv-apk
+          path: shashti-tv.apk
+      - name: Publish to the "latest" release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: شاشتي TV
+          body: "حمّل shashti-tv.apk وثبّته على الـTV box."
+          files: shashti-tv.apk
+          make_latest: true
+
+  pages:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web
+      - id: deploy
+        uses: actions/deploy-pages@v4

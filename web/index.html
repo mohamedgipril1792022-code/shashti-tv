@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>شاشتي TV</title>
+<meta name="theme-color" content="#160e10">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#120d0e;--panel:#1d1416;--line:#3a2124;--red:#e50914;--txt:#fff;--mut:#b9a9ab}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font-family:Cairo,system-ui,sans-serif}
+body{min-height:100vh;padding-bottom:40px}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:12px clamp(12px,3vw,40px);background:linear-gradient(#241316,#160e10);border-bottom:1px solid var(--line)}
+.logo{font-weight:900;font-size:clamp(22px,2.6vw,40px);flex:1;white-space:nowrap}
+.logo b{color:var(--red)}
+.hbtn{background:#2a1a1d;color:#fff;border:1px solid var(--line);border-radius:14px;padding:8px 14px;font:700 clamp(14px,1.4vw,22px) Cairo,sans-serif;cursor:pointer;white-space:nowrap}
+.hbtn.red{background:var(--red);border-color:var(--red)}
+.hbtn.on{background:#fff;color:#000}
+.search{display:flex;gap:8px;padding:10px clamp(12px,3vw,40px) 0}
+.search input{flex:1;min-width:0;background:#0f0a0b;color:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px;font:16px Cairo,sans-serif}
+.search a{text-decoration:none;display:flex;align-items:center}
+.search a[hidden]{display:none}
+.fav{position:absolute;top:8px;right:8px;z-index:2;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.25);color:#ffd54a;border-radius:12px;width:clamp(30px,2.6vw,44px);height:clamp(30px,2.6vw,44px);font-size:clamp(16px,1.6vw,26px);cursor:pointer;line-height:1}
+.fav:focus-visible,.fav:hover{background:var(--red);outline:none}
+.editing .fav{display:none}
+#push{position:fixed;inset:0;z-index:25;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;padding:16px}
+#push.open{display:flex}
+#push .box{text-align:center}
+#push .big{display:block;text-decoration:none;font-size:clamp(20px,2.4vw,36px);padding:16px;margin-top:14px}
+#status{font-size:13px;color:var(--mut);padding:6px clamp(12px,3vw,40px) 0;min-height:4px}
+main{padding:0 clamp(12px,3vw,40px)}
+h2{font-size:clamp(18px,2vw,32px);margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+h2 small{font-size:.55em;color:var(--mut);font-weight:400}
+.row{display:flex;gap:clamp(10px,1.4vw,22px);overflow-x:auto;padding:6px 4px 12px;scroll-snap-type:x proximity}
+.row .tile{flex:0 0 clamp(140px,21vw,320px);scroll-snap-align:start}
+.row.wide .tile{flex-basis:clamp(200px,30vw,440px);aspect-ratio:16/10}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(145px,15vw,280px),1fr));gap:clamp(12px,1.6vw,26px);padding:6px 4px}
+.tile{position:relative;display:block;aspect-ratio:1;border-radius:20px;overflow:hidden;text-decoration:none;color:#fff;background:#222;outline:none;transition:transform .15s,box-shadow .15s;cursor:pointer}
+.tile .bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.tile .shade{position:absolute;inset:0;background:linear-gradient(transparent 30%,rgba(0,0,0,.55))}
+.tile .name{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-weight:900;font-size:clamp(22px,2.6vw,44px);line-height:1.15;text-shadow:0 3px 10px rgba(0,0,0,.85),0 0 2px #000;word-break:break-word}
+.tile .sub{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;background:rgba(0,0,0,.65);font-size:clamp(12px,1.2vw,20px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .ago{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);border-radius:10px;padding:1px 8px;font-size:clamp(11px,1vw,17px)}
+.tile:focus-visible,.tile:hover{transform:scale(1.05);box-shadow:0 0 0 4px var(--red),0 10px 30px rgba(0,0,0,.6)}
+.upd{position:absolute;top:8px;left:8px;z-index:2;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:12px;padding:3px 9px;font:700 clamp(12px,1.1vw,18px) Cairo,sans-serif;cursor:pointer}
+.upd:focus-visible,.upd:hover{background:var(--red);outline:none}
+.editing .upd{display:none}
+.editing .tile::after{content:"✎ تعديل";position:absolute;top:8px;left:8px;background:var(--red);border-radius:10px;padding:2px 10px;font-size:14px;font-weight:700}
+.empty{color:var(--mut);padding:14px 4px;font-size:clamp(14px,1.3vw,20px)}
+.hbtn:focus-visible,.fbtn:focus-visible,input:focus,select:focus{outline:3px solid var(--red);outline-offset:2px}
+footer{text-align:center;margin-top:30px}
+#ver{background:none;border:none;color:var(--mut);font:13px Cairo,sans-serif;cursor:pointer;padding:6px 10px}
+/* modal */
+#modal{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:16px}
+#modal.open{display:flex}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:22px;width:min(560px,100%);max-height:92vh;overflow:auto;padding:20px}
+.box h3{margin:0 0 14px;font-size:clamp(18px,1.8vw,28px)}
+.box label{display:block;font-weight:700;margin:12px 0 4px;font-size:clamp(14px,1.3vw,20px)}
+.box input,.box select{width:100%;background:#0f0a0b;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:16px Cairo,sans-serif}
+.box input[dir=ltr]{text-align:left}
+.prev{display:flex;gap:12px;align-items:center;margin-top:6px}
+.prev .tile{width:110px;flex:0 0 110px}
+.prev .tile .name{font-size:18px}
+.acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.fbtn{flex:1;min-width:110px;background:#2a1a1d;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px;font:700 16px Cairo,sans-serif;cursor:pointer}
+.fbtn.red{background:var(--red);border-color:var(--red)}
+.fbtn.g{display:block;text-align:center;text-decoration:none;background:#fff;color:#1a1a1a;margin-top:6px}
+.steps{color:var(--mut);font-size:13px;margin:8px 0 0;padding-inline-start:18px}
+.fbtn.del{background:transparent;color:#ff6b6b;border-color:#6b2a2a}
+.hint{color:var(--mut);font-size:13px;margin-top:4px}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;color:#000;border-radius:14px;padding:8px 16px;font-weight:700;display:none;z-index:30}
+@media (max-width:520px){.hbtn .t{display:none}.hbtn{padding:8px 11px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">شاشتي <b>TV</b></div>
+  <button class="hbtn red" data-nav id="addSite">＋<span class="t"> موقع</span></button>
+  <button class="hbtn" data-nav id="addCont">▶<span class="t"> تكملة</span></button>
+  <button class="hbtn" data-nav id="editBtn">✎<span class="t"> تعديل</span></button>
+</header>
+<div class="search"><input id="q" type="search" placeholder="🔍 دور في مواقعك وتكملاتك…" data-nav><a id="gq" class="hbtn" target="_blank" rel="noopener" data-nav hidden>🔎 جوجل</a></div>
+<div id="status"></div>
+<main id="main">
+  <h2>▶ تكملة المشاهدة <small>اللي وقفت عنده</small></h2>
+  <div class="row wide" id="contRow"></div>
+  <h2>🕘 آخر ما شاهدت</h2>
+  <div class="row" id="visitRow"></div>
+  <h2>⭐ مواقعي</h2>
+  <div class="grid" id="siteGrid"></div>
+</main>
+<footer><button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button><br><button id="ver" data-nav></button></footer>
+
+<div id="modal"><div class="box" id="box"></div></div>
+<div id="push"><div class="box" id="pbox"></div></div>
+<div id="toast"></div>
+
+<script>
+const VERSION={n:'٥',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٣:٤٠ م'};
+const LS='shashti-v1';
+let items=new Map();
+let col=null, editMode=false;
+let DEV='';try{DEV=localStorage.getItem('shashti-dev')||'';if(!DEV){DEV='d'+Math.random().toString(36).slice(2,10);localStorage.setItem('shashti-dev',DEV)}}catch(e){DEV='d'+Math.random().toString(36).slice(2,10)}
+let pushSeen=0;try{pushSeen=+localStorage.getItem('shashti-pushseen')||0}catch(e){}
+const $=s=>document.querySelector(s);
+
+/* ---------- storage ---------- */
+function loadLocal(){try{JSON.parse(localStorage.getItem(LS)||'[]').forEach(o=>o&&o.id&&items.set(o.id,o))}catch(e){}}
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify([...items.values()]))}catch(e){}}
+const chains={};
+function cloudWrite(id,fn){
+  chains[id]=(chains[id]||Promise.resolve()).then(fn).catch(e=>{
+    if(e&&e.code==='quota_exceeded')toast('المساحة السحابية امتلأت — احذف بعض العناصر');
+    else if(e&&(e.code==='invalid_argument'||e.code==='revoked'||e.code==='not_granted')){col=null;setStatus('الحفظ السحابي غير متاح — الحفظ على هذا الجهاز فقط')}
+  });
+}
+function put(o){items.set(o.id,o);saveLocal();render();if(col){const c=col;cloudWrite(o.id,()=>c.doc(o.id).set(o))}}
+function del(id){items.delete(id);saveLocal();render();if(col){const c=col;cloudWrite(id,()=>c.doc(id).delete())}}
+
+async function initCloud(){
+  if(!window.claude||!claude.use)return;
+  let db,user;
+  try{[db,user]=await Promise.all([claude.use('db'),claude.use('user')])}catch(e){return}
+  if(!db||!user)return;
+  let uid=null;try{uid=await user.id()}catch(e){}
+  if(!uid)return;
+  const c=db.collection('data/users/'+uid);
+  col=c;
+  setStatus('جاري المزامنة…');
+  const timer=setTimeout(()=>setStatus('تعذّر الوصول للمزامنة الآن — المعروض هو المحفوظ على الجهاز'),10000);
+  let first=true;
+  c.onSnapshot(snap=>{
+    if(snap.metadata.fromCache)return;
+    clearTimeout(timer);setStatus('');
+    const m=new Map();
+    snap.docs.forEach(d=>{const v=d.data();if(v&&v.kind)m.set(d.id,Object.assign({},v,{id:d.id}))});
+    if(first){
+      first=false;
+      // نقل أي حاجة محفوظة على الجهاز ومش موجودة في السحابة
+      for(const o of items.values()){if(!m.has(o.id)){m.set(o.id,o);cloudWrite(o.id,()=>c.doc(o.id).set(o))}}
+    }
+    items=m;saveLocal();render();checkPush();
+  },err=>{clearTimeout(timer);col=null;setStatus('المزامنة غير متاحة — الحفظ على هذا الجهاز فقط')});
+}
+
+/* ---------- helpers ---------- */
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function normUrl(u){u=(u||'').trim();if(!u)return '';if(!/^https?:\/\//i.test(u))u='https://'+u;try{return new URL(u).href}catch(e){return ''}}
+function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){return ''}}
+function grad(s){let h=0;for(const ch of s||'x')h=(h*31+ch.charCodeAt(0))%360;return `linear-gradient(135deg,hsl(${h} 70% 38%),hsl(${(h+50)%360} 75% 18%))`}
+function ago(t){const m=Math.round((Date.now()-t)/60000);if(m<1)return 'الآن';if(m<60)return `من ${m} د`;const h=Math.round(m/60);if(h<24)return `من ${h} س`;const d=Math.round(h/24);return `من ${d} يوم`}
+function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',2600)}
+function setStatus(t){$('#status').textContent=t}
+const sites=()=>[...items.values()].filter(o=>o.kind==='site').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+const siteById=id=>{const o=items.get(id);return o&&o.kind==='site'?o:null};
+
+function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav}){
+  const a=document.createElement('a');
+  a.className='tile';a.href=url||'#';a.target='_blank';a.rel='noopener';a.setAttribute('data-nav','');
+  const bg=document.createElement('div');bg.className='bg';
+  if(icon)bg.style.backgroundImage=`url("${icon}")`;else bg.style.background=grad(name);
+  a.appendChild(bg);
+  const sh=document.createElement('div');sh.className='shade';a.appendChild(sh);
+  const n=document.createElement('span');n.className='name';n.textContent=name||hostOf(url);a.appendChild(n);
+  if(sub){const s=document.createElement('span');s.className='sub';s.textContent=sub;a.appendChild(s)}
+  if(agoT){const g=document.createElement('span');g.className='ago';g.textContent=ago(agoT);a.appendChild(g)}
+  if(onFav){const f=document.createElement('button');f.type='button';f.className='fav';f.setAttribute('data-nav','');f.title='المفضلة';f.textContent=fav?'★':'☆';f.onclick=e=>{e.preventDefault();e.stopPropagation();onFav()};a.appendChild(f)}
+  if(onUpd){const b=document.createElement('button');b.type='button';b.className='upd';b.setAttribute('data-nav','');b.textContent='🔄 تحديث الرابط';b.onclick=e=>{e.preventDefault();e.stopPropagation();onUpd()};a.appendChild(b)}
+  return a;
+}
+
+/* ---------- render ---------- */
+function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!q)return true;return fields.some(f=>String(f||'').toLowerCase().includes(q))}
+function render(){
+  const qv=($('#q').value||'').trim();const gq=$('#gq');
+  if(qv){gq.hidden=false;gq.href='https://www.google.com/search?q='+encodeURIComponent(qv);gq.textContent='🔎 جوجل: '+(qv.length>14?qv.slice(0,14)+'…':qv)}else gq.hidden=true;
+  const noRes='<div class="empty">مفيش نتايج — جرّب زرار جوجل جنب البحث.</div>';
+  document.body.classList.toggle('editing',editMode);
+  $('#editBtn').classList.toggle('on',editMode);
+  $('#ver').textContent=`نسخة ${VERSION.n} · ${VERSION.date}`;
+
+  const grid=$('#siteGrid');grid.innerHTML='';
+  const ss=sites().filter(s=>qMatch(s.name,s.url)).sort((a,b)=>(b.fav?1:0)-(a.fav?1:0));
+  if(!ss.length&&qv)grid.innerHTML=noRes;else if(!ss.length)grid.innerHTML='<div class="empty">لسه مفيش مواقع — دوس «＋ موقع» وحط رابط الموقع واختار صورة ليه.</div>';
+  ss.forEach(s=>{
+    const t=tileEl({name:s.name,url:s.url,icon:s.icon,onUpd:()=>openUpdate(s),fav:!!s.fav,onFav:()=>{put(Object.assign({},s,{fav:!s.fav}));toast(s.fav?'اتشال من المفضلة':'⭐ اتضاف للمفضلة')}});
+    t.onclick=e=>{if(editMode){e.preventDefault();openSite(s)}else visit(s.id)};
+    grid.appendChild(t);
+  });
+
+  const vr=$('#visitRow');vr.innerHTML='';
+  const vs=[...items.values()].filter(o=>o.kind==='visit'&&siteById(o.siteId)&&qMatch(siteById(o.siteId).name,siteById(o.siteId).url)).sort((a,b)=>b.lastAt-a.lastAt).slice(0,15);
+  if(!vs.length&&qv)vr.innerHTML=noRes;else if(!vs.length)vr.innerHTML='<div class="empty">أول ما تفتح موقع من هنا هيظهر في القسم ده.</div>';
+  vs.forEach(v=>{
+    const s=siteById(v.siteId);
+    const t=tileEl({name:s.name,url:s.url,icon:s.icon,agoT:v.lastAt,onUpd:()=>openUpdate(s)});
+    t.onclick=e=>{if(editMode){e.preventDefault();confirmBox('تشيل «'+s.name+'» من آخر ما شاهدت؟',()=>del(v.id))}else visit(s.id)};
+    vr.appendChild(t);
+  });
+
+  const cr=$('#contRow');cr.innerHTML='';
+  const cs=[...items.values()].filter(o=>o.kind==='cont'&&qMatch(o.title,o.note,o.url)).sort((a,b)=>b.lastAt-a.lastAt);
+  if(!cs.length&&qv)cr.innerHTML=noRes;else if(!cs.length)cr.innerHTML='<div class="empty">وانت بتتفرج، دوس «▶ تكملة» واحفظ رابط الحلقة والدقيقة اللي وقفت عندها.</div>';
+  cs.forEach(c=>{
+    const s=siteById(c.siteId);
+    const icon=c.icon||(s&&s.icon)||'';
+    const t=tileEl({name:c.title,url:c.url,icon,sub:c.note||(s?s.name:hostOf(c.url)),agoT:c.lastAt});
+    t.onclick=e=>{if(editMode){e.preventDefault();openCont(c)}else{put(Object.assign({},c,{lastAt:Date.now()}));if(c.siteId&&siteById(c.siteId))visit(c.siteId,true)}};
+    cr.appendChild(t);
+  });
+}
+function visit(siteId,silent){
+  const id='v-'+siteId;
+  const o={id,kind:'visit',siteId,lastAt:Date.now()};
+  if(silent){items.set(id,o);saveLocal();if(col){const c=col;cloudWrite(id,()=>c.doc(id).set(o))}return}
+  items.set(id,o);saveLocal();setTimeout(render,80);
+}
+
+/* ---------- image ---------- */
+function fileToIcon(file){return new Promise((res,rej)=>{
+  const img=new Image();const u=URL.createObjectURL(file);
+  img.onload=()=>{const S=400,W=img.naturalWidth,H=img.naturalHeight,s=Math.min(W,H);
+    const cv=document.createElement('canvas');cv.width=S;cv.height=S;
+    cv.getContext('2d').drawImage(img,(W-s)/2,(H-s)/2,s,s,0,0,S,S);
+    URL.revokeObjectURL(u);res(cv.toDataURL('image/jpeg',0.75))};
+  img.onerror=()=>{URL.revokeObjectURL(u);rej()};img.src=u})}
+
+/* ---------- modal ---------- */
+let lastFocus=null;
+function openModal(html){lastFocus=document.activeElement;$('#box').innerHTML=html;$('#modal').classList.add('open');setTimeout(()=>{const f=$('#box input,#box select,#box button');f&&f.focus()},30)}
+function closeModal(){$('#modal').classList.remove('open');$('#box').innerHTML='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
+function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function confirmBox(msg,yes){
+  openModal(`<h3>${esc(msg)}</h3><div class="acts"><button class="fbtn del" data-nav id="cy">نعم، احذف</button><button class="fbtn" data-nav id="cn">إلغاء</button></div>`);
+  $('#cy').onclick=()=>{closeModal();yes()};$('#cn').onclick=closeModal;
+}
+
+function iconPicker(cur,name){
+  return `<label>الصورة (الأيقونة)</label>
+  <div class="prev"><div id="pv"></div><div style="flex:1">
+   <input type="file" accept="image/*" id="fi" data-nav>
+   <button type="button" class="fbtn" style="margin-top:8px;width:100%" id="rmImg" data-nav>بدون صورة</button>
+   <div class="hint">اختار أي صورة من الفون (بوستر أو لوجو) — هتتقص مربع تلقائي.</div></div></div>`;
+}
+function wirePicker(state){
+  const draw=()=>{const pv=$('#pv');pv.innerHTML='';pv.appendChild(tileEl({name:state.nameFn(),icon:state.icon}))};
+  draw();
+  $('#fi').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{state.icon=await fileToIcon(f);draw()}catch(_){toast('تعذّر قراءة الصورة')}};
+  $('#rmImg').onclick=()=>{state.icon='';draw()};
+  return draw;
+}
+
+function openSite(s){
+  const isNew=!s;s=s||{};
+  openModal(`<h3>${isNew?'إضافة موقع':'تعديل الموقع'}</h3>
+   <label>الاسم اللي يظهر على الأيقونة</label><input id="fn" placeholder="اسم الموقع" value="${esc(s.name)}" data-nav>
+   <label>الرابط (URL)</label><input id="fu" dir="ltr" inputmode="url" placeholder="https://example.com" value="${esc(s.url)}" data-nav>
+   <a class="fbtn g" id="gs2" data-nav target="_blank" rel="noopener" href="https://www.google.com/">🔎 مش عارف الرابط؟ ابحث بالاسم في جوجل</a>
+   <div class="hint">افتح الموقع من النتايج، انسخ الرابط من شريط العنوان، وارجع الصقه في خانة الرابط.</div>
+   ${iconPicker()}
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  const st={icon:s.icon||'',nameFn:()=>$('#fn').value.trim()||hostOf(normUrl($('#fu').value))||'موقع'};
+  const draw=wirePicker(st);
+  const gl=()=>{const n=$('#fn').value.trim();$('#gs2').href=n?'https://www.google.com/search?q='+encodeURIComponent(n):'https://www.google.com/'};gl();
+  $('#fn').oninput=()=>{draw();gl()};$('#fu').oninput=draw;
+  $('#gs2').onclick=e=>{if(!$('#fn').value.trim()){e.preventDefault();toast('اكتب اسم الموقع الأول');$('#fn').focus()}};
+  $('#cc').onclick=closeModal;
+  if(!isNew)$('#dl').onclick=()=>confirmBox('تحذف «'+s.name+'»؟',()=>{del(s.id);del('v-'+s.id)});
+  $('#sv').onclick=()=>{
+    const url=normUrl($('#fu').value);if(!url){toast('اكتب رابط صحيح');$('#fu').focus();return}
+    const name=$('#fn').value.trim()||hostOf(url);
+    put({id:s.id||('s-'+uid()),kind:'site',name,url,icon:st.icon,createdAt:s.createdAt||Date.now()});
+    closeModal();toast(isNew?'اتضاف الموقع':'اتحفظ التعديل');
+  };
+}
+
+function openCont(c){
+  const isNew=!c;c=c||{};
+  const ss=sites();
+  let defSite=c.siteId;
+  if(isNew){const v=[...items.values()].filter(o=>o.kind==='visit'&&siteById(o.siteId)).sort((a,b)=>b.lastAt-a.lastAt)[0];defSite=v?v.siteId:''}
+  openModal(`<h3>${isNew?'حفظ تكملة مشاهدة':'تعديل التكملة'}</h3>
+   <label>اسم الفيلم / المسلسل</label><input id="ct" placeholder="مثلاً: مسلسل كذا" value="${esc(c.title)}" data-nav>
+   <label>رابط صفحة الحلقة أو الفيلم</label><input id="cu" dir="ltr" inputmode="url" placeholder="انسخ الرابط من المتصفح والصقه هنا" value="${esc(c.url)}" data-nav>
+   <label>وقفت فين؟</label><input id="cn2" placeholder="مثلاً: حلقة ٥ – دقيقة ٢٣" value="${esc(c.note)}" data-nav>
+   <label>من موقع</label><select id="cs" data-nav><option value="">— بدون —</option>${ss.map(s=>`<option value="${esc(s.id)}"${s.id===defSite?' selected':''}>${esc(s.name)}</option>`).join('')}</select>
+   ${iconPicker()}
+   <div class="hint">لو مختارتش صورة هتاخد صورة الموقع.</div>
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn del" id="dl" data-nav>خلصته — شيله</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  const st={icon:c.icon||'',nameFn:()=>$('#ct').value.trim()||'تكملة'};
+  const draw=wirePicker(st);$('#ct').oninput=draw;
+  $('#cc').onclick=closeModal;
+  if(!isNew)$('#dl').onclick=()=>{closeModal();del(c.id);toast('اتشال من تكملة المشاهدة')};
+  $('#sv').onclick=()=>{
+    const title=$('#ct').value.trim();if(!title){toast('اكتب الاسم');$('#ct').focus();return}
+    const siteId=$('#cs').value;
+    let url=normUrl($('#cu').value);
+    if(!url&&siteId&&siteById(siteId))url=siteById(siteId).url;
+    if(!url){toast('حط الرابط أو اختار الموقع');$('#cu').focus();return}
+    put({id:c.id||('c-'+uid()),kind:'cont',title,url,note:$('#cn2').value.trim(),siteId,icon:st.icon,lastAt:Date.now()});
+    closeModal();toast('اتحفظ في تكملة المشاهدة');
+  };
+}
+
+function openUpdate(s){
+  openModal(`<h3>تحديث رابط «${esc(s.name)}»</h3>
+   <label>الرابط الحالي</label><div class="hint" dir="ltr" style="text-align:left;word-break:break-all">${esc(s.url)}</div>
+   <a class="fbtn g" id="gs" data-nav target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(s.name)}">🔎 ابحث عن «${esc(s.name)}» في جوجل</a>
+   <ol class="steps"><li>افتح الموقع من نتائج البحث</li><li>انسخ الرابط من شريط العنوان</li><li>ارجع هنا والصقه تحت</li></ol>
+   <label>الرابط الجديد</label><input id="nu" dir="ltr" inputmode="url" placeholder="الصق الرابط الجديد هنا" data-nav>
+   <div class="hint">الاسم والصورة هيفضلوا زي ما هم، وروابط التكملات اللي من نفس الموقع هتتحول للعنوان الجديد.</div>
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>تحديث</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  const back=()=>{const i=$('#nu');if(i&&document.visibilityState==='visible')setTimeout(()=>i.focus(),150)};
+  document.addEventListener('visibilitychange',back);window.addEventListener('focus',back);
+  const mo=new MutationObserver(()=>{if(!$('#nu')){document.removeEventListener('visibilitychange',back);window.removeEventListener('focus',back);mo.disconnect()}});
+  mo.observe($('#box'),{childList:true});
+  $('#nu').addEventListener('paste',()=>setTimeout(()=>{if(normUrl($('#nu').value))$('#sv').focus()},50));
+  $('#sv').onclick=()=>{
+    const url=normUrl($('#nu').value);if(!url){toast('الصق رابط صحيح');$('#nu').focus();return}
+    const oldHost=hostOf(s.url),nu=new URL(url);
+    put(Object.assign({},s,{url}));
+    let n=0;
+    [...items.values()].filter(o=>o.kind==='cont'&&(o.siteId===s.id||hostOf(o.url)===oldHost)).forEach(c=>{
+      try{const cu=new URL(c.url);if(hostOf(c.url)!==oldHost)return;cu.protocol=nu.protocol;cu.host=nu.host;put(Object.assign({},c,{url:cu.href}));n++}catch(e){}
+    });
+    closeModal();toast(n?`اتحدّث الرابط و${n} تكملة معاه`:'اتحدّث الرابط');
+  };
+}
+
+function openSend(){
+  if(!col){toast('الإرسال للشاشة محتاج المزامنة تكون شغالة — افتح البرنامج بنفس حساب Claude على الجهازين');return}
+  const opts=[...sites().map(s=>({t:s.name,u:s.url})),...[...items.values()].filter(o=>o.kind==='cont').map(c=>({t:c.title+(c.note?' – '+c.note:''),u:c.url}))];
+  openModal(`<h3>📲 ابعت رابط للشاشة</h3>
+   <label>الصق الرابط</label><input id="pu" dir="ltr" inputmode="url" placeholder="https://…" data-nav>
+   <label>أو اختار من عندك</label><select id="ps" data-nav><option value="">—</option>${opts.map((o,i)=>`<option value="${i}">${esc(o.t)}</option>`).join('')}</select>
+   <label>عنوان (اختياري)</label><input id="pt" placeholder="مثلاً: الحلقة ٦" data-nav>
+   <div class="hint">هيظهر على أي جهاز تاني فاتح البرنامج بنفس الحساب، وتدوس OK بالريموت يفتح.</div>
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>ابعت</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  $('#ps').onchange=()=>{const o=opts[+$('#ps').value];if(o&&$('#ps').value!==''){$('#pu').value=o.u;if(!$('#pt').value)$('#pt').value=o.t}};
+  $('#sv').onclick=()=>{
+    const url=normUrl($('#pu').value);if(!url){toast('الصق رابط صحيح');$('#pu').focus();return}
+    put({id:'push',kind:'push',url,title:$('#pt').value.trim()||hostOf(url),from:DEV,sentAt:Date.now()});
+    closeModal();toast('📲 اتبعت — بص على الشاشة');
+  };
+}
+function checkPush(){
+  const p=items.get('push');
+  if(!p||p.kind!=='push'||p.from===DEV||!(p.sentAt>pushSeen))return;
+  pushSeen=p.sentAt;try{localStorage.setItem('shashti-pushseen',String(pushSeen))}catch(e){}
+  if(Date.now()-p.sentAt>15*60000)return;
+  const ov=$('#push');
+  $('#pbox').innerHTML=`<h3>📲 وصلك رابط</h3><div style="font-size:clamp(18px,2vw,30px);font-weight:900">${esc(p.title)}</div><div class="hint" dir="ltr">${esc(hostOf(p.url))}</div>
+   <a class="fbtn red big" id="po" data-nav target="_blank" rel="noopener" href="${esc(p.url)}">▶ افتح</a>
+   <div class="acts"><button class="fbtn" id="px" data-nav>تجاهل</button></div>`;
+  ov.classList.add('open');
+  const close=()=>ov.classList.remove('open');
+  $('#po').onclick=()=>setTimeout(close,100);$('#px').onclick=close;
+  setTimeout(()=>$('#po').focus(),50);
+}
+
+/* ---------- buttons ---------- */
+$('#addSite').onclick=()=>openSite();
+$('#addCont').onclick=()=>openCont();
+let qT;$('#q').addEventListener('input',()=>{clearTimeout(qT);qT=setTimeout(render,120)});
+$('#editBtn').onclick=()=>{editMode=!editMode;render();toast(editMode?'دوس على أي أيقونة لتعديلها أو حذفها':'خلص التعديل')};
+$('#ver').onclick=()=>{openModal(`<h3>نسخة ${VERSION.n}</h3><p>تاريخ إنشاء النسخة دي: ${VERSION.created}</p><div class="acts"><button class="fbtn" id="cc" data-nav>تمام</button></div>`);$('#cc').onclick=closeModal};
+
+/* ---------- remote / keyboard navigation (TV) ---------- */
+document.addEventListener('keydown',e=>{
+  if($('#push').classList.contains('open')){if(e.key==='Escape'){$('#push').classList.remove('open');return}
+    const pe=[...document.querySelectorAll('#pbox [data-nav]')];if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const i=pe.indexOf(document.activeElement);pe[(i+1)%pe.length].focus()}return}
+  const open=$('#modal').classList.contains('open');
+  if(open&&(e.key==='Escape'||e.key==='GoBack'||e.key==='BrowserBack')){e.preventDefault();closeModal();return}
+  const dirs={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+  const d=dirs[e.key];if(!d)return;
+  const tg=e.target;
+  if(tg.matches&&tg.matches('input:not([type=file]),select')&&d[1]===0)return;
+  if(tg.matches&&tg.matches('select')&&d[0]===0&&!e.altKey){/* allow up/down to leave select */}
+  const scope=open?'#box [data-nav]':'body > header [data-nav], .search [data-nav], main [data-nav], footer [data-nav]';
+  const els=[...document.querySelectorAll(scope)].filter(el=>el.offsetParent!==null);
+  if(!els.length)return;
+  const cur=document.activeElement;
+  if(!els.includes(cur)){e.preventDefault();els[0].focus();return}
+  const r=cur.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
+  let best=null,bs=Infinity;
+  for(const el of els){if(el===cur)continue;const q=el.getBoundingClientRect();
+    const dx=q.left+q.width/2-cx,dy=q.top+q.height/2-cy;
+    const along=dx*d[0]+dy*d[1];if(along<=4)continue;
+    const perp=Math.abs(dx*d[1])+Math.abs(dy*d[0]);
+    const sc=along+perp*2.5;if(sc<bs){bs=sc;best=el}}
+  if(best){e.preventDefault();best.focus({preventScroll:true});best.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}
+});
+
+function exportData(){
+  const data=JSON.stringify({app:'shashti',v:1,at:Date.now(),items:[...items.values()].filter(o=>o.kind!=='push')});
+  let ok=false;
+  try{if(window.Android&&Android.saveBackup){Android.saveBackup(data);ok=true}}catch(e){}
+  if(!ok){try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download='shashti-backup.json';document.body.appendChild(a);a.click();a.remove();ok=true}catch(e){}}
+  toast(ok?'اتحفظ ملف النسخة الاحتياطية (shashti-backup.json)':'تعذّر الحفظ');
+}
+function importData(){
+  openModal(`<h3>📥 استرجاع نسخة احتياطية</h3><label>اختار ملف shashti-backup.json</label><input type="file" id="bf" accept=".json,application/json" data-nav>
+   <div class="hint">المواقع والتكملات اللي في الملف هتتضاف للي عندك (المتشابه هيتحدّث).</div>
+   <div class="acts"><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  $('#bf').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+    try{const j=JSON.parse(await f.text());if(!j||!Array.isArray(j.items))throw 0;
+      let n=0;j.items.forEach(o=>{if(o&&o.id&&['site','visit','cont'].includes(o.kind)){items.set(o.id,o);n++}});
+      saveLocal();render();closeModal();toast(`اتسترجع ${n} عنصر`)}catch(_){toast('الملف ده مش نسخة احتياطية من شاشتي')}};
+}
+$('#bk').onclick=exportData;$('#rs').onclick=importData;
+if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+loadLocal();render();
+setInterval(()=>{if(!$('#modal').classList.contains('open'))render()},60000);
+</script>
+</body>
+</html>
