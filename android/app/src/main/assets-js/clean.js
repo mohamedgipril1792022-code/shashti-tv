@@ -23,7 +23,7 @@
         var r=b.getBoundingClientRect();
         return r.width>0 && r.width<90 && r.height<90 && (/^(×|✕|✖|x|close|إغلاق|اغلاق|skip|تخطي)$/i.test(t) || /close|dismiss|btn-x/i.test(cl));
       })[0];
-      if (x) { x.click(); return true; }
+      if (x) { x.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); return true; }
       return false;
     }
     c.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});
@@ -34,7 +34,7 @@
       var r=b.getBoundingClientRect();
       return r.width>0 && r.width<90 && r.height<90 && (/^(×|✕|✖|x|close|إغلاق|اغلاق|skip|تخطي)$/i.test(t) || /close|dismiss|btn-x/i.test(cl));
     })[0];
-    if (btn) { btn.click(); setTimeout(function(){ if (o.isConnected && getComputedStyle(o).display!=='none') o.remove(); }, 400); }
+    if (btn) { btn.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); setTimeout(function(){ if (o.isConnected && getComputedStyle(o).display!=='none') o.remove(); }, 400); }
     else o.remove();
     return true;
   }

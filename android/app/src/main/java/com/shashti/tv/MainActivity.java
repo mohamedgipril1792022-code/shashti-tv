@@ -562,13 +562,14 @@ public class MainActivity extends Activity {
         "function fx(e){for(;e&&e!==document.body;e=e.parentElement){if(getComputedStyle(e).position==='fixed')return true}return false}" +
         "function plf(f){var a=(f.getAttribute('allow')||'')+' '+(f.hasAttribute('allowfullscreen')?'fullscreen':'');if(/fullscreen/i.test(a)||/embed|player|video|watch|stream|play/i.test(f.src||''))return true;var r=f.getBoundingClientRect();return !(r.width>=innerWidth*0.9&&r.height>=innerHeight*0.9)}" + "function player(e){return e.tagName==='VIDEO'||!!e.querySelector('video')||(e.tagName==='IFRAME'&&plf(e))||[].slice.call(e.querySelectorAll('iframe')).some(plf)}" +
         "var cands=[].slice.call(document.querySelectorAll('body *')).filter(function(e){var s=getComputedStyle(e);if(s.position!=='fixed'&&s.position!=='absolute')return false;" +
-        "if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)<0.3||(parseInt(s.zIndex)||0)<50)return false;var r=e.getBoundingClientRect();" +
-        "return r.width*r.height>vw*vh*0.3&&!player(e)});" +
+        "if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)<0.3)return false;var r=e.getBoundingClientRect();if(r.width*r.height<vw*vh*0.25)return false;" +
+        "var t=(e.innerText||'');if(t.length<800&&/vpn|robot|روبوت|تحقق|verify|ad.?block|مانع/i.test(t)&&!e.querySelector('video'))return true;" + // lock/scam boxes: always closable
+        "return (parseInt(s.zIndex)||0)>=1&&!player(e)});" +
         "if(!cands.length)return 'none';cands.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});var o=cands[0];" +
         "var btns=[].slice.call(o.querySelectorAll('button,a,span,div,i,svg,[role=button]')).filter(function(b){var t=(b.innerText||b.getAttribute('aria-label')||b.getAttribute('title')||'').trim().toLowerCase();" +
         "var c=((b.className&&b.className.baseVal!==undefined)?b.className.baseVal:(b.className||''))+' '+(b.id||'');var r=b.getBoundingClientRect();" +
         "return r.width>0&&r.width<90&&r.height<90&&(/^(×|✕|✖|x|close|إغلاق|اغلاق|skip|تخطي)$/i.test(t)||/close|dismiss|modal-x|btn-x/i.test(c))});" +
-        "if(btns.length){btns[0].click();setTimeout(function(){if(o.isConnected&&getComputedStyle(o).display!=='none')o.remove()},400);return 'closed'}" +
+        "if(btns.length){btns[0].dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));setTimeout(function(){if(o.isConnected&&getComputedStyle(o).display!=='none')o.remove()},400);return 'closed'}" +
         "o.remove();document.documentElement.style.overflow='';document.body.style.overflow='';return 'closed'})()";
 
     private void watchForPlayer() {
