@@ -489,7 +489,7 @@ public class MainActivity extends Activity {
         float d = getResources().getDisplayMetrics().density;
         String js = "(function(x,y){var el=document.elementFromPoint(x,y);if(!el||el===document.body||el===document.documentElement)return '';" +
             "function fx(e){for(;e&&e!==document.body;e=e.parentElement){if(getComputedStyle(e).position==='fixed')return true}return false}" +
-            "function pl(f){return !fx(f)}" + // an iframe that floats over the page is an overlay, not a player
+            "function plf(f){var a=(f.getAttribute('allow')||'')+' '+(f.hasAttribute('allowfullscreen')?'fullscreen':'');if(/fullscreen/i.test(a)||/embed|player|video|watch|stream|play/i.test(f.src||''))return true;var r=f.getBoundingClientRect();return !(r.width>=innerWidth*0.9&&r.height>=innerHeight*0.9)}" + "function pl(f){return plf(f)}" + // full-screen iframes without player traits are ad overlays
             "function media(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;if(e.tagName==='IFRAME')return pl(e);return [].slice.call(e.querySelectorAll('iframe')).some(pl)}" +
             "if(media(el))return 'PLAYER';" +
             "var t=el,best=null;while(t&&t!==document.body){if(media(t))break;var s=getComputedStyle(t);if(s.position==='fixed'||s.position==='absolute'&&(parseInt(s.zIndex)||0)>=10)best=t;t=t.parentElement}" +
@@ -525,18 +525,18 @@ public class MainActivity extends Activity {
 
     // ---- auto-fix: you pressed play but a blocking box came up instead of the player ----
     private static final String PLAYER_CHECK =
-        "(function(){var vw=innerWidth,vh=innerHeight;function big(r,f){return r.width*r.height>vw*vh*f}" +
+        "(function(){var vw=innerWidth,vh=innerHeight;function big(r,f){return r.width*r.height>vw*vh*f}" + "function plf(f){var a=(f.getAttribute('allow')||'')+' '+(f.hasAttribute('allowfullscreen')?'fullscreen':'');if(/fullscreen/i.test(a)||/embed|player|video|watch|stream|play/i.test(f.src||''))return true;var r=f.getBoundingClientRect();return !(r.width>=innerWidth*0.9&&r.height>=innerHeight*0.9)}" +
         "var player=[].slice.call(document.querySelectorAll('video,iframe')).some(function(e){var r=e.getBoundingClientRect();return r.width>0&&r.bottom>0&&r.top<vh&&big(r,0.12)});" +
         "var wall=[].slice.call(document.querySelectorAll('body *')).some(function(e){var s=getComputedStyle(e);if(s.position!=='fixed'&&s.position!=='absolute')return false;" +
         "if((parseInt(s.zIndex)||0)<100||s.visibility==='hidden'||s.display==='none'||parseFloat(s.opacity)<0.3)return false;var r=e.getBoundingClientRect();if(!big(r,0.35))return false;" +
-        "if(e.querySelector('video'))return false;if(e.tagName==='IFRAME'||e.querySelector('iframe'))return s.position==='fixed';return !!(e.innerText.trim()||e.querySelector('img,canvas,svg'))});" +
+        "if(e.querySelector('video'))return false;var fr=e.tagName==='IFRAME'?[e]:[].slice.call(e.querySelectorAll('iframe'));if(fr.length)return !fr.some(plf);return !!(e.innerText.trim()||e.querySelector('img,canvas,svg'))});" +
         "return player&&!wall?'player':(wall?'wall':'none')})()";
     private String checkedPage = null;
 
     private static final String CLOSE_OVERLAY =
         "(function(){var vw=innerWidth,vh=innerHeight;" +
         "function fx(e){for(;e&&e!==document.body;e=e.parentElement){if(getComputedStyle(e).position==='fixed')return true}return false}" +
-        "function player(e){return e.tagName==='VIDEO'||!!e.querySelector('video')||[].slice.call(e.querySelectorAll('iframe')).some(function(f){return !fx(f)})}" +
+        "function plf(f){var a=(f.getAttribute('allow')||'')+' '+(f.hasAttribute('allowfullscreen')?'fullscreen':'');if(/fullscreen/i.test(a)||/embed|player|video|watch|stream|play/i.test(f.src||''))return true;var r=f.getBoundingClientRect();return !(r.width>=innerWidth*0.9&&r.height>=innerHeight*0.9)}" + "function player(e){return e.tagName==='VIDEO'||!!e.querySelector('video')||(e.tagName==='IFRAME'&&plf(e))||[].slice.call(e.querySelectorAll('iframe')).some(plf)}" +
         "var cands=[].slice.call(document.querySelectorAll('body *')).filter(function(e){var s=getComputedStyle(e);if(s.position!=='fixed'&&s.position!=='absolute')return false;" +
         "if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)<0.3||(parseInt(s.zIndex)||0)<50)return false;var r=e.getBoundingClientRect();" +
         "return r.width*r.height>vw*vh*0.3&&!player(e)});" +
