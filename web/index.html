@@ -101,7 +101,7 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'٥١',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٨:١٥ م'};
+const VERSION={n:'٥٢',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٨:٤٠ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -392,6 +392,7 @@ function tileMenu(kind,s,v){
     items.push(['▶ افتح',()=>{location.href=s.url}]);
     if(kind==='site')items.push([s.fav?'☆ شيله من المفضلة':'⭐ ضيفه للمفضلة',()=>{put(Object.assign({},s,{fav:!s.fav}))}]);
     items.push(['🔄 تحديث الرابط',()=>openUpdate(s)]);
+    if(window.Android&&Android.openExternal)items.push(['🌐 افتحه في متصفح تاني (BrowseHere)',()=>Android.openExternal(s.url)]);
     items.push(['✎ تعديل',()=>openSite(s)]);
     if(kind==='visit')items.push(['✕ شيله من آخر ما شاهدت',()=>del(v.id)]);
     else items.push(['🗑 حذف',()=>confirmBox('تحذف «'+s.name+'»؟',()=>{del(s.id);del('v-'+s.id)})]);

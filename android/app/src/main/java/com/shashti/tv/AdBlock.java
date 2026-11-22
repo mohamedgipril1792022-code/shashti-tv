@@ -17,6 +17,15 @@ import java.util.Set;
 /** Simple host-based ad blocker: a built-in list plus a public hosts list refreshed weekly. */
 public class AdBlock {
     private static final String LIST_URL = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts";
+    // the same public filter lists ad-blocking browsers use: EasyList + the Arabic list
+    private static final String[][] FILTER_LISTS = {
+        {"https://easylist.to/easylist/easylist.txt", "easylist.txt", "0"},
+        {"https://easylist-downloads.adblockplus.org/Liste_AR.txt", "liste_ar.txt", "1"},
+    };
+    /** site -> CSS selectors to hide there (from the lists). */
+    private final java.util.Map<String, StringBuilder> cosmetic = new java.util.concurrent.ConcurrentHashMap<>();
+    /** Selectors hidden on every site (Arabic list only — EasyList's generic set is too heavy for a TV box). */
+    private final StringBuilder genericCss = new StringBuilder();
     private static final long WEEK = 7L * 24 * 60 * 60 * 1000;
     private static final String[] BUILTIN = {
         "doubleclick.net", "googlesyndication.com", "googleadservices.com", "adservice.google.com",
@@ -108,7 +117,83 @@ public class AdBlock {
         return false;
     }
 
+    private void loadFilterLists(File dir) {
+        for (String[] fl : FILTER_LISTS) {
+            File f = new File(dir, fl[1]);
+            if (!f.exists() || System.currentTimeMillis() - f.lastModified() > WEEK) download(fl[0], f);
+            if (f.exists()) parseFilters(f, fl[2].equals("1"));
+        }
+    }
+
+    private void download(String url, File to) {
+        try {
+            HttpURLConnection con = (HttpURLConnection) new URL(url).openConnection();
+            con.setConnectTimeout(15000); con.setReadTimeout(30000);
+            if (con.getResponseCode() == 200) {
+                File tmp = new File(to.getPath() + ".tmp");
+                try (InputStream in = con.getInputStream(); FileOutputStream out = new FileOutputStream(tmp)) {
+                    byte[] buf = new byte[16384]; int n;
+                    while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                }
+                tmp.renameTo(to);
+            }
+            con.disconnect();
+        } catch (Exception ignored) { }
+    }
+
+    private void parseFilters(File f, boolean generic) {
+        try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                if (line.isEmpty() || line.charAt(0) == '!' || line.charAt(0) == '[' || line.contains("#@#")) continue;
+                int hh = line.indexOf("##");
+                if (hh >= 0) {
+                    String sel = line.substring(hh + 2).trim();
+                    if (sel.isEmpty() || sel.contains(":-abp-") || sel.contains(":has-text") || sel.contains(":xpath") || sel.contains("{")) continue;
+                    String doms = line.substring(0, hh).trim();
+                    if (doms.isEmpty()) {
+                        if (generic) synchronized (genericCss) { if (genericCss.length() > 0) genericCss.append(','); genericCss.append(sel); }
+                    } else {
+                        for (String d : doms.split(",")) {
+                            d = d.trim().toLowerCase();
+                            if (d.isEmpty() || d.startsWith("~") || d.contains("*")) continue;
+                            StringBuilder b = cosmetic.get(d);
+                            if (b == null) { b = new StringBuilder(); cosmetic.put(d, b); }
+                            synchronized (b) { if (b.length() > 0) b.append(','); b.append(sel); }
+                        }
+                    }
+                    continue;
+                }
+                // network rules of the simple form ||host^ (optionally $third-party)
+                if (line.startsWith("||")) {
+                    int end = 2;
+                    while (end < line.length() && "^/$*".indexOf(line.charAt(end)) < 0) end++;
+                    if (end >= line.length() || line.charAt(end) != '^') continue;
+                    String rest = line.substring(end + 1);
+                    if (!(rest.isEmpty() || rest.equals("$third-party") || rest.equals("$popup") || rest.equals("$third-party,popup"))) continue;
+                    String h = line.substring(2, end).toLowerCase();
+                    if (h.contains(".")) hosts.add(h);
+                }
+            }
+        } catch (Exception ignored) { }
+    }
+
+    /** CSS that hides the list's ad boxes on this host (site rules + parent domains + Arabic generic rules). */
+    public String cssFor(String host) {
+        if (host == null || !enabled()) return "";
+        StringBuilder out = new StringBuilder();
+        String h = host.toLowerCase();
+        while (h.indexOf('.') > 0) {
+            StringBuilder b = cosmetic.get(h);
+            if (b != null) synchronized (b) { if (out.length() > 0) out.append(','); out.append(b); }
+            h = h.substring(h.indexOf('.') + 1);
+        }
+        synchronized (genericCss) { if (genericCss.length() > 0) { if (out.length() > 0) out.append(','); out.append(genericCss); } }
+        return out.toString();
+    }
+
     private void loadAndRefresh() {
+        loadFilterLists(cache.getParentFile());
         if (cache.exists()) parse(cache);
         if (!cache.exists() || System.currentTimeMillis() - cache.lastModified() > WEEK) {
             try {

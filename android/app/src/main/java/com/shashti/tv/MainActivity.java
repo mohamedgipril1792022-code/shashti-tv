@@ -112,6 +112,16 @@ public class MainActivity extends Activity {
     /** Simple mode: block ad addresses and pop-ups only — nothing that edits or clicks pages by itself. */
     private boolean simple() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("simple", false); }
 
+    /** Hide the boxes the public filter lists mark as ads on this site (same rules ad-blocking browsers use). */
+    private void injectListCss(WebView v) {
+        if (atHome() || !blocking()) return;
+        String css = adblock.cssFor(currentSite);
+        if (css.isEmpty()) return;
+        String rule = org.json.JSONObject.quote(css + "{display:none!important}");
+        v.evaluateJavascript("(function(){function go(){var s=document.getElementById('__shList');if(!s){s=document.createElement('style');s.id='__shList';(document.head||document.documentElement).appendChild(s)}s.textContent=" + rule + "}" +
+            "if(document.documentElement)go();else document.addEventListener('readystatechange',go,{once:true})})()", null);
+    }
+
     private boolean blocking() { return adblock.enabled() && !adblock.isAllowed(currentSite); }
 
     @Override
@@ -186,9 +196,11 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView v, String u, android.graphics.Bitmap f) {
                 currentSite = (u == null || u.startsWith("https://appassets.androidplatform.net/")) ? null : Uri.parse(u).getHost();
+                injectListCss(v);
             }
             @Override
             public void onPageFinished(WebView v, String u) {
+                injectListCss(v);
                 boxes = new float[0][];
                 v.postDelayed(MainActivity.this::refreshBoxes, 600);
                 // older WebViews without document-start scripts: clean the main page at least
@@ -348,7 +360,7 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"⬅ الصفحة اللي قبلها", "🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ انسى الإعلانات اللي اتعلمتها من الموقع ده (لو حاجة اختفت غلط)", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: مبعملش حاجة لوحدي (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز", simple() ? "🧩 الوضع البسيط شغال (رجّع الوضع المتقدم)" : "🧩 الوضع المتقدم شغال (رجّع الوضع البسيط)", "✕ اقفل الصندوق اللي مغطي الصفحة"};
+        String[] items = {"⬅ الصفحة اللي قبلها", "🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ انسى الإعلانات اللي اتعلمتها من الموقع ده (لو حاجة اختفت غلط)", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: مبعملش حاجة لوحدي (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز", simple() ? "🧩 الوضع البسيط شغال (رجّع الوضع المتقدم)" : "🧩 الوضع المتقدم شغال (رجّع الوضع البسيط)", "✕ اقفل الصندوق اللي مغطي الصفحة", "🌐 افتح الصفحة دي في متصفح تاني (زي BrowseHere)"};
         final String[] shown = new String[items.length - 1];
         for (int i = 0, j = 0; i < items.length; i++) if (i != 9) shown[j++] = items[i];
         new android.app.AlertDialog.Builder(this)
@@ -381,6 +393,7 @@ public class MainActivity extends Activity {
                     web.reload();
                     return;
                 }
+                if (which == 15) { openExternal(url); return; }
                 if (which == 14) {
                     web.evaluateJavascript(CLOSE_OVERLAY, v -> {
                         if (v != null && v.contains("closed")) { learnFrom(v); Toast.makeText(this, "✕ اتقفل — ومش هيظهر تاني هنا", Toast.LENGTH_SHORT).show(); return; }
@@ -841,6 +854,15 @@ public class MainActivity extends Activity {
         });
     }
 
+    /** Hand a page to another browser installed on the box (the user picks it once, e.g. BrowseHere). */
+    private void openExternal(String url) {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+            i.addCategory(Intent.CATEGORY_BROWSABLE);
+            startActivity(Intent.createChooser(i, "افتح في…"));
+        } catch (Exception e) { Toast.makeText(this, "مفيش متصفح تاني على الجهاز", Toast.LENGTH_SHORT).show(); }
+    }
+
     /** Previous page, no box closing. */
     private void goBackPage() {
         if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME);
@@ -985,6 +1007,9 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public void openExternal(String url) { runOnUiThread(() -> MainActivity.this.openExternal(url)); }
 
         @JavascriptInterface
         public void closedInFrame() { frameClosed = true; }
