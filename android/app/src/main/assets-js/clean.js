@@ -16,7 +16,7 @@
     if (!c.length) {
       // the box is the frame's own page (not floating): press its ✕ if the page looks like a lock screen
       var txt=(document.body.innerText||'').slice(0,3000);
-      if (!/robot|روبوت|vpn|verify|تحقق|ad.?block/i.test(txt)) return false;
+      if (!/robot|روبوت|vpn|verify|تحقق|ad.?block|السماح/i.test(txt) || document.querySelector('video')) return false;
       var x=[].slice.call(document.querySelectorAll('button,a,span,div,i,svg,[role=button]')).filter(function(b){
         var t=(b.innerText||b.getAttribute('aria-label')||b.getAttribute('title')||'').trim().toLowerCase();
         var cl=((b.className&&b.className.baseVal!==undefined)?b.className.baseVal:(b.className||''))+' '+(b.id||'');
