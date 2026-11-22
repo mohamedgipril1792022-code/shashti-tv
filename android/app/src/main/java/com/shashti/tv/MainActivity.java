@@ -542,6 +542,19 @@ public class MainActivity extends Activity {
     }
 
     private volatile boolean zapReplied = false;
+    private final java.util.List<String> probeLines = new java.util.ArrayList<>();
+
+    private void probeAtCursor() {
+        float d = getResources().getDisplayMetrics().density;
+        synchronized (probeLines) { probeLines.clear(); }
+        final int x = Math.round(Math.max(0, cursor.x) / d), y = Math.round(Math.max(0, cursor.y) / d);
+        ensureStealth(() -> web.evaluateJavascript("window.__sajoProbe&&__sajoProbe(" + x + "," + y + ")", null));
+        web.postDelayed(() -> {
+            StringBuilder b = new StringBuilder("الماوس: " + x + "," + y + "\n\n");
+            synchronized (probeLines) { for (String l : probeLines) b.append(l).append("\n\n"); }
+            new android.app.AlertDialog.Builder(this).setTitle("🔬 اللي تحت الماوس").setMessage(b.toString()).setPositiveButton("تمام", null).show();
+        }, 1200);
+    }
 
     private void zapFallback() {
         adClosedInFrame = false;
@@ -887,7 +900,8 @@ public class MainActivity extends Activity {
             "ℹ معلومات",
             "🔍 المشغّل مش شغال؟ شوف اللي اتمنع في الصفحة دي",
             "🧾 سجل أخطاء الصفحة",
-            "🧹 شيل الإعلان اللي تحت الماوس"
+            "🧹 شيل الإعلان اللي تحت الماوس",
+            "🔬 افحص اللي تحت الماوس (صوّرهولي)"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -942,6 +956,7 @@ public class MainActivity extends Activity {
                     case 11: showBlocked(); break;
                     case 12: showLog(); break;
                     case 13: zapAtCursor(); break;
+                    case 14: probeAtCursor(); break;
                 }
             })
             .show();
@@ -965,6 +980,8 @@ public class MainActivity extends Activity {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
+        @JavascriptInterface
+        public void probe(String line) { synchronized (probeLines) { if (probeLines.size() < 12) probeLines.add(line); } }
         @JavascriptInterface
         public void fsOn() { runOnUiThread(() -> { setStretched(true); autoCloseAds(); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }); }
         @JavascriptInterface
