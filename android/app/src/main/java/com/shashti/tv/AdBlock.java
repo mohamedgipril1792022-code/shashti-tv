@@ -141,7 +141,7 @@ public class AdBlock {
 
     private static final String[] PLAYER_HOSTS = {"jwpcdn.com", "jwplayer.com", "jwpsrv.com", "jwplatform.com", "jsdelivr.net", "cdnjs.cloudflare.com", "unpkg.com"};
     private static final java.util.regex.Pattern PLAYER_PATH = java.util.regex.Pattern.compile(
-        "/(jwplayer[^/]*|jw[0-9.]*\\.js|provider\\.[a-z0-9.]+\\.js|hls(\\.light)?(\\.min)?\\.js|video(\\.min)?\\.js|videojs[^/]*|plyr[^/]*|clappr[^/]*|dash\\.all[^/]*|shaka-player[^/]*|flowplayer[^/]*|mediaelement[^/]*|artplayer[^/]*|dplayer[^/]*|fluidplayer[^/]*)(\\?|$)");
+        "/(jwplayer[^/]*|jquery[^/]*|jw[0-9.]*\\.js|provider\\.[a-z0-9.]+\\.js|hls(\\.light)?(\\.min)?\\.js|video(\\.min)?\\.js|videojs[^/]*|plyr[^/]*|clappr[^/]*|dash\\.all[^/]*|shaka-player[^/]*|flowplayer[^/]*|mediaelement[^/]*|artplayer[^/]*|dplayer[^/]*|fluidplayer[^/]*)(\\?|$)");
 
     /** The video player's own library (JW Player, hls.js, video.js...): never touched, even if a list matches it —
      *  JW Player stops with "failed to load (101102/104153)" when one of its parts is missing. Its ads come from ad servers, still blocked. */

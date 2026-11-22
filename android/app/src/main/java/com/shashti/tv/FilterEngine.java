@@ -280,7 +280,7 @@ public class FilterEngine {
         String host = hostOf(u);
         boolean third = pageHost == null || !sameSite(host, pageHost);
         Rule block = null;
-        if (type != POPUP && type != DOCUMENT) {
+        if (type != POPUP && type != DOCUMENT && third) {
             for (String h = host; h != null; h = parent(h)) if (blockHosts.contains(h)) { block = HOST_RULE; break; }
         }
         Set<String> toks = null;
@@ -300,6 +300,7 @@ public class FilterEngine {
 
 
     private static final Rule HOST_RULE = new Rule();
+    private static boolean blockHostsIsSite(String anchor, String pageHost) { return pageHost != null && sameSite(anchor, pageHost); }
     private static final int ANY_TYPE = ALL_NORMAL | POPUP | DOCUMENT;
 
     private Rule find(Map<String, List<Rule>> idx, List<Rule> any, Set<String> toks, String u, String host, String pageHost, int type, boolean third) {
@@ -324,6 +325,12 @@ public class FilterEngine {
 
     private boolean matches(Rule r, String u, String host, String pageHost, int type, boolean third) {
         if ((r.types & type) == 0) return false;
+        // the site's own files (its jQuery, its player page...) are only blocked by rules written for that site:
+        // a generic list rule hitting them breaks the whole page ("$ is not defined")
+        if (!third && type != POPUP && type != ANY_TYPE && r.incDomains == null && !r.important && r != HOST_RULE) {
+            if (r.hostAnchor == null || !r.pattern.startsWith("||")) return false;
+            if (blockHostsIsSite(r.hostAnchor, pageHost)) return false;
+        }
         if (r.party == 1 && !third) return false;
         if (r.party == 2 && third) return false;
         if (r.incDomains != null || r.excDomains != null) {
