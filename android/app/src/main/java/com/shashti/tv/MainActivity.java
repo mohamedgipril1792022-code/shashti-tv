@@ -28,6 +28,7 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
 
@@ -105,6 +106,10 @@ public class MainActivity extends Activity {
         cm.setAcceptCookie(true);
         if (Build.VERSION.SDK_INT >= 21) cm.setAcceptThirdPartyCookies(web, true);
         s.setUserAgentString(s.getUserAgentString().replace("; wv", "").replace(" Version/4.0", ""));
+
+        // don't announce the app's package in every request (some video hosts refuse in-app browsers)
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST))
+            WebSettingsCompat.setRequestedWithHeaderOriginAllowList(s, Collections.<String>emptySet());
 
         web.addJavascriptInterface(new Bridge(), "Android");
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))

@@ -308,7 +308,9 @@ public class FilterEngine {
     // ---------------------------------------------------------------- cosmetics
 
     /** CSS selectors to hide on this host (site rules + generic rules), minus exceptions. */
-    public synchronized String hideSelectors(String host) {
+    public synchronized String hideSelectors(String host) { return hideSelectors(host, true); }
+
+    public synchronized String hideSelectors(String host, boolean generic) {
         if (host == null) return "";
         host = host.toLowerCase(Locale.ROOT);
         for (String h = host; h != null; h = parent(h)) if (noElemhide.contains(h)) return "";
@@ -319,7 +321,7 @@ public class FilterEngine {
             List<String> l = siteHide.get(h);
             if (l != null) for (String s : l) if (!unhide.contains(s)) append(out, s);
         }
-        boolean gen = true;
+        boolean gen = generic;
         for (String h = host; h != null; h = parent(h)) if (noGenerichide.contains(h)) gen = false;
         if (gen) for (String s : genericHide) if (!unhide.contains(s)) append(out, s);
         return out.toString();

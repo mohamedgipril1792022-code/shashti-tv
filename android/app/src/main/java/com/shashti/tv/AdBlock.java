@@ -20,7 +20,6 @@ public class AdBlock {
     // url, file, use generic hiding rules from this list
     private static final String[][] LISTS = {
         {"https://easylist.to/easylist/easylist.txt", "easylist.txt", "1"},
-        {"https://easylist.to/easylist/easyprivacy.txt", "easyprivacy.txt", "0"},
         {"https://ublockorigin.github.io/uAssets/filters/filters.txt", "ubo_filters.txt", "1"},
         {"https://easylist-downloads.adblockplus.org/Liste_AR.txt", "liste_ar.txt", "1"},
     };
@@ -86,7 +85,9 @@ public class AdBlock {
     /** CSS rule hiding the list's ad elements on this host ("" when none). */
     public String css(String host, String pageHost) {
         if (!active(pageHost) || host == null) return "";
-        String sel = engine.hideSelectors(host);
+        // inside another site's frame (usually the video player) only that site's own rules apply
+        boolean sameSite = FilterEngine.sameSite(host, pageHost);
+        String sel = engine.hideSelectors(host, sameSite);
         return sel.isEmpty() ? "" : sel + "{display:none!important}";
     }
 
