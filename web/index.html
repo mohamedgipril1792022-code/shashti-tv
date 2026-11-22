@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#120d0e;--panel:#1d1416;--line:#3a2124;--red:#e50914;--txt:#fff;--mut:#b9a9ab}
+[hidden]{display:none!important}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--txt);font-family:Cairo,system-ui,sans-serif}
 body{min-height:100vh;padding-bottom:40px}
@@ -88,8 +89,8 @@ footer{text-align:center;margin-top:30px}
 <main id="main">
   <h2>▶ تكملة المشاهدة <small>اللي وقفت عنده</small></h2>
   <div class="row wide" id="contRow"></div>
-  <h2>🕘 آخر ما شاهدت</h2>
-  <div class="row" id="visitRow"></div>
+  <h2 hidden>🕘 آخر ما شاهدت</h2>
+  <div class="row" id="visitRow" hidden></div>
   <h2>⭐ مواقعي</h2>
   <div class="grid" id="siteGrid"></div>
 </main>
@@ -100,7 +101,7 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'١٧',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٥:٢٥ م'};
+const VERSION={n:'١٨',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٥:٥٥ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -402,12 +403,15 @@ function tileMenu(kind,s,v){
   openModal(`<h3>${esc(s.name||s.title)}</h3>`+items.map((it,i)=>`<button class="fbtn" style="display:block;width:100%;margin-top:8px" data-nav data-i="${i}">${esc(it[0])}</button>`).join(''));
   $('#box').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const f=items[+b.dataset.i][1];closeModal();f()});
 }
-// long press OK on a tile = menu (for remotes without a Menu button)
-let okT0=0,okLong=false;
-document.addEventListener('keydown',e=>{const a=e.target;if(e.key!=='Enter'||!a.classList||!a.classList.contains('tile')||$('#modal').classList.contains('open'))return;
-  e.preventDefault();if(!e.repeat){okT0=Date.now();okLong=false}else if(!okLong&&Date.now()-okT0>600){okLong=true;a._menu&&a._menu()}},true);
-document.addEventListener('keyup',e=>{const a=e.target;if(e.key!=='Enter'||!a.classList||!a.classList.contains('tile'))return;
-  if(!okLong&&okT0){okT0=0;a.click()}okLong=false;okT0=0},true);
+// OK on a tile: opens on release (one press); holding it opens the tile menu
+let okTile=null,okTimer=0,okLong=false;
+const isOk=e=>e.key==='Enter'||e.keyCode===13||e.keyCode===23;
+document.addEventListener('keydown',e=>{const a=e.target;if(!isOk(e)||!a.classList||!a.classList.contains('tile')||$('#modal').classList.contains('open'))return;
+  e.preventDefault();e.stopPropagation();
+  if(!e.repeat&&okTile!==a){okTile=a;okLong=false;clearTimeout(okTimer);okTimer=setTimeout(()=>{if(okTile===a&&!okLong){okTile=null;a.click()}},900)}
+  else if(e.repeat&&!okLong){okLong=true;clearTimeout(okTimer);okTile=null;a._menu&&a._menu()}},true);
+document.addEventListener('keyup',e=>{const a=e.target;if(!isOk(e)||!a.classList||!a.classList.contains('tile'))return;
+  e.preventDefault();clearTimeout(okTimer);if(okTile===a&&!okLong){okTile=null;a.click()}okTile=null;okLong=false},true);
 window.tileMenuFocused=function(){const a=document.activeElement;if(a&&a._menu){a._menu();return 1}return 0};
 document.addEventListener('keydown',e=>{if((e.key==='ContextMenu'||e.key==='F10')&&!$('#modal').classList.contains('open')){if(tileMenuFocused())e.preventDefault()}});
 document.addEventListener('contextmenu',e=>{const a=e.target.closest&&e.target.closest('.tile');if(a&&a._menu){e.preventDefault();a._menu()}});

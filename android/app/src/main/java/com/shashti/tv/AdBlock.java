@@ -47,6 +47,15 @@ public class AdBlock {
     }
 
     public boolean enabled() { return prefs.getBoolean("on", true); }
+
+    /** Sites the user allowed: nothing is blocked while browsing them. */
+    public Set<String> allowed() { return new HashSet<>(prefs.getStringSet("allow", new HashSet<>())); }
+    public boolean isAllowed(String site) { return site != null && allowed().contains(base(site)); }
+    public void toggleAllow(String site) {
+        Set<String> a = allowed(); String b = base(site);
+        if (!a.remove(b)) a.add(b);
+        prefs.edit().putStringSet("allow", a).apply();
+    }
     public void setEnabled(boolean on) { prefs.edit().putBoolean("on", on).apply(); }
 
     public boolean isAd(String host) {
@@ -100,7 +109,8 @@ public class AdBlock {
         if (a == null || b == null) return false;
         return base(a).equals(base(b));
     }
-    private static String base(String h) {
+    public static String base(String h) {
+        if (h == null) return "";
         h = h.toLowerCase();
         String[] p = h.split("\\.");
         return p.length <= 2 ? h : p[p.length - 2] + "." + p[p.length - 1];

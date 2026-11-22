@@ -56,6 +56,8 @@ public class MainActivity extends Activity {
     private boolean longPressed = false;
     private ScriptHandler cleaner;
     private String cleanJs = "";
+    private volatile String currentSite = null;
+    private long pressStart = 0;
 
     /** Page cleaner (ad overlays, pop-ups) runs in every frame, the video player's frame included. */
     private void applyCleaner() {
@@ -68,12 +70,17 @@ public class MainActivity extends Activity {
             } catch (Exception e) { return; }
         }
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
-        if (adblock.enabled() && cleaner == null) {
-            cleaner = WebViewCompat.addDocumentStartJavaScript(web, cleanJs, Collections.singleton("*"));
-        } else if (!adblock.enabled() && cleaner != null) {
-            cleaner.remove();
-            cleaner = null;
-        }
+        if (cleaner != null) { cleaner.remove(); cleaner = null; }
+        if (adblock.enabled()) cleaner = WebViewCompat.addDocumentStartJavaScript(web, cleanerScript(), Collections.singleton("*"));
+    }
+
+    private String cleanerScript() {
+        org.json.JSONArray a = new org.json.JSONArray();
+        for (String x : adblock.allowed()) a.put(x);
+        return "window.__SHASHTI_ALLOW=" + a + ";" + cleanJs;
+    }
+
+    private boolean blocking() { return adblock.enabled() && !adblock.isAllowed(currentSite); }
     }
 
     @Override
@@ -111,16 +118,20 @@ public class MainActivity extends Activity {
             public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
                 WebResourceResponse a = assets.shouldInterceptRequest(r.getUrl());
                 if (a != null) return a;
-                if (adblock.isAd(r.getUrl().getHost())) {
+                if (adblock.isAd(r.getUrl().getHost()) && !adblock.isAllowed(currentSite)) {
                     adblock.blocked++;
                     return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
                 }
                 return null;
             }
             @Override
+            public void onPageStarted(WebView v, String u, android.graphics.Bitmap f) {
+                currentSite = (u == null || u.startsWith("https://appassets.androidplatform.net/")) ? null : Uri.parse(u).getHost();
+            }
+            @Override
             public void onPageFinished(WebView v, String u) {
                 // older WebViews without document-start scripts: clean the main page at least
-                if (cleaner == null && adblock.enabled() && !atHome() && !cleanJs.isEmpty()) v.evaluateJavascript(cleanJs, null);
+                if (cleaner == null && blocking() && !atHome() && !cleanJs.isEmpty()) v.evaluateJavascript(cleanerScript(), null);
                 if (pendingAdd != null && atHome()) {
                     final String js = pendingAdd;
                     pendingAdd = null;
@@ -132,16 +143,12 @@ public class MainActivity extends Activity {
                 String sc = r.getUrl().getScheme();
                 if (!"http".equals(sc) && !"https".equals(sc)) return true; // ignore intent://, market:// ...
                 String host = r.getUrl().getHost();
-                if (adblock.isAd(host)) { blockedToast(); return true; }
-                if (adblock.enabled() && r.isForMainFrame() && !atHome() && Build.VERSION.SDK_INT >= 24 && !r.isRedirect()) {
+                if (!blocking() || atHome()) return false;
+                if (adblock.isAd(host)) { lastBlocked = r.getUrl().toString(); blockedToast(); return true; }
+                // a jump to another site that you did not click is an ad redirect; clicks are always allowed
+                if (r.isForMainFrame() && Build.VERSION.SDK_INT >= 24 && !r.isRedirect() && !r.hasGesture()) {
                     String cur = Uri.parse(web.getUrl()).getHost();
-                    boolean fromSearch = cur != null && (cur.contains("google.") || cur.contains("bing.") || cur.contains("duckduckgo."));
-                    if (!fromSearch && !AdBlock.sameSite(cur, host)) {
-                        // a click on the player that jumps to another site is almost always an ad
-                        lastBlocked = r.getUrl().toString();
-                        blockedToast();
-                        return true;
-                    }
+                    if (!AdBlock.sameSite(cur, host)) { lastBlocked = r.getUrl().toString(); blockedToast(); return true; }
                 }
                 return false;
             }
@@ -207,7 +214,7 @@ public class MainActivity extends Activity {
             web.loadUrl(url);
             return;
         }
-        if (!adblock.enabled()) { web.loadUrl(url); return; }
+        if (!blocking()) { web.loadUrl(url); return; }
         String cur = Uri.parse(web.getUrl()).getHost();
         if (gesture && !adblock.isAd(host) && AdBlock.sameSite(cur, host)) { web.loadUrl(url); return; }
         blockedToast();
@@ -228,7 +235,7 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "↪ افتح آخر صفحة اتمنعت", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)")};
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "↪ افتح آخر صفحة اتمنعت", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)"};
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(items, (dlg, which) -> {
@@ -243,6 +250,13 @@ public class MainActivity extends Activity {
                     adblock.setEnabled(!adblock.enabled());
                     applyCleaner();
                     Toast.makeText(this, adblock.enabled() ? "🛡 مانع الإعلانات اشتغل" : "مانع الإعلانات اتقفل", Toast.LENGTH_SHORT).show();
+                    web.reload();
+                    return;
+                }
+                if (which == 6) {
+                    adblock.toggleAllow(currentSite);
+                    applyCleaner();
+                    Toast.makeText(this, adblock.isAllowed(currentSite) ? "✅ الموقع ده مسموح — مفيش منع عليه" : "🛡 المنع رجع على الموقع ده", Toast.LENGTH_SHORT).show();
                     web.reload();
                     return;
                 }
@@ -289,8 +303,10 @@ public class MainActivity extends Activity {
             case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_DPAD_RIGHT: {
                 if (e.getAction() == KeyEvent.ACTION_UP) { repeat = 0; return true; }
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return true;
-                repeat = e.getRepeatCount() == 0 ? 0 : repeat + 1;
-                float step = d * Math.min(18 + repeat * 6, 90);
+                if (e.getRepeatCount() == 0) pressStart = SystemClock.uptimeMillis();
+                long held = SystemClock.uptimeMillis() - pressStart;
+                // short tap = fine move; holding speeds up smoothly
+                float step = d * (e.getRepeatCount() == 0 ? 22 : Math.min(14 + held / 18f, 85));
                 if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
                 float margin = 30 * d;
                 if (code == KeyEvent.KEYCODE_DPAD_UP) {
@@ -303,6 +319,7 @@ public class MainActivity extends Activity {
                     cursor.x = Math.min(w - 4 * d, cursor.x + step);
                 }
                 cursor.invalidate();
+                hoverAtCursor();
                 return true;
             }
             case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER: case KeyEvent.KEYCODE_NUMPAD_ENTER: {
@@ -332,6 +349,14 @@ public class MainActivity extends Activity {
         web.evaluateJavascript("(function(){var y=" + css + ",x=" + Math.round(cursor.x / d) + ",yy=" + Math.round(cursor.y / d) + ";" +
             "var el=document.elementFromPoint(x,yy),b=window.scrollY;window.scrollBy(0,y);if(window.scrollY!==b)return;" +
             "while(el&&el!==document.body){var s=getComputedStyle(el).overflowY;if((s=='auto'||s=='scroll')&&el.scrollHeight>el.clientHeight){el.scrollBy(0,y);return}el=el.parentElement}})()", null);
+    }
+
+    private void hoverAtCursor() {
+        long t = SystemClock.uptimeMillis();
+        MotionEvent m = MotionEvent.obtain(t, t, MotionEvent.ACTION_HOVER_MOVE, cursor.x, cursor.y, 0);
+        m.setSource(android.view.InputDevice.SOURCE_MOUSE);
+        web.dispatchGenericMotionEvent(m);
+        m.recycle();
     }
 
     private void tapAtCursor() {
