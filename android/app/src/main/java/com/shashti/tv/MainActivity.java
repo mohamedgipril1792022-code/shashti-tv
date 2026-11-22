@@ -129,10 +129,24 @@ public class MainActivity extends Activity {
                 return rep != null ? rep : new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
             }
             @Override
+            public void onReceivedError(WebView v, WebResourceRequest r, android.webkit.WebResourceError e) {
+                if (Build.VERSION.SDK_INT >= 23) logLine("❌ " + e.getDescription() + " ← " + r.getUrl());
+            }
+            @Override
+            public void onReceivedHttpError(WebView v, WebResourceRequest r, WebResourceResponse e) {
+                logLine("❌ HTTP " + e.getStatusCode() + " ← " + r.getUrl());
+            }
+            @Override
+            public void onReceivedSslError(WebView v, android.webkit.SslErrorHandler h, android.net.http.SslError e) {
+                logLine("❌ شهادة SSL " + e.getPrimaryError() + " ← " + e.getUrl());
+                h.cancel();
+            }
+            @Override
             public void onPageStarted(WebView v, String u, android.graphics.Bitmap f) {
                 pageHost = (u == null || u.startsWith("https://appassets.androidplatform.net/")) ? null : Uri.parse(u).getHost();
                 boxes = new float[0][];
                 adblock.clearLog();
+                synchronized (pageLog) { pageLog.clear(); }
             }
             @Override
             public void onPageFinished(WebView v, String u) {
@@ -147,7 +161,9 @@ public class MainActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 String sc = r.getUrl().getScheme();
-                if (!"http".equals(sc) && !"https".equals(sc)) return true; // intent://, market:// …
+                // frames built from about:/data:/blob: (many players) must load; only app links (intent://, market://) on the page itself stop
+                if (sc == null || sc.equals("about") || sc.equals("data") || sc.equals("blob") || sc.equals("javascript")) return false;
+                if (!"http".equals(sc) && !"https".equals(sc)) { logLine("⛔ رابط تطبيق: " + r.getUrl()); return r.isForMainFrame() || r.hasGesture(); }
                 // a page that jumps to a listed ad page (a popup-ad listed in the filter lists)
                 if (pageHost != null && r.isForMainFrame() && adblock.shouldBlock(r.getUrl().toString(), pageHost, FilterEngine.POPUP)) {
                     blockedToast();
@@ -158,6 +174,12 @@ public class MainActivity extends Activity {
         });
 
         web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
+                if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR)
+                    logLine("⚠ " + m.message() + " (" + Uri.parse(String.valueOf(m.sourceId())).getHost() + ")");
+                return true;
+            }
             @Override
             public void onShowCustomView(View view, CustomViewCallback cb) {
                 if (customView != null) { cb.onCustomViewHidden(); return; }
@@ -620,6 +642,27 @@ public class MainActivity extends Activity {
             .setNegativeButton("رجوع", null).show();
     }
 
+    private final java.util.ArrayList<String> pageLog = new java.util.ArrayList<>();
+    private void logLine(String l) {
+        if (l.length() > 220) l = l.substring(0, 220) + "…";
+        synchronized (pageLog) { pageLog.add(l); if (pageLog.size() > 80) pageLog.remove(0); }
+    }
+
+    /** What went wrong on this page (failed loads, script errors) — to find why a player stays empty. */
+    private void showLog() {
+        StringBuilder b = new StringBuilder();
+        synchronized (pageLog) { for (int i = pageLog.size() - 1; i >= 0; i--) b.append(pageLog.get(i)).append("\n\n"); }
+        java.util.List<String> bl = adblock.blockedHosts();
+        if (!bl.isEmpty()) b.append("🛡 اتمنع: ").append(android.text.TextUtils.join("، ", bl));
+        final String text = b.length() == 0 ? "مفيش أخطاء في الصفحة دي" : b.toString();
+        new android.app.AlertDialog.Builder(this).setTitle("🧾 سجل الصفحة").setMessage(text)
+            .setPositiveButton("تمام", null)
+            .setNeutralButton("📋 انسخ", (d, w) -> {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                cm.setPrimaryClip(android.content.ClipData.newPlainText("log", text));
+            }).show();
+    }
+
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
@@ -636,7 +679,8 @@ public class MainActivity extends Activity {
             snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)",
             "🌐 افتح الصفحة دي في متصفح تاني",
             "ℹ معلومات",
-            "🔍 المشغّل مش شغال؟ شوف اللي اتمنع في الصفحة دي"
+            "🔍 المشغّل مش شغال؟ شوف اللي اتمنع في الصفحة دي",
+            "🧾 سجل أخطاء الصفحة"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -689,6 +733,7 @@ public class MainActivity extends Activity {
                         break;
                     }
                     case 11: showBlocked(); break;
+                    case 12: showLog(); break;
                 }
             })
             .show();
