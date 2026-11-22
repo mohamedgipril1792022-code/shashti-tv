@@ -29,6 +29,10 @@ import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
+import androidx.webkit.WebViewCompat;
+import androidx.webkit.WebViewFeature;
+import androidx.webkit.ScriptHandler;
+import java.util.Collections;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -50,6 +54,27 @@ public class MainActivity extends Activity {
     private CursorView cursor;
     private int repeat = 0;
     private boolean longPressed = false;
+    private ScriptHandler cleaner;
+    private String cleanJs = "";
+
+    /** Page cleaner (ad overlays, pop-ups) runs in every frame, the video player's frame included. */
+    private void applyCleaner() {
+        if (cleanJs.isEmpty()) {
+            try (java.io.InputStream in = getAssets().open("clean.js")) {
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[8192]; int n;
+                while ((n = in.read(buf)) > 0) bo.write(buf, 0, n);
+                cleanJs = new String(bo.toByteArray(), StandardCharsets.UTF_8);
+            } catch (Exception e) { return; }
+        }
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return;
+        if (adblock.enabled() && cleaner == null) {
+            cleaner = WebViewCompat.addDocumentStartJavaScript(web, cleanJs, Collections.singleton("*"));
+        } else if (!adblock.enabled() && cleaner != null) {
+            cleaner.remove();
+            cleaner = null;
+        }
+    }
 
     @Override
     protected void onCreate(Bundle b) {
@@ -94,6 +119,8 @@ public class MainActivity extends Activity {
             }
             @Override
             public void onPageFinished(WebView v, String u) {
+                // older WebViews without document-start scripts: clean the main page at least
+                if (cleaner == null && adblock.enabled() && !atHome() && !cleanJs.isEmpty()) v.evaluateJavascript(cleanJs, null);
                 if (pendingAdd != null && atHome()) {
                     final String js = pendingAdd;
                     pendingAdd = null;
@@ -169,6 +196,7 @@ public class MainActivity extends Activity {
             }
         });
 
+        applyCleaner();
         if (b != null) web.restoreState(b); else web.loadUrl(HOME);
     }
 
@@ -213,6 +241,7 @@ public class MainActivity extends Activity {
                 }
                 if (which == 5) {
                     adblock.setEnabled(!adblock.enabled());
+                    applyCleaner();
                     Toast.makeText(this, adblock.enabled() ? "🛡 مانع الإعلانات اشتغل" : "مانع الإعلانات اتقفل", Toast.LENGTH_SHORT).show();
                     web.reload();
                     return;
@@ -389,7 +418,7 @@ public class MainActivity extends Activity {
         public boolean adblockOn() { return adblock.enabled(); }
 
         @JavascriptInterface
-        public void setAdblock(boolean on) { adblock.setEnabled(on); }
+        public void setAdblock(boolean on) { adblock.setEnabled(on); runOnUiThread(MainActivity.this::applyCleaner); }
 
         @JavascriptInterface
         public int blockedCount() { return adblock.blocked; }
