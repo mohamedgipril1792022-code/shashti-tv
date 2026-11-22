@@ -231,10 +231,13 @@ public class FilterEngine {
         if (block == null) return false;
         if (block.important) return true;
         if (toks == null) toks = tokens(u);
-        return find(allowIdx, allowAny, toks, u, host, pageHost, type, third) == null;
+        // exceptions are checked without the type limit: the WebView does not say what a request is,
+        // and a missed exception breaks players (e.g. a player library whose exception says $script)
+        return find(allowIdx, allowAny, toks, u, host, pageHost, ANY_TYPE, third) == null;
     }
 
     private static final Rule HOST_RULE = new Rule();
+    private static final int ANY_TYPE = ALL_NORMAL | POPUP | DOCUMENT;
 
     private Rule find(Map<String, List<Rule>> idx, List<Rule> any, Set<String> toks, String u, String host, String pageHost, int type, boolean third) {
         for (String t : toks) {
