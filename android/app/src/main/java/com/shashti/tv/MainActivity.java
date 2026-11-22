@@ -246,10 +246,10 @@ public class MainActivity extends Activity {
 
     /** Open a pop-up/ad quietly in a hidden tab: nothing changes on screen. */
     private void sendAway(String url) {
-        retapAfterAd();
+        boolean retrying = retapAfterAd();
         long now = System.currentTimeMillis();
         bgUrl = url;
-        if (!adsOutside() || adblock.isAd(Uri.parse(url).getHost()) || now - lastAway < 3000) { blockedToast(); return; }
+        if (!adsOutside() || adblock.isAd(Uri.parse(url).getHost()) || now - lastAway < 1500) { if (!retrying) blockedToast(); else adblock.blocked++; return; }
         lastAway = now;
         if (bgTab == null) {
             bgTab = new WebView(this);
@@ -270,7 +270,7 @@ public class MainActivity extends Activity {
         }
         bgTab.loadUrl(url);
         long t = System.currentTimeMillis();
-        if (t - lastToast > 4000) { lastToast = t; Toast.makeText(this, "📑 صفحة اتفتحت في الخلفية (Menu لو عايز تشوفها)", Toast.LENGTH_SHORT).show(); }
+        if (!retrying && t - lastToast > 4000) { lastToast = t; Toast.makeText(this, "📑 صفحة اتفتحت في الخلفية (Menu لو عايز تشوفها)", Toast.LENGTH_SHORT).show(); }
     }
     private String lastBlocked = null;
     private void blockedToast() {
@@ -430,7 +430,7 @@ public class MainActivity extends Activity {
                 int w = root.getWidth(), h = root.getHeight();
                 long held = SystemClock.uptimeMillis() - pressStart;
                 // short tap = fine move; holding speeds up smoothly
-                float step = d * (repeatCount == 0 ? 22 : Math.min(14 + held / 18f, 85));
+                float step = d * (repeatCount == 0 ? 34 : Math.min(30 + held / 8f, 140));
                 if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
                 float margin = 30 * d;
                 if (code == KeyEvent.KEYCODE_DPAD_UP) {
@@ -649,20 +649,21 @@ public class MainActivity extends Activity {
     }
 
     private long lastTapAt = 0;
-    private boolean retapUsed = true;
+    private int retaps = 3;
 
-    /** An ad grabbed the click: press again at the same spot, once, so the click does what you meant. */
-    private void retapAfterAd() {
-        if (retapUsed || System.currentTimeMillis() - lastTapAt > 1800 || atHome()) return;
-        retapUsed = true;
+    /** An ad grabbed the click: press again at the same spot (up to 3 times) so the click does what you meant. */
+    private boolean retapAfterAd() {
+        if (retaps >= 3 || System.currentTimeMillis() - lastTapAt > 2500 || atHome()) return false;
+        retaps++;
         final float x = cursor.x, y = cursor.y;
-        web.postDelayed(() -> { if (!atHome() && cursor.x == x && cursor.y == y) doTap(false); }, 700);
+        web.postDelayed(() -> { if (!atHome() && cursor.x == x && cursor.y == y) { lastTapAt = System.currentTimeMillis(); doTap(false); } }, 450);
+        return true;
     }
 
     private void doTap() { doTap(true); }
 
     private void doTap(boolean user) {
-        if (user) { lastTapAt = System.currentTimeMillis(); retapUsed = false; }
+        if (user) { lastTapAt = System.currentTimeMillis(); retaps = 0; }
         long t = SystemClock.uptimeMillis();
         MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
         MotionEvent up = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, cursor.x, cursor.y, 0);
