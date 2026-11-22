@@ -100,7 +100,7 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'١٦',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٥:١٥ م'};
+const VERSION={n:'١٧',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٥:٢٥ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -158,9 +158,9 @@ function setStatus(t){$('#status').textContent=t}
 const sites=()=>[...items.values()].filter(o=>o.kind==='site').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
 const siteById=id=>{const o=items.get(id);return o&&o.kind==='site'?o:null};
 
-function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav}){
+function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav,menu}){
   const a=document.createElement('a');
-  a.className='tile';a.href=url||'#';a.target='_blank';a.rel='noopener';a.setAttribute('data-nav','');
+  a.className='tile';a.href=url||'#';if(menu)a._menu=menu;a.target='_blank';a.rel='noopener';a.setAttribute('data-nav','');
   const bg=document.createElement('div');bg.className='bg';
   if(icon)bg.style.backgroundImage=`url("${icon}")`;else bg.style.background=grad(name);
   a.appendChild(bg);
@@ -168,8 +168,8 @@ function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav}){
   const n=document.createElement('span');n.className='name';n.textContent=name||hostOf(url);a.appendChild(n);
   if(sub){const s=document.createElement('span');s.className='sub';s.textContent=sub;a.appendChild(s)}
   if(agoT){const g=document.createElement('span');g.className='ago';g.textContent=ago(agoT);a.appendChild(g)}
-  if(onFav){const f=document.createElement('button');f.type='button';f.className='fav';f.setAttribute('data-nav','');f.title='المفضلة';f.textContent=fav?'★':'☆';f.onclick=e=>{e.preventDefault();e.stopPropagation();onFav()};a.appendChild(f)}
-  if(onUpd){const b=document.createElement('button');b.type='button';b.className='upd';b.setAttribute('data-nav','');b.textContent='🔄 تحديث الرابط';b.onclick=e=>{e.preventDefault();e.stopPropagation();onUpd()};a.appendChild(b)}
+  if(onFav){const f=document.createElement('button');f.type='button';f.className='fav';f.tabIndex=-1;f.title='المفضلة';f.textContent=fav?'★':'☆';f.onclick=e=>{e.preventDefault();e.stopPropagation();onFav()};a.appendChild(f)}
+  if(onUpd){const b=document.createElement('button');b.type='button';b.className='upd';b.tabIndex=-1;b.textContent='🔄 تحديث الرابط';b.onclick=e=>{e.preventDefault();e.stopPropagation();onUpd()};a.appendChild(b)}
   return a;
 }
 
@@ -187,7 +187,7 @@ function render(){
   const ss=sites().filter(s=>qMatch(s.name,s.url)).sort((a,b)=>(b.fav?1:0)-(a.fav?1:0));
   if(!ss.length&&qv)grid.innerHTML=noRes;else if(!ss.length)grid.innerHTML='<div class="empty">لسه مفيش مواقع — دوس «＋ موقع» وحط رابط الموقع واختار صورة ليه.</div>';
   ss.forEach(s=>{
-    const t=tileEl({name:s.name,url:s.url,icon:s.icon,onUpd:()=>openUpdate(s),fav:!!s.fav,onFav:()=>{put(Object.assign({},s,{fav:!s.fav}));toast(s.fav?'اتشال من المفضلة':'⭐ اتضاف للمفضلة')}});
+    const t=tileEl({name:s.name,url:s.url,icon:s.icon,menu:()=>tileMenu('site',s),onUpd:()=>openUpdate(s),fav:!!s.fav,onFav:()=>{put(Object.assign({},s,{fav:!s.fav}));toast(s.fav?'اتشال من المفضلة':'⭐ اتضاف للمفضلة')}});
     t.onclick=e=>{if(editMode){e.preventDefault();openSite(s)}else visit(s.id)};
     grid.appendChild(t);
   });
@@ -197,7 +197,7 @@ function render(){
   if(!vs.length&&qv)vr.innerHTML=noRes;else if(!vs.length)vr.innerHTML='<div class="empty">أول ما تفتح موقع من هنا هيظهر في القسم ده.</div>';
   vs.forEach(v=>{
     const s=siteById(v.siteId);
-    const t=tileEl({name:s.name,url:s.url,icon:s.icon,agoT:v.lastAt,onUpd:()=>openUpdate(s)});
+    const t=tileEl({name:s.name,url:s.url,icon:s.icon,agoT:v.lastAt,onUpd:()=>openUpdate(s),menu:()=>tileMenu('visit',s,v)});
     t.onclick=e=>{if(editMode){e.preventDefault();confirmBox('تشيل «'+s.name+'» من آخر ما شاهدت؟',()=>del(v.id))}else visit(s.id)};
     vr.appendChild(t);
   });
@@ -208,7 +208,7 @@ function render(){
   cs.forEach(c=>{
     const s=siteById(c.siteId);
     const icon=c.icon||(s&&s.icon)||'';
-    const t=tileEl({name:c.title,url:c.url,icon,sub:c.note||(s?s.name:hostOf(c.url)),agoT:c.lastAt});
+    const t=tileEl({name:c.title,url:c.url,icon,sub:c.note||(s?s.name:hostOf(c.url)),agoT:c.lastAt,menu:()=>tileMenu('cont',c)});
     t.onclick=e=>{if(editMode){e.preventDefault();openCont(c)}else{put(Object.assign({},c,{lastAt:Date.now()}));if(c.siteId&&siteById(c.siteId))visit(c.siteId,true)}};
     cr.appendChild(t);
   });
@@ -385,6 +385,33 @@ let qT;$('#q').addEventListener('input',()=>{clearTimeout(qT);qT=setTimeout(rend
 $('#editBtn').onclick=()=>{editMode=!editMode;render();toast(editMode?'دوس على أي أيقونة لتعديلها أو حذفها':'خلص التعديل')};
 $('#ver').onclick=()=>{openModal(`<h3>نسخة ${VERSION.n}</h3><p>تاريخ إنشاء النسخة دي: ${VERSION.created}</p><div class="acts"><button class="fbtn" id="cc" data-nav>تمام</button></div>`);$('#cc').onclick=closeModal};
 
+function tileMenu(kind,s,v){
+  const items=[];
+  if(kind==='site'||kind==='visit'){
+    items.push(['▶ افتح',()=>{location.href=s.url}]);
+    if(kind==='site')items.push([s.fav?'☆ شيله من المفضلة':'⭐ ضيفه للمفضلة',()=>{put(Object.assign({},s,{fav:!s.fav}))}]);
+    items.push(['🔄 تحديث الرابط',()=>openUpdate(s)]);
+    items.push(['✎ تعديل',()=>openSite(s)]);
+    if(kind==='visit')items.push(['✕ شيله من آخر ما شاهدت',()=>del(v.id)]);
+    else items.push(['🗑 حذف',()=>confirmBox('تحذف «'+s.name+'»؟',()=>{del(s.id);del('v-'+s.id)})]);
+  }else{
+    items.push(['▶ افتح',()=>{location.href=s.url}]);
+    items.push(['✎ تعديل',()=>openCont(s)]);
+    items.push(['✓ خلصته — شيله',()=>del(s.id)]);
+  }
+  openModal(`<h3>${esc(s.name||s.title)}</h3>`+items.map((it,i)=>`<button class="fbtn" style="display:block;width:100%;margin-top:8px" data-nav data-i="${i}">${esc(it[0])}</button>`).join(''));
+  $('#box').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const f=items[+b.dataset.i][1];closeModal();f()});
+}
+// long press OK on a tile = menu (for remotes without a Menu button)
+let okT0=0,okLong=false;
+document.addEventListener('keydown',e=>{const a=e.target;if(e.key!=='Enter'||!a.classList||!a.classList.contains('tile')||$('#modal').classList.contains('open'))return;
+  e.preventDefault();if(!e.repeat){okT0=Date.now();okLong=false}else if(!okLong&&Date.now()-okT0>600){okLong=true;a._menu&&a._menu()}},true);
+document.addEventListener('keyup',e=>{const a=e.target;if(e.key!=='Enter'||!a.classList||!a.classList.contains('tile'))return;
+  if(!okLong&&okT0){okT0=0;a.click()}okLong=false;okT0=0},true);
+window.tileMenuFocused=function(){const a=document.activeElement;if(a&&a._menu){a._menu();return 1}return 0};
+document.addEventListener('keydown',e=>{if((e.key==='ContextMenu'||e.key==='F10')&&!$('#modal').classList.contains('open')){if(tileMenuFocused())e.preventDefault()}});
+document.addEventListener('contextmenu',e=>{const a=e.target.closest&&e.target.closest('.tile');if(a&&a._menu){e.preventDefault();a._menu()}});
+
 /* ---------- remote / keyboard navigation (TV) ---------- */
 document.addEventListener('keydown',e=>{
   if($('#push').classList.contains('open')){if(e.key==='Escape'){$('#push').classList.remove('open');return}
@@ -407,16 +434,31 @@ document.addEventListener('keydown',e=>{
     e.preventDefault();if(next>=0&&next<els.length){els[next].focus();els[next].scrollIntoView({block:'nearest'})}
     return;
   }
-  const r=cur.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2;
-  let best=null,bs=Infinity;
-  const ver=$('#ver');
-  for(const el of els){if(el===cur||el===ver)continue;const q=el.getBoundingClientRect();
-    const dx=q.left+q.width/2-cx,dy=q.top+q.height/2-cy;
-    const along=dx*d[0]+dy*d[1];if(along<=4)continue;
-    const perp=Math.abs(dx*d[1])+Math.abs(dy*d[0]);
-    const sc=along+perp*2.5;if(sc<bs){bs=sc;best=el}}
-  if(!best&&d[1]>0&&cur!==ver)best=ver; // version label only after everything else
-  if(best){e.preventDefault();best.focus({preventScroll:true});best.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}
+  // main page: fixed rows, top to bottom; right/left move inside a row
+  const vis=el=>el&&!el.hidden&&el.offsetParent!==null;
+  const rows=[];
+  const add=list=>{list=list.filter(vis);if(list.length)rows.push(list)};
+  add([...document.querySelectorAll('header [data-nav]')]);
+  add([$('#q'),$('#gq')]);
+  add([...document.querySelectorAll('#contRow .tile')]);
+  add([...document.querySelectorAll('#visitRow .tile')]);
+  const gridRows={};[...document.querySelectorAll('#siteGrid .tile')].forEach(t=>{const k=Math.round(t.offsetTop/10);(gridRows[k]=gridRows[k]||[]).push(t)});
+  Object.keys(gridRows).map(Number).sort((a,b)=>a-b).forEach(k=>add(gridRows[k]));
+  add([$('#ab'),$('#bk'),$('#rs')]);
+  add([$('#ver')]);
+  let ri=rows.findIndex(row=>row.includes(cur));
+  e.preventDefault();
+  if(ri<0){rows[0][0].focus();return}
+  const row=rows[ri],ci=row.indexOf(cur);let target=null;
+  if(d[0]!==0){target=row[ci+(d[0]<0?1:-1)]||null} // RTL: left = next
+  else{
+    const nr=rows[ri+d[1]];
+    if(nr){const cx=cur.getBoundingClientRect().left+cur.offsetWidth/2;let bd=Infinity;
+      nr.forEach(el=>{const q=el.getBoundingClientRect(),dd=Math.abs(q.left+q.width/2-cx);if(dd<bd){bd=dd;target=el}});
+      if(nr[0].closest('footer'))target=nr[0];
+      else if(nr[0].closest('.row'))target=nr.find(el=>{const q=el.getBoundingClientRect();return q.right>0&&q.left<innerWidth})||nr[0];}
+  }
+  if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}
 });
 
 function exportData(){

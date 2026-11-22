@@ -363,7 +363,7 @@ public class MainActivity extends Activity {
             return true;
         }
         if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_GUIDE) {
-            if (atHome()) return true;
+            if (atHome()) { web.evaluateJavascript("window.tileMenuFocused&&tileMenuFocused()", null); return true; }
             showSiteMenu();
             return true;
         }
