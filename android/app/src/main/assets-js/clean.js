@@ -13,7 +13,19 @@
       var r=e.getBoundingClientRect(); if (r.width*r.height < vw*vh*0.3) continue;
       c.push(e);
     }
-    if (!c.length) return false;
+    if (!c.length) {
+      // the box is the frame's own page (not floating): press its ✕ if the page looks like a lock screen
+      var txt=(document.body.innerText||'').slice(0,3000);
+      if (!/robot|روبوت|vpn|verify|تحقق|ad.?block/i.test(txt)) return false;
+      var x=[].slice.call(document.querySelectorAll('button,a,span,div,i,svg,[role=button]')).filter(function(b){
+        var t=(b.innerText||b.getAttribute('aria-label')||b.getAttribute('title')||'').trim().toLowerCase();
+        var cl=((b.className&&b.className.baseVal!==undefined)?b.className.baseVal:(b.className||''))+' '+(b.id||'');
+        var r=b.getBoundingClientRect();
+        return r.width>0 && r.width<90 && r.height<90 && (/^(×|✕|✖|x|close|إغلاق|اغلاق|skip|تخطي)$/i.test(t) || /close|dismiss|btn-x/i.test(cl));
+      })[0];
+      if (x) { x.click(); return true; }
+      return false;
+    }
     c.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});
     var o=c[0];
     var btn=[].slice.call(o.querySelectorAll('button,a,span,div,i,svg,[role=button]')).filter(function(b){

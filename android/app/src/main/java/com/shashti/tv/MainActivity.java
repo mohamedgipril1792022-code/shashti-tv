@@ -276,7 +276,7 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)"};
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", "ℹ معلومات الجهاز"};
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(items, (dlg, which) -> {
@@ -296,6 +296,16 @@ public class MainActivity extends Activity {
                     return;
                 }
                 if (which == 8) { zapUnderCursor(); return; }
+                if (which == 11) {
+                    String wv = "?";
+                    try { if (Build.VERSION.SDK_INT >= 26) wv = WebView.getCurrentWebViewPackage().versionName; } catch (Exception ignored) { }
+                    boolean frames = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT);
+                    new android.app.AlertDialog.Builder(this).setTitle("ℹ معلومات الجهاز")
+                        .setMessage("Sajo TV نسخة " + Updater.myCode(this) + "\nأندرويد " + Build.VERSION.RELEASE + "\nWebView " + wv +
+                            "\nالتنظيف جوه المشغّل: " + (frames ? "شغال ✅" : "مش مدعوم على الجهاز ده ❌ (حدّث Android System WebView)"))
+                        .setPositiveButton("تمام", null).show();
+                    return;
+                }
                 if (which == 10) {
                     boolean sn = !snapMode();
                     getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("snap", sn).apply();
