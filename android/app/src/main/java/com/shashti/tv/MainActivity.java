@@ -163,7 +163,7 @@ public class MainActivity extends Activity {
             }
             @Override
             public void onPageFinished(WebView v, String u) {
-                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && pageHost != null) v.evaluateJavascript(CSS_JS, null);
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && pageHost != null) { v.evaluateJavascript(CSS_JS, null); ensureStealth(null); }
                 v.postDelayed(MainActivity.this::refreshBoxes, 600);
                 if (pendingAdd != null && atHome()) {
                     final String js = pendingAdd;
@@ -489,6 +489,10 @@ public class MainActivity extends Activity {
     }
 
     private void media(String cmd, int d) {
+        ensureStealth(() -> media2(cmd, d));
+    }
+
+    private void media2(String cmd, int d) {
         web.evaluateJavascript("window.__sajoMedia&&__sajoMedia('" + cmd + "'," + d + ")", null);
     }
 
@@ -497,7 +501,24 @@ public class MainActivity extends Activity {
         return h > 0 ? String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, s % 60) : String.format(java.util.Locale.US, "%d:%02d", m, s % 60);
     }
 
+    private String stealthSrc;
+    /** Our page helpers (Back closes ads, 🧹, video controls) — injected now if the page doesn't have them yet
+     *  (old WebViews can't add them at page start). */
+    private void ensureStealth(Runnable then) {
+        web.evaluateJavascript("!!window.__sajoMedia", v -> {
+            if (!"true".equals(v)) {
+                if (stealthSrc == null) stealthSrc = asset("stealth.js");
+                if (stealthSrc != null) web.evaluateJavascript(stealthSrc, null);
+            }
+            if (then != null) then.run();
+        });
+    }
+
     private void zapAtCursor() {
+        ensureStealth(this::zapAtCursor2);
+    }
+
+    private void zapAtCursor2() {
         float d = getResources().getDisplayMetrics().density;
         if (cursor.x < 0) { Toast.makeText(this, "حرّك الماوس على الإعلان الأول", Toast.LENGTH_SHORT).show(); return; }
         web.evaluateJavascript("window.__sajoZap?__sajoZap(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + "):'none'",
@@ -515,7 +536,7 @@ public class MainActivity extends Activity {
         if (!atHome()) {
             // the player stretched with a double OK comes back first
             // 1) the player stretched with a double OK comes back, 2) an ad laid over the page closes, 3) previous page
-            web.evaluateJavascript(BACK_JS, v -> {
+            ensureStealth(() -> web.evaluateJavascript(BACK_JS, v -> {
                 if (v != null && v.contains("ask")) {
                     // the ad may be inside the player's frame: the frames answer through Android.adClosed()
                     adClosedInFrame = false;
@@ -527,7 +548,7 @@ public class MainActivity extends Activity {
                 else if (v != null && v.contains("ad")) Toast.makeText(this, "🛡 اتقفل إعلان", Toast.LENGTH_SHORT).show();
                 else if (v != null && v.contains("fs")) setStretched(false);
                 else goBackPage();
-            });
+            }));
             return;
         }
         web.evaluateJavascript(
