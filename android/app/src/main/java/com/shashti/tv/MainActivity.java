@@ -272,6 +272,8 @@ public class MainActivity extends Activity {
         if (!ap0.getBoolean("hideCleared", false)) ap0.edit().putString("hide", "{}").putBoolean("hideCleared", true).apply();
         applyCleaner();
         if (b != null) web.restoreState(b); else web.loadUrl(HOME);
+        // every launch checks for a new version
+        getSharedPreferences("upd", MODE_PRIVATE).edit().putLong("last", 0).apply();
         web.postDelayed(() -> Updater.check(this, false), 4000);
     }
 
@@ -891,7 +893,7 @@ public class MainActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle o) { super.onSaveInstanceState(o); web.saveState(o); }
     @Override protected void onPause() { super.onPause(); web.onPause(); }
-    @Override protected void onResume() { super.onResume(); web.onResume(); Updater.resume(this); }
+    @Override protected void onResume() { super.onResume(); web.onResume(); Updater.resume(this); Updater.check(this, false); }
 
     private class Bridge {
         @JavascriptInterface

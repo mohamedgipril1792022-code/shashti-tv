@@ -32,7 +32,7 @@ public class Updater {
     static void check(Activity a, boolean manual) {
         if (!manual) {
             long last = a.getSharedPreferences("upd", Activity.MODE_PRIVATE).getLong("last", 0);
-            if (System.currentTimeMillis() - last < 6L * 60 * 60 * 1000) return; // at most every 6 hours
+            if (System.currentTimeMillis() - last < 15L * 60 * 1000) return; // at most every 15 minutes
         }
         a.getSharedPreferences("upd", Activity.MODE_PRIVATE).edit().putLong("last", System.currentTimeMillis()).apply();
         if (manual) Toast.makeText(a, "بدوّر على تحديث…", Toast.LENGTH_SHORT).show();
