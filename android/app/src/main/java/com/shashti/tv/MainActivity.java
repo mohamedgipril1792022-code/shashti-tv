@@ -113,6 +113,13 @@ public class MainActivity extends Activity {
         s.setSupportMultipleWindows(true); // popups go through onCreateWindow below
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         if (Build.VERSION.SDK_INT >= 21) s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        // behave like a normal browser: players inside sites often need their own cookies,
+        // and some video hosts refuse pages that announce themselves as an in-app WebView
+        android.webkit.CookieManager cm = android.webkit.CookieManager.getInstance();
+        cm.setAcceptCookie(true);
+        if (Build.VERSION.SDK_INT >= 21) cm.setAcceptThirdPartyCookies(web, true);
+        s.setUserAgentString(s.getUserAgentString().replace("; wv", "").replace(" Version/4.0", ""));
+        s.setAllowContentAccess(true);
 
         web.addJavascriptInterface(new Bridge(), "Android");
 
