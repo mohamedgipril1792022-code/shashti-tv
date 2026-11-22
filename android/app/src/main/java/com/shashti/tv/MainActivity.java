@@ -54,6 +54,7 @@ public class MainActivity extends Activity {
     private CursorView cursor;
     private int repeat = 0;
     private boolean longPressed = false;
+    private boolean backLong = false;
     private ScriptHandler cleaner;
     private String cleanJs = "";
     private volatile String currentSite = null;
@@ -355,6 +356,21 @@ public class MainActivity extends Activity {
     /** Remote control on websites: arrows move a pointer, OK taps, edges scroll. */
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
+        // Back: short press = one step back; holding it = home screen from anywhere
+        if (e.getKeyCode() == KeyEvent.KEYCODE_BACK) {
+            if (e.getAction() == KeyEvent.ACTION_DOWN) {
+                if (e.getRepeatCount() == 0) backLong = false;
+                else if (!backLong && e.getRepeatCount() >= 6) {
+                    backLong = true;
+                    exitFullscreen();
+                    if (!atHome()) { web.loadUrl(HOME); Toast.makeText(this, "🏠 الرئيسية", Toast.LENGTH_SHORT).show(); }
+                }
+            } else if (e.getAction() == KeyEvent.ACTION_UP) {
+                if (!backLong) onKeyDown(KeyEvent.KEYCODE_BACK, e);
+                backLong = false;
+            }
+            return true;
+        }
         boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
         if (!pointer) return super.dispatchKeyEvent(e);
@@ -471,17 +487,20 @@ public class MainActivity extends Activity {
     private void zapUnderCursor() {
         float d = getResources().getDisplayMetrics().density;
         String js = "(function(x,y){var el=document.elementFromPoint(x,y);if(!el||el===document.body||el===document.documentElement)return '';" +
-            "var t=el,best=null;while(t&&t!==document.body){var s=getComputedStyle(t);if(s.position==='fixed'||s.position==='absolute'&&(parseInt(s.zIndex)||0)>=10)best=t;t=t.parentElement}" +
-            "var box=best||el;var r=box.getBoundingClientRect();" +
+            "function media(e){return e.tagName==='VIDEO'||e.tagName==='IFRAME'||!!e.querySelector('video,iframe')}" +
+            "if(media(el))return 'PLAYER';" +
+            "var t=el,best=null;while(t&&t!==document.body){if(media(t))break;var s=getComputedStyle(t);if(s.position==='fixed'||s.position==='absolute'&&(parseInt(s.zIndex)||0)>=10)best=t;t=t.parentElement}" +
+            "var box=best||el;if(media(box))return 'PLAYER';" +
             "function sel(e){if(e.id&&!/\\d{3,}/.test(e.id))return '#'+CSS.escape(e.id);var c=[].slice.call(e.classList).filter(function(k){return !/\\d{3,}/.test(k)}).slice(0,3);return e.tagName.toLowerCase()+(c.length?'.'+c.map(CSS.escape).join('.'):'')}" +
             "var out=[sel(box)];box.remove();" +
             "[].slice.call(document.querySelectorAll('body *')).forEach(function(e){var s=getComputedStyle(e);if(s.position!=='fixed')return;var q=e.getBoundingClientRect();" +
-            "if(q.width*q.height>innerWidth*innerHeight*0.6&&!e.querySelector('video,iframe')&&!e.innerText.trim()){out.push(sel(e));e.remove()}});" +
+            "if(q.width*q.height>innerWidth*innerHeight*0.6&&!media(e)&&!e.innerText.trim()){out.push(sel(e));e.remove()}});" +
             "document.documentElement.style.overflow='';document.body.style.overflow='';return JSON.stringify(out)})(" +
             Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")";
         web.evaluateJavascript(js, v -> {
             try {
                 if (v == null || v.equals("null") || v.equals("\"\"")) { Toast.makeText(this, "مفيش صندوق تحت الماوس", Toast.LENGTH_SHORT).show(); return; }
+                if (v.contains("PLAYER")) { Toast.makeText(this, "ده المشغّل نفسه — مش هشيله. لو عليه صندوق قافله، التطبيق بيشغّل الموقع من غير منع لوحده", Toast.LENGTH_LONG).show(); return; }
                 org.json.JSONArray got = new org.json.JSONArray(new org.json.JSONTokener(v).nextValue().toString());
                 android.content.SharedPreferences p = getSharedPreferences("adblock", MODE_PRIVATE);
                 org.json.JSONObject h = new org.json.JSONObject(p.getString("hide", "{}"));
