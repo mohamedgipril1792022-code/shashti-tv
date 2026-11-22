@@ -158,6 +158,7 @@ public class MainActivity extends Activity {
                 pageHost = (u == null || u.startsWith("https://appassets.androidplatform.net/")) ? null : Uri.parse(u).getHost();
                 boxes = new float[0][];
                 adblock.clearLog();
+                if (stretched) setStretched(false);
                 synchronized (pageLog) { pageLog.clear(); }
             }
             @Override
@@ -394,7 +395,11 @@ public class MainActivity extends Activity {
             return true;
         }
         // full-screen video: ◀ ▶ seek (faster when held), OK play/pause
-        if (customView != null) {
+        if (customView != null || stretched) {
+            if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN) {
+                if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) media("info", 0);
+                return true;
+            }
             if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_MEDIA_REWIND || code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) {
                 if (e.getAction() == KeyEvent.ACTION_DOWN) {
                     int r = e.getRepeatCount();
@@ -411,7 +416,7 @@ public class MainActivity extends Activity {
                 return true;
             }
         }
-        boolean pointer = customView == null && !atHome();
+        boolean pointer = customView == null && !stretched && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
         navBar.setVisibility(pointer ? View.VISIBLE : View.GONE);
         if (!pointer) return super.dispatchKeyEvent(e);
@@ -444,10 +449,44 @@ public class MainActivity extends Activity {
     }
 
     // never touches a video or a player frame (allowfullscreen / embed), and only things laid over the page
-    private static final String BACK_JS = "(function(){var f=window.__shFs;if(f){f.el.setAttribute('style',f.st);window.__shFs=null;document.documentElement.style.overflow='';return 'fs'}if(window.__sajoCloseAd){if(__sajoCloseAd())return 'ad';var n=0;for(var i=0;i<frames.length;i++){try{frames[i].postMessage({sajoCloseAd:1},'*');n++}catch(e){}}return n?'ask':''}var vw=innerWidth,vh=innerHeight,va=vw*vh,fs=document.fullscreenElement||document.webkitFullscreenElement;function isPlayer(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;var fr=e.tagName==='IFRAME'?[e]:e.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){var x=fr[i];if(x.hasAttribute('allowfullscreen')||x.hasAttribute('webkitallowfullscreen')||/fullscreen/i.test(x.getAttribute('allow')||'')||/embed|player|video|stream/i.test(x.src||''))return true}return false}function cands(e){var l=[];for(var n=e;n&&n!==document.body&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n),p=st.position;if(p!=='fixed'&&!(p==='absolute'&&(parseInt(st.zIndex)||0)>=1000))continue;var r=n.getBoundingClientRect();var a=Math.max(0,Math.min(r.right,vw)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,0));if(a<va*0.04)continue;if(r.top<=4&&r.height<vh*0.2&&r.width>vw*0.8)continue;l.unshift(n)}return l}var pts=[[.5,.5],[.3,.45],[.7,.45],[.5,.75],[.3,.7],[.7,.7],[.5,.92],[.5,.3]];for(var i=0;i<pts.length;i++){var x=vw*pts[i][0],y=vh*pts[i][1];var st=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];var top=st[0];if(!top)continue;var l=cands(top);for(var j=0;j<l.length;j++){var c=l[j];if(fs&&(c.contains(fs)||fs.contains(c)))continue;if(isPlayer(c))continue;c.remove();document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';return 'ad'}}return ''})()";
+    private static final String BACK_JS = "(function(){var f=window.__shFs;if(f){f.el.setAttribute('style',f.st);(f.anc||[]).forEach(function(z){if(z[1]==null)z[0].removeAttribute('style');else z[0].setAttribute('style',z[1])});if(document.body)document.body.style.overflow='';window.__shFs=null;document.documentElement.style.overflow='';return 'fs'}if(window.__sajoCloseAd){if(__sajoCloseAd())return 'ad';var n=0;for(var i=0;i<frames.length;i++){try{frames[i].postMessage({sajoCloseAd:1},'*');n++}catch(e){}}return n?'ask':''}var vw=innerWidth,vh=innerHeight,va=vw*vh,fs=document.fullscreenElement||document.webkitFullscreenElement;function isPlayer(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;var fr=e.tagName==='IFRAME'?[e]:e.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){var x=fr[i];if(x.hasAttribute('allowfullscreen')||x.hasAttribute('webkitallowfullscreen')||/fullscreen/i.test(x.getAttribute('allow')||'')||/embed|player|video|stream/i.test(x.src||''))return true}return false}function cands(e){var l=[];for(var n=e;n&&n!==document.body&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n),p=st.position;if(p!=='fixed'&&!(p==='absolute'&&(parseInt(st.zIndex)||0)>=1000))continue;var r=n.getBoundingClientRect();var a=Math.max(0,Math.min(r.right,vw)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,0));if(a<va*0.04)continue;if(r.top<=4&&r.height<vh*0.2&&r.width>vw*0.8)continue;l.unshift(n)}return l}var pts=[[.5,.5],[.3,.45],[.7,.45],[.5,.75],[.3,.7],[.7,.7],[.5,.92],[.5,.3]];for(var i=0;i<pts.length;i++){var x=vw*pts[i][0],y=vh*pts[i][1];var st=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];var top=st[0];if(!top)continue;var l=cands(top);for(var j=0;j<l.length;j++){var c=l[j];if(fs&&(c.contains(fs)||fs.contains(c)))continue;if(isPlayer(c))continue;c.remove();document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';return 'ad'}}return ''})()";
 
     private volatile boolean adClosedInFrame = false;
     private Toast mediaToast;
+    private boolean stretched = false;
+    private android.widget.TextView mediaBar;
+    private final Runnable hideBar = () -> { if (mediaBar != null) mediaBar.setVisibility(View.GONE); };
+
+    private void setStretched(boolean on) {
+        stretched = on;
+        boolean pointer = !on && customView == null && !atHome();
+        cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        navBar.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        if (!on) hideBar.run();
+    }
+
+    /** Our own control strip over the video: what the remote does + the time. */
+    private void showMediaBar(String text) {
+        if (mediaBar == null) {
+            float d = getResources().getDisplayMetrics().density;
+            mediaBar = new android.widget.TextView(this);
+            mediaBar.setTextColor(0xFFFFFFFF);
+            mediaBar.setTextSize(22);
+            mediaBar.setGravity(android.view.Gravity.CENTER);
+            mediaBar.setPadding((int) (24 * d), (int) (12 * d), (int) (24 * d), (int) (12 * d));
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+            bg.setColor(0xCC000000); bg.setCornerRadius(18 * d); bg.setStroke((int) (2 * d), 0x66FFFFFF);
+            mediaBar.setBackground(bg);
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, android.view.Gravity.BOTTOM | android.view.Gravity.CENTER_HORIZONTAL);
+            lp.bottomMargin = (int) (36 * d);
+            root.addView(mediaBar, lp);
+        }
+        mediaBar.setText(text);
+        mediaBar.setVisibility(View.VISIBLE);
+        mediaBar.bringToFront();
+        root.removeCallbacks(hideBar);
+        root.postDelayed(hideBar, 4000);
+    }
 
     private void media(String cmd, int d) {
         web.evaluateJavascript("window.__sajoMedia&&__sajoMedia('" + cmd + "'," + d + ")", null);
@@ -486,7 +525,8 @@ public class MainActivity extends Activity {
                     }, 350);
                 }
                 else if (v != null && v.contains("ad")) Toast.makeText(this, "🛡 اتقفل إعلان", Toast.LENGTH_SHORT).show();
-                else if (v == null || !v.contains("fs")) goBackPage();
+                else if (v != null && v.contains("fs")) setStretched(false);
+                else goBackPage();
             });
             return;
         }
@@ -687,14 +727,14 @@ public class MainActivity extends Activity {
 
     private static final String FS_JS =
         "(function(x,y){var e=document.elementFromPoint(x,y),p=null;for(;e;e=e.parentElement){if(e.tagName==='IFRAME'||e.tagName==='VIDEO'){p=e;break}}if(!p)return '';" +
-        "function css(){if(window.__shFs)return;window.__shFs={el:p,st:p.getAttribute('style')||''};p.setAttribute('style',(window.__shFs.st)+';position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;border:0!important;max-width:none!important;max-height:none!important');document.documentElement.style.overflow='hidden'}" +
-        "try{var f=p.requestFullscreen||p.webkitRequestFullscreen;var r=f?f.call(p):null;if(r&&r.catch)r.catch(css);else if(!f)css()}catch(z){css()}return 'ok'})";
+        "function css(){if(window.__shFs)return;window.__shFs={el:p,st:p.getAttribute('style')||''};p.setAttribute('style',(window.__shFs.st)+';position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;border:0!important;max-width:none!important;max-height:none!important');var a=[];for(var q=p.parentElement;q&&q!==document.documentElement;q=q.parentElement){a.push([q,q.getAttribute('style')]);q.setAttribute('style',(q.getAttribute('style')||'')+';transform:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important;z-index:2147483647!important')}window.__shFs.anc=a;document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden'}" +
+        "css();return 'ok'})";
 
     /** Double OK on the player: full screen (real full screen, or the player stretched over the whole page). */
     private void fullscreenAtCursor() {
         float d = getResources().getDisplayMetrics().density;
         web.evaluateJavascript(FS_JS + "(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", v -> {
-            if (v != null && v.contains("ok")) Toast.makeText(this, "⛶ ملء الشاشة — Back للخروج", Toast.LENGTH_SHORT).show();
+            if (v != null && v.contains("ok")) { setStretched(true); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }
         });
     }
 
@@ -872,10 +912,13 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void mediaInfo(String cmd, double cur, double dur, boolean paused) {
             runOnUiThread(() -> {
-                String t = (cmd.equals("toggle") ? (paused ? "⏸ " : "▶ ") : "⏩ ") + hms(cur) + (dur > 0 ? " / " + hms(dur) : "");
-                if (mediaToast != null) mediaToast.cancel();
-                mediaToast = Toast.makeText(MainActivity.this, t, Toast.LENGTH_SHORT);
-                mediaToast.show();
+                String t = (paused ? "⏸" : "▶") + "   " + hms(cur) + (dur > 0 ? " / " + hms(dur) : "") + "\n◀ ترجيع   ·   OK " + (paused ? "تشغيل" : "إيقاف") + "   ·   تقديم ▶";
+                if (customView != null && mediaToast == null) { /* the full-screen view covers our views: use a toast there */ }
+                if (customView != null) {
+                    if (mediaToast != null) mediaToast.cancel();
+                    mediaToast = Toast.makeText(MainActivity.this, t, Toast.LENGTH_SHORT);
+                    mediaToast.show();
+                } else showMediaBar(t);
             });
         }
         @JavascriptInterface
