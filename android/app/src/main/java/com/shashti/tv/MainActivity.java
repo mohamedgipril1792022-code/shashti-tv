@@ -52,7 +52,27 @@ public class MainActivity extends Activity {
     private WebViewAssetLoader assets;
     private AdBlock adblock;
     private CursorView cursor;
-    private android.widget.TextView backBtn;
+    private android.widget.TextView backBtn, homeBtn;
+    private android.widget.LinearLayout navBar;
+
+    private android.widget.TextView navButton(String text, int color) {
+        android.widget.TextView b = new android.widget.TextView(this);
+        b.setText(text);
+        b.setTextColor(0xFFFFFFFF);
+        b.setTextSize(18);
+        b.setPadding(28, 12, 28, 12);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(color); bg.setCornerRadius(40);
+        b.setBackground(bg);
+        return b;
+    }
+
+    private boolean onButton(View b) {
+        int[] p = new int[2], q = new int[2];
+        b.getLocationOnScreen(p); root.getLocationOnScreen(q);
+        float x = p[0] - q[0], y = p[1] - q[1];
+        return cursor.x >= x && cursor.x <= x + b.getWidth() && cursor.y >= y && cursor.y <= y + b.getHeight();
+    }
     private int repeat = 0;
     private boolean longPressed = false;
     private boolean backLong = false;
@@ -94,20 +114,22 @@ public class MainActivity extends Activity {
         root = new FrameLayout(this);
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
-        backBtn = new android.widget.TextView(this);
-        backBtn.setText("⬅ رجوع");
-        backBtn.setTextColor(0xFFFFFFFF);
-        backBtn.setTextSize(18);
-        backBtn.setPadding(28, 12, 28, 12);
-        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
-        bg.setColor(0xCCE50914); bg.setCornerRadius(40);
-        backBtn.setBackground(bg);
-        backBtn.setVisibility(View.GONE);
+        // on-screen buttons in the top-left corner: previous page / home (press OK on them with the pointer)
+        navBar = new android.widget.LinearLayout(this);
+        navBar.setOrientation(android.widget.LinearLayout.HORIZONTAL);
+        backBtn = navButton("⬅ رجوع", 0xCCE50914);
+        homeBtn = navButton("🏠 الرئيسية", 0xCC333333);
+        navBar.addView(backBtn);
+        android.widget.LinearLayout.LayoutParams gap = new android.widget.LinearLayout.LayoutParams(-2, -2);
+        gap.setMargins(12, 0, 0, 0);
+        navBar.addView(homeBtn, gap);
+        navBar.setVisibility(View.GONE);
         FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(-2, -2);
         bl.gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
         bl.setMargins(16, 16, 0, 0);
-        root.addView(backBtn, bl);
+        root.addView(navBar, bl);
         backBtn.setOnClickListener(v -> goBackPage());
+        homeBtn.setOnClickListener(v -> web.loadUrl(HOME));
         cursor = new CursorView(this);
         cursor.setVisibility(View.GONE);
         root.addView(cursor, new FrameLayout.LayoutParams(-1, -1));
@@ -434,7 +456,7 @@ public class MainActivity extends Activity {
         }
         boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
-        backBtn.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        navBar.setVisibility(pointer ? View.VISIBLE : View.GONE);
         if (!pointer) return super.dispatchKeyEvent(e);
         int code = e.getKeyCode();
         float d = getResources().getDisplayMetrics().density;
@@ -697,9 +719,10 @@ public class MainActivity extends Activity {
     }
 
     private void doTap(boolean user) {
-        if (user && backBtn.getVisibility() == View.VISIBLE
-                && cursor.x >= backBtn.getLeft() && cursor.x <= backBtn.getRight()
-                && cursor.y >= backBtn.getTop() && cursor.y <= backBtn.getBottom()) { goBackPage(); return; }
+        if (user && navBar.getVisibility() == View.VISIBLE) {
+            if (onButton(backBtn)) { goBackPage(); return; }
+            if (onButton(homeBtn)) { web.loadUrl(HOME); return; }
+        }
         if (user) { lastTapAt = System.currentTimeMillis(); retaps = 0; }
         long t = SystemClock.uptimeMillis();
         MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
