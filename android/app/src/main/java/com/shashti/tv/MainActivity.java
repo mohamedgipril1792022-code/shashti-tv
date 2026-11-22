@@ -200,6 +200,7 @@ public class MainActivity extends Activity {
                 root.addView(view, new FrameLayout.LayoutParams(-1, -1));
                 web.setVisibility(View.GONE);
                 view.requestFocus();
+                autoCloseAds();
             }
             @Override
             public void onHideCustomView() { exitFullscreen(); }
@@ -451,9 +452,17 @@ public class MainActivity extends Activity {
     }
 
     // never touches a video or a player frame (allowfullscreen / embed), and only things laid over the page
-    private static final String BACK_JS = "(function(){var f=window.__shFs;if(f){f.el.setAttribute('style',f.st);(f.anc||[]).forEach(function(z){if(z[1]==null)z[0].removeAttribute('style');else z[0].setAttribute('style',z[1])});if(document.body)document.body.style.overflow='';window.__shFs=null;document.documentElement.style.overflow='';return 'fs'}if(window.__sajoCloseAd){if(__sajoCloseAd())return 'ad';var n=0;for(var i=0;i<frames.length;i++){try{frames[i].postMessage({sajoCloseAd:1},'*');n++}catch(e){}}return n?'ask':''}var vw=innerWidth,vh=innerHeight,va=vw*vh,fs=document.fullscreenElement||document.webkitFullscreenElement;function isPlayer(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;var fr=e.tagName==='IFRAME'?[e]:e.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){var x=fr[i];if(x.hasAttribute('allowfullscreen')||x.hasAttribute('webkitallowfullscreen')||/fullscreen/i.test(x.getAttribute('allow')||'')||/embed|player|video|stream/i.test(x.src||''))return true}return false}function cands(e){var l=[];for(var n=e;n&&n!==document.body&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n),p=st.position;if(p!=='fixed'&&!(p==='absolute'&&(parseInt(st.zIndex)||0)>=1000))continue;var r=n.getBoundingClientRect();var a=Math.max(0,Math.min(r.right,vw)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,0));if(a<va*0.04)continue;if(r.top<=4&&r.height<vh*0.2&&r.width>vw*0.8)continue;l.unshift(n)}return l}var pts=[[.5,.5],[.3,.45],[.7,.45],[.5,.75],[.3,.7],[.7,.7],[.5,.92],[.5,.3]];for(var i=0;i<pts.length;i++){var x=vw*pts[i][0],y=vh*pts[i][1];var st=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];var top=st[0];if(!top)continue;var l=cands(top);for(var j=0;j<l.length;j++){var c=l[j];if(fs&&(c.contains(fs)||fs.contains(c)))continue;if(isPlayer(c))continue;c.remove();document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';return 'ad'}}return ''})()";
+    private static final String BACK_JS = "(function(){if(window.__sajoCloseAd){if(__sajoCloseAd())return 'ad';var n=0;for(var i=0;i<frames.length;i++){try{frames[i].postMessage({sajoCloseAd:1},'*');n++}catch(e){}}if(n)return 'ask';var f=window.__shFs;if(f){f.el.setAttribute('style',f.st);(f.anc||[]).forEach(function(z){if(z[1]==null)z[0].removeAttribute('style');else z[0].setAttribute('style',z[1])});if(document.body)document.body.style.overflow='';window.__shFs=null;document.documentElement.style.overflow='';return 'fs'}return ''}var vw=innerWidth,vh=innerHeight,va=vw*vh,fs=document.fullscreenElement||document.webkitFullscreenElement;function isPlayer(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;var fr=e.tagName==='IFRAME'?[e]:e.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){var x=fr[i];if(x.hasAttribute('allowfullscreen')||x.hasAttribute('webkitallowfullscreen')||/fullscreen/i.test(x.getAttribute('allow')||'')||/embed|player|video|stream/i.test(x.src||''))return true}return false}function cands(e){var l=[];for(var n=e;n&&n!==document.body&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n),p=st.position;if(p!=='fixed'&&!(p==='absolute'&&(parseInt(st.zIndex)||0)>=1000))continue;var r=n.getBoundingClientRect();var a=Math.max(0,Math.min(r.right,vw)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,0));if(a<va*0.04)continue;if(r.top<=4&&r.height<vh*0.2&&r.width>vw*0.8)continue;l.unshift(n)}return l}var pts=[[.5,.5],[.3,.45],[.7,.45],[.5,.75],[.3,.7],[.7,.7],[.5,.92],[.5,.3]];for(var i=0;i<pts.length;i++){var x=vw*pts[i][0],y=vh*pts[i][1];var st=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];var top=st[0];if(!top)continue;var l=cands(top);for(var j=0;j<l.length;j++){var c=l[j];if(fs&&(c.contains(fs)||fs.contains(c)))continue;if(isPlayer(c))continue;c.remove();document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';return 'ad'}}return ''})()";
 
     private volatile boolean adClosedInFrame = false;
+
+    private static final String UNSTRETCH_JS = "(function(){var f=window.__shFs;if(!f)return '';f.el.setAttribute('style',f.st);(f.anc||[]).forEach(function(z){if(z[1]==null)z[0].removeAttribute('style');else z[0].setAttribute('style',z[1])});document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';window.__shFs=null;return 'fs'})()";
+    private static final String ASK_FRAMES_JS = "(function(){var c=window.__sajoCloseAd&&__sajoCloseAd();for(var i=0;i<frames.length;i++){try{frames[i].postMessage({sajoCloseAd:1},'*')}catch(e){}}return c?'ad':''})()";
+
+    /** Ads that pop up when the video goes full screen: looked for right away, and again a little later. */
+    private void autoCloseAds() {
+        for (int t : new int[]{700, 1800, 3500}) web.postDelayed(() -> ensureStealth(() -> web.evaluateJavascript(ASK_FRAMES_JS, null)), t);
+    }
     private Toast mediaToast;
     private boolean stretched = false;
     private android.widget.TextView mediaBar;
@@ -534,7 +543,15 @@ public class MainActivity extends Activity {
     }
 
     private void onBack() {
-        if (customView != null) { exitFullscreen(); return; }
+        if (customView != null) {
+            // an ad over the full-screen video closes first; otherwise leave full screen
+            adClosedInFrame = false;
+            web.evaluateJavascript(ASK_FRAMES_JS, v -> web.postDelayed(() -> {
+                if (adClosedInFrame || (v != null && v.contains("ad"))) Toast.makeText(this, "🛡 اتقفل إعلان", Toast.LENGTH_SHORT).show();
+                else exitFullscreen();
+            }, 350));
+            return;
+        }
         if (!atHome()) {
             // the player stretched with a double OK comes back first
             // 1) the player stretched with a double OK comes back, 2) an ad laid over the page closes, 3) previous page
@@ -544,7 +561,8 @@ public class MainActivity extends Activity {
                     adClosedInFrame = false;
                     web.postDelayed(() -> {
                         if (adClosedInFrame) Toast.makeText(this, "🛡 اتقفل إعلان", Toast.LENGTH_SHORT).show();
-                        else goBackPage();
+                        // no ad: leave the full-screen player first, then go back
+                        else web.evaluateJavascript(UNSTRETCH_JS, r -> { if (r != null && r.contains("fs")) setStretched(false); else goBackPage(); });
                     }, 350);
                 }
                 else if (v != null && v.contains("ad")) Toast.makeText(this, "🛡 اتقفل إعلان", Toast.LENGTH_SHORT).show();
@@ -757,7 +775,7 @@ public class MainActivity extends Activity {
     private void fullscreenAtCursor() {
         float d = getResources().getDisplayMetrics().density;
         web.evaluateJavascript(FS_JS + "(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", v -> {
-            if (v != null && v.contains("ok")) { setStretched(true); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }
+            if (v != null && v.contains("ok")) { setStretched(true); autoCloseAds(); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }
         });
     }
 
@@ -933,7 +951,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
         @JavascriptInterface
-        public void fsOn() { runOnUiThread(() -> { setStretched(true); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }); }
+        public void fsOn() { runOnUiThread(() -> { setStretched(true); autoCloseAds(); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }); }
         @JavascriptInterface
         public void fsOff() { runOnUiThread(() -> setStretched(false)); }
         @JavascriptInterface
