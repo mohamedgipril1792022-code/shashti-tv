@@ -441,6 +441,7 @@ public class MainActivity extends Activity {
         }
         web.evaluateJavascript(
             "(function(){var m=document.getElementById('modal'),p=document.getElementById('push');" +
+            "if(window.endMove&&endMove())return 1;" +
             "if(m&&m.classList.contains('open')){closeModal();return 1}" +
             "if(p&&p.classList.contains('open')){p.classList.remove('open');return 1}return 0})()",
             v -> { if (!"1".equals(v)) finish(); });

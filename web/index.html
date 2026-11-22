@@ -41,6 +41,8 @@ h2 small{font-size:.55em;color:var(--mut);font-weight:400}
 .row.wide .tile{flex-basis:clamp(200px,30vw,440px);aspect-ratio:16/10}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(145px,15vw,280px),1fr));gap:clamp(12px,1.6vw,26px);padding:6px 4px}
 .tile{position:relative;display:block;aspect-ratio:1;border-radius:20px;overflow:hidden;text-decoration:none;color:#fff;background:#222;outline:none;transition:transform .15s,box-shadow .15s;cursor:pointer}
+.tile.moving{outline:5px dashed #ffd54a;outline-offset:-5px;transform:scale(1.07);box-shadow:0 0 0 6px rgba(255,213,74,.35),0 12px 30px rgba(0,0,0,.6);z-index:3}
+#moveBar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#ffd54a;color:#111;font-weight:900;padding:12px 22px;border-radius:14px;z-index:50;font-size:clamp(16px,1.5vw,24px);box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .tile .bg{position:absolute;inset:0;background-size:cover;background-position:center}
 .tile .shade{position:absolute;inset:0;background:linear-gradient(transparent 30%,rgba(0,0,0,.55))}
 .tile .name{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-weight:900;font-size:clamp(22px,2.6vw,44px);line-height:1.15;text-shadow:0 3px 10px rgba(0,0,0,.85),0 0 2px #000;word-break:break-word}
@@ -101,7 +103,7 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'٦٣',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ١٢:٤٠ ص'};
+const VERSION={n:'٦٤',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ١٢:٥٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -156,7 +158,8 @@ function grad(s){let h=0;for(const ch of s||'x')h=(h*31+ch.charCodeAt(0))%360;re
 function ago(t){const m=Math.round((Date.now()-t)/60000);if(m<1)return 'الآن';if(m<60)return `من ${m} د`;const h=Math.round(m/60);if(h<24)return `من ${h} س`;const d=Math.round(h/24);return `من ${d} يوم`}
 function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',2600)}
 function setStatus(t){$('#status').textContent=t}
-const sites=()=>[...items.values()].filter(o=>o.kind==='site').sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+const ord=o=>o.order!=null?o.order:(o.createdAt||0)/1e13;   // your own order; old sites keep the order they were added in
+const sites=()=>[...items.values()].filter(o=>o.kind==='site').sort((a,b)=>ord(a)-ord(b)||(a.createdAt||0)-(b.createdAt||0));
 const siteById=id=>{const o=items.get(id);return o&&o.kind==='site'?o:null};
 
 function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav,menu}){
@@ -185,13 +188,15 @@ function render(){
   $('#ver').textContent=`نسخة ${VERSION.n} · ${VERSION.date}`;
 
   const grid=$('#siteGrid');grid.innerHTML='';
-  const ss=sites().filter(s=>qMatch(s.name,s.url)).sort((a,b)=>(b.fav?1:0)-(a.fav?1:0));
+  const ss=sites().filter(s=>qMatch(s.name,s.url));
   if(!ss.length&&qv)grid.innerHTML=noRes;else if(!ss.length)grid.innerHTML='<div class="empty">لسه مفيش مواقع — دوس «＋ موقع» وحط رابط الموقع واختار صورة ليه.</div>';
   ss.forEach(s=>{
     const t=tileEl({name:s.name,url:s.url,icon:s.icon,menu:()=>tileMenu('site',s),onUpd:()=>openUpdate(s),fav:!!s.fav,onFav:()=>{put(Object.assign({},s,{fav:!s.fav}));toast(s.fav?'اتشال من المفضلة':'⭐ اتضاف للمفضلة')}});
     t.onclick=e=>{if(editMode){e.preventDefault();openSite(s)}else visit(s.id)};
+    if(s.id===moveId){t.classList.add('moving');t.dataset.moving='1'}
     grid.appendChild(t);
   });
+  const mv=grid.querySelector('[data-moving]');if(mv)setTimeout(()=>mv.focus({preventScroll:false}),0);
 
   const vr=$('#visitRow');vr.innerHTML='';
   const vs=[...items.values()].filter(o=>o.kind==='visit'&&siteById(o.siteId)&&qMatch(siteById(o.siteId).name,siteById(o.siteId).url)).sort((a,b)=>b.lastAt-a.lastAt).slice(0,15);
@@ -386,10 +391,38 @@ let qT;$('#q').addEventListener('input',()=>{clearTimeout(qT);qT=setTimeout(rend
 $('#editBtn').onclick=()=>{editMode=!editMode;render();toast(editMode?'دوس على أي أيقونة لتعديلها أو حذفها':'خلص التعديل')};
 $('#ver').onclick=()=>{openModal(`<h3>نسخة ${VERSION.n}</h3><p>تاريخ إنشاء النسخة دي: ${VERSION.created}</p><div class="acts"><button class="fbtn" id="cc" data-nav>تمام</button></div>`);$('#cc').onclick=closeModal};
 
+/* ---------- arranging my sites: pick a tile, move it with the arrows, OK/Back to finish ---------- */
+let moveId=null;
+function startMove(s){if(($('#q').value||'').trim()){$('#q').value=''}moveId=s.id;render();
+  let b=$('#moveBar');if(!b){b=document.createElement('div');b.id='moveBar';document.body.appendChild(b)}
+  b.textContent='↔ حرّك «'+(s.name||'')+'» بالأسهم — OK أو رجوع لما تخلص';b.hidden=false}
+function endMove(){if(!moveId)return 0;moveId=null;const b=$('#moveBar');if(b)b.hidden=true;render();toast('✓ اتحفظ الترتيب');return 1}
+window.endMove=endMove;
+function moveBy(step){
+  const list=sites(),i=list.findIndex(o=>o.id===moveId),j=i+step;
+  if(i<0||j<0||j>=list.length)return;
+  const [m]=list.splice(i,1);list.splice(j,0,m);
+  list.forEach((o,k)=>{if(o.order!==k){const n=Object.assign({},o,{order:k});items.set(n.id,n);if(col){const c=col;cloudWrite(n.id,()=>c.doc(n.id).set(n))}}});
+  saveLocal();render();
+}
+function gridCols(){const ts=[...$('#siteGrid').querySelectorAll('.tile')];if(!ts.length)return 1;const top=ts[0].offsetTop;let n=0;for(const t of ts){if(t.offsetTop!==top)break;n++}return Math.max(1,n)}
+window.addEventListener('keydown',e=>{
+  if(!moveId||$('#modal').classList.contains('open'))return;
+  const k=e.key,rtl=getComputedStyle(document.documentElement).direction==='rtl';
+  let st=0;
+  if(k==='ArrowLeft')st=rtl?1:-1;else if(k==='ArrowRight')st=rtl?-1:1;
+  else if(k==='ArrowUp')st=-gridCols();else if(k==='ArrowDown')st=gridCols();
+  else if(isOk(e)||k==='Escape'||k==='Backspace'){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)endMove();return}
+  else return;
+  e.preventDefault();e.stopImmediatePropagation();moveBy(st);
+},true);
+window.addEventListener('keyup',e=>{if(moveId&&(isOk(e)||e.key.startsWith('Arrow'))){e.preventDefault();e.stopImmediatePropagation()}},true);
+
 function tileMenu(kind,s,v){
   const items=[];
   if(kind==='site'||kind==='visit'){
     items.push(['▶ افتح',()=>{location.href=s.url}]);
+    if(kind==='site')items.push(['↔ رتّب (حرّكه بالأسهم)',()=>startMove(s)]);
     if(kind==='site')items.push([s.fav?'☆ شيله من المفضلة':'⭐ ضيفه للمفضلة',()=>{put(Object.assign({},s,{fav:!s.fav}))}]);
     items.push(['🔄 تحديث الرابط',()=>openUpdate(s)]);
     if(window.Android&&Android.openExternal)items.push(['🌐 افتحه في متصفح تاني (BrowseHere)',()=>Android.openExternal(s.url)]);
