@@ -430,6 +430,19 @@ public class MainActivity extends Activity {
 
     private volatile boolean adClosedInFrame = false;
 
+    private void zapAtCursor() {
+        float d = getResources().getDisplayMetrics().density;
+        if (cursor.x < 0) { Toast.makeText(this, "حرّك الماوس على الإعلان الأول", Toast.LENGTH_SHORT).show(); return; }
+        web.evaluateJavascript("window.__sajoZap?__sajoZap(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + "):'none'",
+            v -> { if (v != null && !v.contains("frame")) zapResult(v); });
+    }
+
+    private void zapResult(String v) {
+        runOnUiThread(() -> Toast.makeText(this,
+            v.contains("ok") ? "🧹 اتشال" : v.contains("video") ? "ده الفيديو نفسه — مش هلمسه" : "مفيش حاجة تحت الماوس أشيلها",
+            Toast.LENGTH_SHORT).show());
+    }
+
     private void onBack() {
         if (customView != null) { exitFullscreen(); return; }
         if (!atHome()) {
@@ -749,7 +762,8 @@ public class MainActivity extends Activity {
             "🌐 افتح الصفحة دي في متصفح تاني",
             "ℹ معلومات",
             "🔍 المشغّل مش شغال؟ شوف اللي اتمنع في الصفحة دي",
-            "🧾 سجل أخطاء الصفحة"
+            "🧾 سجل أخطاء الصفحة",
+            "🧹 شيل الإعلان اللي تحت الماوس"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -803,6 +817,7 @@ public class MainActivity extends Activity {
                     }
                     case 11: showBlocked(); break;
                     case 12: showLog(); break;
+                    case 13: zapAtCursor(); break;
                 }
             })
             .show();
@@ -826,6 +841,8 @@ public class MainActivity extends Activity {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
+        @JavascriptInterface
+        public void zapped(String r) { zapResult(r == null ? "" : r); }
         @JavascriptInterface
         public String sl(String host) { return adblock.stealthConfig(pageHost, host); }
         @JavascriptInterface
