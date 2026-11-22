@@ -795,7 +795,11 @@ public class MainActivity extends Activity {
         float dd = getResources().getDisplayMetrics().density;
         web.evaluateJavascript("(function(x,y){var e=document.elementFromPoint(x,y);for(;e;e=e.parentElement){if(e.tagName==='IFRAME'||e.tagName==='VIDEO')return 'P'}return ''})("
                 + Math.round(cursor.x / dd) + "," + Math.round(cursor.y / dd) + ")", v -> {
-            if (v != null && v.contains("P")) playerTapAt = System.currentTimeMillis();
+            long now = System.currentTimeMillis();
+            if (v != null && v.contains("P")) {
+                if (now - playerTapAt < 500) { playerTapAt = 0; fullscreenAtCursor(); return; } // double press on the player
+                playerTapAt = now;
+            }
             doTap();
         });
     }
@@ -814,6 +818,19 @@ public class MainActivity extends Activity {
     }
 
     private void doTap() { doTap(true); }
+
+    private static final String FS_JS =
+        "(function(x,y){var e=document.elementFromPoint(x,y),p=null;for(;e;e=e.parentElement){if(e.tagName==='IFRAME'||e.tagName==='VIDEO'){p=e;break}}if(!p)return '';" +
+        "function css(){if(window.__shFs)return;window.__shFs={el:p,st:p.getAttribute('style')||''};p.setAttribute('style',(window.__shFs.st)+';position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;border:0!important;max-width:none!important;max-height:none!important');document.documentElement.style.overflow='hidden'}" +
+        "try{var f=p.requestFullscreen||p.webkitRequestFullscreen;var r=f?f.call(p):null;if(r&&r.catch)r.catch(css);else if(!f)css()}catch(z){css()}return 'ok'})";
+
+    /** Double OK on the player: full screen (real full screen, or the player stretched over the whole page). */
+    private void fullscreenAtCursor() {
+        float d = getResources().getDisplayMetrics().density;
+        web.evaluateJavascript(FS_JS + "(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", v -> {
+            if (v != null && v.contains("ok")) Toast.makeText(this, "⛶ ملء الشاشة — Back للخروج", Toast.LENGTH_SHORT).show();
+        });
+    }
 
     /** Previous page, no box closing. */
     private void goBackPage() {
@@ -843,7 +860,25 @@ public class MainActivity extends Activity {
         if (code == KeyEvent.KEYCODE_BACK) {
             if (customView != null) { exitFullscreen(); return true; }
             if (!atHome()) {
-                if (simple()) { goBackPage(); return true; }
+                web.evaluateJavascript("(function(){var f=window.__shFs;if(!f)return '';f.el.setAttribute('style',f.st);window.__shFs=null;document.documentElement.style.overflow='';return 'fs'})()", fs -> {
+                    if (fs != null && fs.contains("fs")) return;
+                    backAfterFullscreenCheck();
+                });
+                return true;
+            }
+            return backOnHome();
+        }
+        if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_GUIDE) {
+            if (atHome()) { web.evaluateJavascript("window.tileMenuFocused&&tileMenuFocused()", null); return true; }
+            showSiteMenu();
+            return true;
+        }
+        return super.onKeyDown(code, e);
+    }
+
+    private void backAfterFullscreenCheck() {
+            {
+                if (simple()) { goBackPage(); return; }
                 // a box covering the page? Back presses its ✕ (or removes it) instead of leaving the page
                 web.evaluateJavascript(CLOSE_OVERLAY, v -> {
                     if (v != null && v.contains("closed")) { Toast.makeText(this, "✕ اتقفل", Toast.LENGTH_SHORT).show(); return; }
@@ -863,8 +898,10 @@ public class MainActivity extends Activity {
                         if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME);
                     }, 450);
                 });
-                return true;
             }
+    }
+
+    private boolean backOnHome() {
             // on the launcher page: let the page close its own dialogs first
             web.evaluateJavascript(
                 "(function(){var m=document.getElementById('modal'),p=document.getElementById('push');" +
@@ -872,13 +909,6 @@ public class MainActivity extends Activity {
                 "if(p&&p.classList.contains('open')){p.classList.remove('open');return 1}return 0})()",
                 v -> { if (!"1".equals(v)) finish(); });
             return true;
-        }
-        if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_GUIDE) {
-            if (atHome()) { web.evaluateJavascript("window.tileMenuFocused&&tileMenuFocused()", null); return true; }
-            showSiteMenu();
-            return true;
-        }
-        return super.onKeyDown(code, e);
     }
 
     @Override
