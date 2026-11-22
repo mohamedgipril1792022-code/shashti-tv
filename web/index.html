@@ -100,7 +100,7 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'٨',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٤:٤٠ م'};
+const VERSION={n:'٩',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٤:٤٥ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -421,6 +421,14 @@ function drawAb(){const b=$('#ab');if(!AND)return;b.hidden=false;let on=true;try
   b.textContent=on?'🛡 مانع الإعلانات: شغال':'🛡 مانع الإعلانات: مقفول';b.classList.toggle('red',on)}
 $('#ab').onclick=()=>{try{const on=!Android.adblockOn();Android.setAdblock(on);drawAb();toast(on?'مانع الإعلانات اشتغل':'مانع الإعلانات اتقفل')}catch(e){}};
 drawAb();
+window.quickAdd=function(kind,url,title){
+  title=(title||'').split(/[|\-–—]/)[0].trim().slice(0,40);
+  if(kind==='site'){const ex=sites().find(x=>hostOf(x.url)===hostOf(url));if(ex){toast('«'+ex.name+'» موجود عندك بالفعل');return}
+    openSite();$('#fu').value=url;$('#fn').value=title;$('#fn').dispatchEvent(new Event('input'));}
+  else{openCont();$('#cu').value=url;$('#ct').value=title;$('#ct').dispatchEvent(new Event('input'));
+    const s=sites().find(x=>hostOf(x.url)===hostOf(url));if(s)$('#cs').value=s.id}
+  setTimeout(()=>{const f=kind==='site'?$('#fn'):$('#cn2');f&&f.focus()},80);
+};
 $('#bk').onclick=exportData;$('#rs').onclick=importData;
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 loadLocal();render();

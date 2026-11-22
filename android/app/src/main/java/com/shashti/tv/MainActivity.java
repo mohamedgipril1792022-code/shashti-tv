@@ -92,6 +92,14 @@ public class MainActivity extends Activity {
                 return null;
             }
             @Override
+            public void onPageFinished(WebView v, String u) {
+                if (pendingAdd != null && atHome()) {
+                    final String js = pendingAdd;
+                    pendingAdd = null;
+                    v.postDelayed(() -> v.evaluateJavascript(js, null), 300);
+                }
+            }
+            @Override
             public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest r) {
                 String sc = r.getUrl().getScheme();
                 if (!"http".equals(sc) && !"https".equals(sc)) return true; // ignore intent://, market:// ...
@@ -156,16 +164,6 @@ public class MainActivity extends Activity {
     private void openPopup(String url, boolean gesture) {
         String host = Uri.parse(url).getHost();
         if (atHome()) { // links from the launcher itself
-            if (host != null && host.contains("google.") && url.contains("/search")) {
-                try {
-                    Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-                    i.addCategory(Intent.CATEGORY_BROWSABLE);
-                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                    startActivity(i);
-                    Toast.makeText(this, "انسخ رابط الموقع من المتصفح وارجع للبرنامج", Toast.LENGTH_LONG).show();
-                    return;
-                } catch (Exception noBrowser) { /* no browser on the box: open inside the app */ }
-            }
             web.loadUrl(url);
             return;
         }
@@ -184,6 +182,24 @@ public class MainActivity extends Activity {
             runOnUiThread(() -> Toast.makeText(this, "🛡 اتمنع إعلان", Toast.LENGTH_SHORT).show());
         }
     }
+
+    /** Menu key on a website: save it to the launcher without typing the address. */
+    private void showSiteMenu() {
+        final String url = web.getUrl();
+        final String title = web.getTitle() == null ? "" : web.getTitle();
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة"};
+        new android.app.AlertDialog.Builder(this)
+            .setTitle(Uri.parse(url).getHost())
+            .setItems(items, (dlg, which) -> {
+                if (which == 0) { web.loadUrl(HOME); return; }
+                String kind = which == 1 ? "site" : "cont";
+                String target = which == 1 ? Uri.parse(url).getScheme() + "://" + Uri.parse(url).getHost() + "/" : url;
+                pendingAdd = "quickAdd(" + org.json.JSONObject.quote(kind) + "," + org.json.JSONObject.quote(target) + "," + org.json.JSONObject.quote(title) + ")";
+                web.loadUrl(HOME);
+            })
+            .show();
+    }
+    private String pendingAdd = null;
 
     private void exitFullscreen() {
         if (customView == null) return;
@@ -281,7 +297,8 @@ public class MainActivity extends Activity {
             return true;
         }
         if (code == KeyEvent.KEYCODE_MENU || code == KeyEvent.KEYCODE_GUIDE) {
-            web.loadUrl(HOME);
+            if (atHome()) return true;
+            showSiteMenu();
             return true;
         }
         return super.onKeyDown(code, e);
