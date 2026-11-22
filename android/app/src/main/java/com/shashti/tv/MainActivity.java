@@ -273,7 +273,7 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده"};
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)"};
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(items, (dlg, which) -> {
@@ -293,6 +293,12 @@ public class MainActivity extends Activity {
                     return;
                 }
                 if (which == 8) { zapUnderCursor(); return; }
+                if (which == 10) {
+                    boolean sn = !snapMode();
+                    getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("snap", sn).apply();
+                    Toast.makeText(this, sn ? "🔲 الأسهم بتنط من زرار لزرار — اضغط مطوّل للماوس الحر" : "🖱 الأسهم بقت ماوس بس", Toast.LENGTH_LONG).show();
+                    return;
+                }
                 if (which == 9) {
                     try {
                         android.content.SharedPreferences p = getSharedPreferences("adblock", MODE_PRIVATE);
@@ -360,9 +366,22 @@ public class MainActivity extends Activity {
                 if (e.getAction() == KeyEvent.ACTION_UP) { repeat = 0; return true; }
                 if (e.getAction() != KeyEvent.ACTION_DOWN) return true;
                 if (e.getRepeatCount() == 0) pressStart = SystemClock.uptimeMillis();
+                // a single press jumps to the next box (link/button) in that direction; holding = free mouse
+                if (e.getRepeatCount() == 0 && snapMode()) { snapTo(code); return true; }
+                freeMove(code, e.getRepeatCount());
+                return true;
+            }
+            default: break;
+        }
+        return dispatchRest(e);
+    }
+
+    private void freeMove(int code, int repeatCount) {
+                float d = getResources().getDisplayMetrics().density;
+                int w = root.getWidth(), h = root.getHeight();
                 long held = SystemClock.uptimeMillis() - pressStart;
                 // short tap = fine move; holding speeds up smoothly
-                float step = d * (e.getRepeatCount() == 0 ? 22 : Math.min(14 + held / 18f, 85));
+                float step = d * (repeatCount == 0 ? 22 : Math.min(14 + held / 18f, 85));
                 if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
                 float margin = 30 * d;
                 if (code == KeyEvent.KEYCODE_DPAD_UP) {
@@ -376,8 +395,48 @@ public class MainActivity extends Activity {
                 }
                 cursor.invalidate();
                 hoverAtCursor();
-                return true;
+    }
+
+    private boolean snapMode() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("snap", true); }
+
+    private static final String SNAP_JS =
+        "(function(dx,dy,cx,cy){var sel='a[href],button,input:not([type=hidden]),select,textarea,summary,video,iframe,[role=button],[role=link],[role=tab],[onclick],[tabindex]:not([tabindex=\"-1\"])';" +
+        "var vw=innerWidth,vh=innerHeight,best=null,bs=1e9;" +
+        "[].slice.call(document.querySelectorAll(sel)).forEach(function(e){var r=e.getBoundingClientRect();if(r.width<6||r.height<6||r.bottom<0||r.top>vh||r.right<0||r.left>vw)return;" +
+        "var st=getComputedStyle(e);if(st.visibility==='hidden'||parseFloat(st.opacity)<0.1)return;" +
+        "var x=Math.min(Math.max(cx,r.left+4),r.right-4),y=Math.min(Math.max(cy,r.top+4),r.bottom-4);if(Math.abs(x-cx)<2&&Math.abs(y-cy)<2)return;" +
+        "var ex=r.left+r.width/2,ey=r.top+r.height/2,ax=(dx?ex:x)-cx,ay=(dy?ey:y)-cy,along=ax*dx+ay*dy;if(along<8)return;" +
+        "var perp=Math.abs(ax*dy)+Math.abs(ay*dx);var sc=along+perp*2.2;if(sc<bs){bs=sc;best=[e,ex,ey]}});" +
+        "if(window.__shPrev){window.__shPrev.style.outline=window.__shPrevO||'';window.__shPrev=null}" +
+        "if(!best)return '';var e=best[0];window.__shPrev=e;window.__shPrevO=e.style.outline;e.style.outline='3px solid #e50914';e.style.outlineOffset='2px';" +
+        "return Math.round(best[1])+','+Math.round(best[2])})";
+
+    private void snapTo(int code) {
+        final float d = getResources().getDisplayMetrics().density;
+        if (cursor.x < 0) { cursor.x = root.getWidth() / 2f; cursor.y = root.getHeight() / 2f; }
+        int dx = code == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
+        int dy = code == KeyEvent.KEYCODE_DPAD_UP ? -1 : code == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : 0;
+        String js = SNAP_JS + "(" + dx + "," + dy + "," + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")";
+        web.evaluateJavascript(js, v -> {
+            String xy = v == null ? "" : v.replace("\"", "");
+            if (xy.contains(",")) {
+                String[] p = xy.split(",");
+                cursor.x = Float.parseFloat(p[0]) * d;
+                cursor.y = Float.parseFloat(p[1]) * d;
+                cursor.invalidate();
+                hoverAtCursor();
+            } else if (dy != 0) {
+                scrollPage(dy * root.getHeight() * 0.45f); // nothing more in that direction on screen: scroll
+            } else {
+                freeMove(code, 0);
             }
+        });
+    }
+
+    private boolean dispatchRest(KeyEvent e) {
+        int code = e.getKeyCode();
+        int h = root.getHeight();
+        switch (code) {
             case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER: case KeyEvent.KEYCODE_NUMPAD_ENTER: {
                 if (e.getAction() == KeyEvent.ACTION_DOWN) {
                     if (e.getRepeatCount() == 0) longPressed = false;
