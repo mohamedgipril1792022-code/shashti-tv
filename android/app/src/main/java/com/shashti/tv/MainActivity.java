@@ -299,7 +299,7 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: بقفله والمنع شغال (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز"};
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: مبعملش حاجة لوحدي (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز"};
         final String[] shown = new String[items.length - 2];
         for (int i = 0, j = 0; i < items.length; i++) if (i != 8 && i != 9) shown[j++] = items[i];
         new android.app.AlertDialog.Builder(this)
@@ -326,7 +326,7 @@ public class MainActivity extends Activity {
                     android.content.SharedPreferences ap = getSharedPreferences("adblock", MODE_PRIVATE);
                     boolean aa = !ap.getBoolean("autoallow", false);
                     ap.edit().putBoolean("autoallow", aa).apply();
-                    Toast.makeText(this, aa ? "🔧 هشغّل الموقع من غير منع لو اتقفل المشغّل" : "🔧 هقفل الصندوق بس والمنع يفضل شغال", Toast.LENGTH_LONG).show();
+                    Toast.makeText(this, aa ? "🔧 هشغّل الموقع من غير منع لو اتقفل المشغّل" : "🔧 مش هعمل حاجة لوحدي — Back بيقفل الصناديق", Toast.LENGTH_LONG).show();
                     return;
                 }
                 if (which == 12) {
@@ -615,13 +615,10 @@ public class MainActivity extends Activity {
                     if (atHome() || !blocking() || page == null) return;
                     if (!getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false)) {
                         // default: keep blocking, just close the box (page first, then inside the player)
-                        if (!page.equals(wallPage)) { wallPage = page; wallCloses = 0; }
-                        if (++wallCloses > 4) return;
-                        web.evaluateJavascript(CLOSE_OVERLAY, v -> {
-                            if (v == null || !v.contains("closed"))
-                                web.evaluateJavascript("[].forEach.call(document.querySelectorAll('iframe'),function(f){try{f.contentWindow.postMessage({shashti:'close'},'*')}catch(e){}})", null);
-                            Toast.makeText(this, "✕ قفلت صندوق كان مغطي المشغّل", Toast.LENGTH_SHORT).show();
-                        });
+                        // default: touch nothing on its own (closing by itself sometimes removed the player); just hint
+                        if (page.equals(wallPage)) return;
+                        wallPage = page;
+                        Toast.makeText(this, "لو فيه صندوق مغطي المشغّل دوس Back عشان تقفله", Toast.LENGTH_LONG).show();
                         return;
                     }
                     if (page.equals(checkedPage)) return;
