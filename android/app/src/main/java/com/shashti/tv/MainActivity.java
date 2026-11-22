@@ -52,6 +52,7 @@ public class MainActivity extends Activity {
     private WebViewAssetLoader assets;
     private AdBlock adblock;
     private CursorView cursor;
+    private android.widget.TextView backBtn;
     private int repeat = 0;
     private boolean longPressed = false;
     private boolean backLong = false;
@@ -93,6 +94,20 @@ public class MainActivity extends Activity {
         root = new FrameLayout(this);
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        backBtn = new android.widget.TextView(this);
+        backBtn.setText("⬅ رجوع");
+        backBtn.setTextColor(0xFFFFFFFF);
+        backBtn.setTextSize(18);
+        backBtn.setPadding(28, 12, 28, 12);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xCCE50914); bg.setCornerRadius(40);
+        backBtn.setBackground(bg);
+        backBtn.setVisibility(View.GONE);
+        FrameLayout.LayoutParams bl = new FrameLayout.LayoutParams(-2, -2);
+        bl.gravity = android.view.Gravity.TOP | android.view.Gravity.LEFT;
+        bl.setMargins(16, 16, 0, 0);
+        root.addView(backBtn, bl);
+        backBtn.setOnClickListener(v -> goBackPage());
         cursor = new CursorView(this);
         cursor.setVisibility(View.GONE);
         root.addView(cursor, new FrameLayout.LayoutParams(-1, -1));
@@ -299,12 +314,14 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: مبعملش حاجة لوحدي (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز"};
+        String[] items = {"⬅ الصفحة اللي قبلها", "🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: مبعملش حاجة لوحدي (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز"};
         final String[] shown = new String[items.length - 2];
-        for (int i = 0, j = 0; i < items.length; i++) if (i != 8 && i != 9) shown[j++] = items[i];
+        for (int i = 0, j = 0; i < items.length; i++) if (i != 9 && i != 10) shown[j++] = items[i];
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(shown, (dlg, pos) -> {
+                if (pos == 0) { goBackPage(); return; }
+                pos -= 1;
                 final int which = pos >= 8 ? pos + 2 : pos;
                 if (which == 0) { web.loadUrl(HOME); return; }
                 if (which == 4 && bgUrl != null) { String go = bgUrl; bgUrl = null; web.loadUrl(go); return; }
@@ -417,6 +434,7 @@ public class MainActivity extends Activity {
         }
         boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        backBtn.setVisibility(pointer ? View.VISIBLE : View.GONE);
         if (!pointer) return super.dispatchKeyEvent(e);
         int code = e.getKeyCode();
         float d = getResources().getDisplayMetrics().density;
@@ -673,7 +691,15 @@ public class MainActivity extends Activity {
 
     private void doTap() { doTap(true); }
 
+    /** Previous page, no box closing. */
+    private void goBackPage() {
+        if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME);
+    }
+
     private void doTap(boolean user) {
+        if (user && backBtn.getVisibility() == View.VISIBLE
+                && cursor.x >= backBtn.getLeft() && cursor.x <= backBtn.getRight()
+                && cursor.y >= backBtn.getTop() && cursor.y <= backBtn.getBottom()) { goBackPage(); return; }
         if (user) { lastTapAt = System.currentTimeMillis(); retaps = 0; }
         long t = SystemClock.uptimeMillis();
         MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
