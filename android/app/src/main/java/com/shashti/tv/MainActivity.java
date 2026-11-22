@@ -213,6 +213,8 @@ public class MainActivity extends Activity {
             }
         });
 
+        android.content.SharedPreferences ap0 = getSharedPreferences("adblock", MODE_PRIVATE);
+        if (!ap0.getBoolean("hideCleared", false)) ap0.edit().putString("hide", "{}").putBoolean("hideCleared", true).apply();
         applyCleaner();
         if (b != null) web.restoreState(b); else web.loadUrl(HOME);
         web.postDelayed(() -> Updater.check(this, false), 4000);
@@ -244,6 +246,7 @@ public class MainActivity extends Activity {
 
     /** Open a pop-up/ad quietly in a hidden tab: nothing changes on screen. */
     private void sendAway(String url) {
+        retapAfterAd();
         long now = System.currentTimeMillis();
         bgUrl = url;
         if (!adsOutside() || adblock.isAd(Uri.parse(url).getHost()) || now - lastAway < 3000) { blockedToast(); return; }
@@ -271,6 +274,7 @@ public class MainActivity extends Activity {
     }
     private String lastBlocked = null;
     private void blockedToast() {
+        retapAfterAd();
         adblock.blocked++;
         long now = System.currentTimeMillis();
         if (now - lastToast > 4000) {
@@ -284,9 +288,12 @@ public class MainActivity extends Activity {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
         String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: بقفله والمنع شغال (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز"};
+        final String[] shown = new String[items.length - 2];
+        for (int i = 0, j = 0; i < items.length; i++) if (i != 8 && i != 9) shown[j++] = items[i];
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
-            .setItems(items, (dlg, which) -> {
+            .setItems(shown, (dlg, pos) -> {
+                final int which = pos >= 8 ? pos + 2 : pos;
                 if (which == 0) { web.loadUrl(HOME); return; }
                 if (which == 4 && bgUrl != null) { String go = bgUrl; bgUrl = null; web.loadUrl(go); return; }
                 if (which == 4) {
@@ -641,7 +648,21 @@ public class MainActivity extends Activity {
         });
     }
 
-    private void doTap() {
+    private long lastTapAt = 0;
+    private boolean retapUsed = true;
+
+    /** An ad grabbed the click: press again at the same spot, once, so the click does what you meant. */
+    private void retapAfterAd() {
+        if (retapUsed || System.currentTimeMillis() - lastTapAt > 1800 || atHome()) return;
+        retapUsed = true;
+        final float x = cursor.x, y = cursor.y;
+        web.postDelayed(() -> { if (!atHome() && cursor.x == x && cursor.y == y) doTap(false); }, 700);
+    }
+
+    private void doTap() { doTap(true); }
+
+    private void doTap(boolean user) {
+        if (user) { lastTapAt = System.currentTimeMillis(); retapUsed = false; }
         long t = SystemClock.uptimeMillis();
         MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
         MotionEvent up = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, cursor.x, cursor.y, 0);
