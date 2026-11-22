@@ -441,6 +441,47 @@ public class MainActivity extends Activity {
         });
     }
 
+    // ---- auto-fix: you pressed play but a blocking box came up instead of the player ----
+    private static final String PLAYER_CHECK =
+        "(function(){var vw=innerWidth,vh=innerHeight;function big(r,f){return r.width*r.height>vw*vh*f}" +
+        "var player=[].slice.call(document.querySelectorAll('video,iframe')).some(function(e){var r=e.getBoundingClientRect();return r.width>0&&r.bottom>0&&r.top<vh&&big(r,0.12)});" +
+        "var wall=[].slice.call(document.querySelectorAll('body *')).some(function(e){var s=getComputedStyle(e);if(s.position!=='fixed'&&s.position!=='absolute')return false;" +
+        "if((parseInt(s.zIndex)||0)<100||s.visibility==='hidden'||s.display==='none'||parseFloat(s.opacity)<0.3)return false;var r=e.getBoundingClientRect();if(!big(r,0.35))return false;" +
+        "if(e.querySelector('video,iframe'))return false;return !!(e.innerText.trim()||e.querySelector('img,canvas,svg'))});" +
+        "return player&&!wall?'player':(wall?'wall':'none')})()";
+    private String checkedPage = null;
+
+    private void watchForPlayer() {
+        if (atHome() || customView != null || !blocking()) return;
+        final String page = web.getUrl();
+        web.evaluateJavascript(PLAYER_CHECK, before -> {
+            if (before != null && before.contains("player")) return; // player already there
+            web.postDelayed(() -> {
+                if (customView != null || web.getUrl() == null || !web.getUrl().equals(page) || !blocking()) return;
+                web.evaluateJavascript(PLAYER_CHECK, after -> {
+                    if (after == null || !after.contains("wall")) return;
+                    if (page.equals(checkedPage)) return;
+                    checkedPage = page;
+                    // the site answered the blocker with a wall: let this site run unblocked and try again
+                    adblock.toggleAllow(currentSite);
+                    try { // also forget boxes removed on this site, they may be part of the player
+                        android.content.SharedPreferences p = getSharedPreferences("adblock", MODE_PRIVATE);
+                        org.json.JSONObject h = new org.json.JSONObject(p.getString("hide", "{}"));
+                        h.remove(AdBlock.base(currentSite));
+                        p.edit().putString("hide", h.toString()).apply();
+                    } catch (Exception ignored) { }
+                    applyCleaner();
+                    Toast.makeText(this, "🔧 المشغّل ماظهرش — شغّلت الموقع ده من غير منع وبعيد التحميل", Toast.LENGTH_LONG).show();
+                    web.reload();
+                    web.postDelayed(() -> web.evaluateJavascript(PLAYER_CHECK, v -> {
+                        if (v != null && v.contains("wall"))
+                            Toast.makeText(this, "الموقع ده لسه قافل المشغّل — جرّب موقع تاني", Toast.LENGTH_LONG).show();
+                    }), 9000);
+                });
+            }, 5000);
+        });
+    }
+
     private void hoverAtCursor() {
         long t = SystemClock.uptimeMillis();
         MotionEvent m = MotionEvent.obtain(t, t, MotionEvent.ACTION_HOVER_MOVE, cursor.x, cursor.y, 0);
@@ -459,6 +500,7 @@ public class MainActivity extends Activity {
         web.dispatchTouchEvent(up);
         down.recycle();
         up.recycle();
+        watchForPlayer();
     }
 
     @Override
