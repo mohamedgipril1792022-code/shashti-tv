@@ -5,6 +5,16 @@
     var th = top.replace(/^https?:\/\//,'').split('/')[0].split('.').slice(-2).join('.');
     if ((window.__SHASHTI_ALLOW || []).indexOf(th) >= 0) return;
   } catch(e) {}
+  // boxes the user removed before on this site
+  try {
+    var hide = (window.__SHASHTI_HIDE || {})[location.hostname.split('.').slice(-2).join('.')];
+    if (hide && hide.length) {
+      var css = document.createElement('style');
+      css.textContent = hide.join(',') + '{display:none!important}';
+      (document.head || document.documentElement).appendChild(css);
+      document.addEventListener('DOMContentLoaded', function(){ (document.head||document.documentElement).appendChild(css); document.documentElement.style.overflow=''; document.body && (document.body.style.overflow=''); });
+    }
+  } catch(e) {}
   // pop-ups and pop-unders
   try { // pop-ups without a click are dropped; a real click still opens its window
     var _open = window.open;

@@ -77,7 +77,8 @@ public class MainActivity extends Activity {
     private String cleanerScript() {
         org.json.JSONArray a = new org.json.JSONArray();
         for (String x : adblock.allowed()) a.put(x);
-        return "window.__SHASHTI_ALLOW=" + a + ";" + cleanJs;
+        String hide = getSharedPreferences("adblock", MODE_PRIVATE).getString("hide", "{}");
+        return "window.__SHASHTI_ALLOW=" + a + ";window.__SHASHTI_HIDE=" + hide + ";" + cleanJs;
     }
 
     private boolean blocking() { return adblock.enabled() && !adblock.isAllowed(currentSite); }
@@ -259,7 +260,7 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "↪ افتح آخر صفحة اتمنعت", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📤 الإعلانات: بتفتح في المتصفح بالخلفية (اقفلها خالص)" : "🚫 الإعلانات: بتتقفل (افتحها في المتصفح بالخلفية)"};
+        String[] items = {"🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "↪ افتح آخر صفحة اتمنعت", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📤 الإعلانات: بتفتح في المتصفح بالخلفية (اقفلها خالص)" : "🚫 الإعلانات: بتتقفل (افتحها في المتصفح بالخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده"};
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(items, (dlg, which) -> {
@@ -275,6 +276,17 @@ public class MainActivity extends Activity {
                     applyCleaner();
                     Toast.makeText(this, adblock.enabled() ? "🛡 مانع الإعلانات اشتغل" : "مانع الإعلانات اتقفل", Toast.LENGTH_SHORT).show();
                     web.reload();
+                    return;
+                }
+                if (which == 8) { zapUnderCursor(); return; }
+                if (which == 9) {
+                    try {
+                        android.content.SharedPreferences p = getSharedPreferences("adblock", MODE_PRIVATE);
+                        org.json.JSONObject h = new org.json.JSONObject(p.getString("hide", "{}"));
+                        h.remove(AdBlock.base(currentSite));
+                        p.edit().putString("hide", h.toString()).apply();
+                    } catch (Exception ignored) { }
+                    applyCleaner(); web.reload();
                     return;
                 }
                 if (which == 7) {
@@ -379,6 +391,40 @@ public class MainActivity extends Activity {
         web.evaluateJavascript("(function(){var y=" + css + ",x=" + Math.round(cursor.x / d) + ",yy=" + Math.round(cursor.y / d) + ";" +
             "var el=document.elementFromPoint(x,yy),b=window.scrollY;window.scrollBy(0,y);if(window.scrollY!==b)return;" +
             "while(el&&el!==document.body){var s=getComputedStyle(el).overflowY;if((s=='auto'||s=='scroll')&&el.scrollHeight>el.clientHeight){el.scrollBy(0,y);return}el=el.parentElement}})()", null);
+    }
+
+    /** Remove the box under the pointer (and its dark backdrop), and remember it for this site. */
+    private void zapUnderCursor() {
+        float d = getResources().getDisplayMetrics().density;
+        String js = "(function(x,y){var el=document.elementFromPoint(x,y);if(!el||el===document.body||el===document.documentElement)return '';" +
+            "var t=el,best=null;while(t&&t!==document.body){var s=getComputedStyle(t);if(s.position==='fixed'||s.position==='absolute'&&(parseInt(s.zIndex)||0)>=10)best=t;t=t.parentElement}" +
+            "var box=best||el;var r=box.getBoundingClientRect();" +
+            "function sel(e){if(e.id&&!/\\d{3,}/.test(e.id))return '#'+CSS.escape(e.id);var c=[].slice.call(e.classList).filter(function(k){return !/\\d{3,}/.test(k)}).slice(0,3);return e.tagName.toLowerCase()+(c.length?'.'+c.map(CSS.escape).join('.'):'')}" +
+            "var out=[sel(box)];box.remove();" +
+            "[].slice.call(document.querySelectorAll('body *')).forEach(function(e){var s=getComputedStyle(e);if(s.position!=='fixed')return;var q=e.getBoundingClientRect();" +
+            "if(q.width*q.height>innerWidth*innerHeight*0.6&&!e.querySelector('video,iframe')&&!e.innerText.trim()){out.push(sel(e));e.remove()}});" +
+            "document.documentElement.style.overflow='';document.body.style.overflow='';return JSON.stringify(out)})(" +
+            Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")";
+        web.evaluateJavascript(js, v -> {
+            try {
+                if (v == null || v.equals("null") || v.equals("\"\"")) { Toast.makeText(this, "مفيش صندوق تحت الماوس", Toast.LENGTH_SHORT).show(); return; }
+                org.json.JSONArray got = new org.json.JSONArray(new org.json.JSONTokener(v).nextValue().toString());
+                android.content.SharedPreferences p = getSharedPreferences("adblock", MODE_PRIVATE);
+                org.json.JSONObject h = new org.json.JSONObject(p.getString("hide", "{}"));
+                String site = AdBlock.base(currentSite);
+                org.json.JSONArray list = h.optJSONArray(site);
+                if (list == null) list = new org.json.JSONArray();
+                for (int i = 0; i < got.length(); i++) {
+                    String sel = got.getString(i);
+                    if (sel.equals("div") || sel.equals("a") || sel.equals("span") || sel.equals("section")) continue; // too general to remember
+                    list.put(sel);
+                }
+                h.put(site, list);
+                p.edit().putString("hide", h.toString()).apply();
+                applyCleaner();
+                Toast.makeText(this, "🧹 اتشال — ومش هيظهر تاني على الموقع ده", Toast.LENGTH_SHORT).show();
+            } catch (Exception e) { Toast.makeText(this, "🧹 اتشال", Toast.LENGTH_SHORT).show(); }
+        });
     }
 
     private void hoverAtCursor() {
