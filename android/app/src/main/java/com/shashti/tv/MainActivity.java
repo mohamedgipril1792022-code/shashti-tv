@@ -56,6 +56,7 @@ public class MainActivity extends Activity {
     private boolean longPressed = false;
     private boolean backLong = false;
     private volatile boolean frameClosed = false;
+    private long backArmedAt = 0;
     private ScriptHandler cleaner;
     private String cleanJs = "";
     private volatile String currentSite = null;
@@ -571,7 +572,7 @@ public class MainActivity extends Activity {
         "var cands=[].slice.call(document.querySelectorAll('body *')).filter(function(e){var s=getComputedStyle(e);if(s.position!=='fixed'&&s.position!=='absolute')return false;" +
         "if(s.display==='none'||s.visibility==='hidden'||parseFloat(s.opacity)<0.3)return false;var r=e.getBoundingClientRect();if(r.width*r.height<vw*vh*0.25)return false;" +
         "var t=(e.innerText||'');if(t.length<800&&/vpn|robot|روبوت|تحقق|verify|ad.?block|مانع/i.test(t)&&!e.querySelector('video'))return true;" + // lock/scam boxes: always closable
-        "return (parseInt(s.zIndex)||0)>=1&&!player(e)});" +
+        "if(e.querySelectorAll('a[href]').length>5)return false;return !player(e)});" +
         "if(!cands.length)return 'none';cands.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});var o=cands[0];" +
         "var btns=[].slice.call(o.querySelectorAll('button,a,span,div,i,svg,[role=button]')).filter(function(b){var t=(b.innerText||b.getAttribute('aria-label')||b.getAttribute('title')||'').trim().toLowerCase();" +
         "var c=((b.className&&b.className.baseVal!==undefined)?b.className.baseVal:(b.className||''))+' '+(b.id||'');var r=b.getBoundingClientRect();" +
@@ -689,6 +690,14 @@ public class MainActivity extends Activity {
                     web.evaluateJavascript("[].forEach.call(document.querySelectorAll('iframe'),function(f){try{f.contentWindow.postMessage({shashti:'close'},'*')}catch(e){}})", null);
                     web.postDelayed(() -> {
                         if (frameClosed) { Toast.makeText(this, "✕ اتقفل", Toast.LENGTH_SHORT).show(); return; }
+                        // nothing found to close: leave the page only on a second Back, so a box never throws you out
+                        long now = System.currentTimeMillis();
+                        if (now - backArmedAt > 2500) {
+                            backArmedAt = now;
+                            Toast.makeText(this, "دوس Back تاني عشان ترجع للصفحة اللي قبلها", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        backArmedAt = 0;
                         if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME);
                     }, 450);
                 });
