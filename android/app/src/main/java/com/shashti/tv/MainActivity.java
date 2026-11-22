@@ -348,15 +348,15 @@ public class MainActivity extends Activity {
     private void showSiteMenu() {
         final String url = web.getUrl();
         final String title = web.getTitle() == null ? "" : web.getTitle();
-        String[] items = {"⬅ الصفحة اللي قبلها", "🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ رجّع الصناديق اللي شلتها من الموقع ده", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: مبعملش حاجة لوحدي (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز", simple() ? "🧩 الوضع البسيط شغال (رجّع الوضع المتقدم)" : "🧩 الوضع المتقدم شغال (رجّع الوضع البسيط)", "✕ اقفل الصندوق اللي مغطي الصفحة"};
-        final String[] shown = new String[items.length - 2];
-        for (int i = 0, j = 0; i < items.length; i++) if (i != 9 && i != 10) shown[j++] = items[i];
+        String[] items = {"⬅ الصفحة اللي قبلها", "🏠 الرئيسية", "➕ أضف الموقع ده لمواقعي", "▶ احفظ الصفحة دي في تكملة المشاهدة", "📋 انسخ الرابط", "📑 اعرض الصفحة اللي اتفتحت في الخلفية", "🛡 مانع الإعلانات: " + (adblock.enabled() ? "شغال (اقفله)" : "مقفول (شغّله)"), adblock.isAllowed(currentSite) ? "🛡 رجّع المنع على الموقع ده" : "✅ اسمح للموقع ده (لو بيبوظ مع المنع)", adsOutside() ? "📑 الصفحات المنبثقة: بتفتح في الخلفية بصمت (اقفلها خالص)" : "🚫 الصفحات المنبثقة: بتتقفل (افتحها في الخلفية)", "🧹 شيل الصندوق اللي تحت الماوس (ويفضل متشال)", "↩ انسى الإعلانات اللي اتعلمتها من الموقع ده (لو حاجة اختفت غلط)", snapMode() ? "🔲 الأسهم: بتنط من زرار لزرار (خليها ماوس بس)" : "🖱 الأسهم: ماوس بس (خليها تنط من زرار لزرار)", (getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autoallow", false) ? "🔧 لو ظهر صندوق قافل: بشغّل الموقع من غير منع (خليه يقفل الصندوق بس)" : "🔧 لو ظهر صندوق قافل: مبعملش حاجة لوحدي (خليه يشغّل الموقع من غير منع)"), "ℹ معلومات الجهاز", simple() ? "🧩 الوضع البسيط شغال (رجّع الوضع المتقدم)" : "🧩 الوضع المتقدم شغال (رجّع الوضع البسيط)", "✕ اقفل الصندوق اللي مغطي الصفحة"};
+        final String[] shown = new String[items.length - 1];
+        for (int i = 0, j = 0; i < items.length; i++) if (i != 9) shown[j++] = items[i];
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
             .setItems(shown, (dlg, pos) -> {
                 if (pos == 0) { goBackPage(); return; }
                 pos -= 1;
-                final int which = pos >= 8 ? pos + 2 : pos;
+                final int which = pos >= 8 ? pos + 1 : pos;
                 if (which == 0) { web.loadUrl(HOME); return; }
                 if (which == 4 && bgUrl != null) { String go = bgUrl; bgUrl = null; web.loadUrl(go); return; }
                 if (which == 4) {
@@ -383,7 +383,7 @@ public class MainActivity extends Activity {
                 }
                 if (which == 14) {
                     web.evaluateJavascript(CLOSE_OVERLAY, v -> {
-                        if (v != null && v.contains("closed")) { Toast.makeText(this, "✕ اتقفل", Toast.LENGTH_SHORT).show(); return; }
+                        if (v != null && v.contains("closed")) { learnFrom(v); Toast.makeText(this, "✕ اتقفل — ومش هيظهر تاني هنا", Toast.LENGTH_SHORT).show(); return; }
                         frameClosed = false;
                         web.evaluateJavascript("[].forEach.call(document.querySelectorAll('iframe'),function(f){try{f.contentWindow.postMessage({shashti:'close'},'*')}catch(e){}})", null);
                         web.postDelayed(() -> Toast.makeText(this, frameClosed ? "✕ اتقفل" : "ملقتش صندوق أقفله", Toast.LENGTH_SHORT).show(), 450);
@@ -414,6 +414,7 @@ public class MainActivity extends Activity {
                     return;
                 }
                 if (which == 9) {
+                    adblock.forget(AdBlock.base(currentSite));
                     try {
                         android.content.SharedPreferences p = getSharedPreferences("adblock", MODE_PRIVATE);
                         org.json.JSONObject h = new org.json.JSONObject(p.getString("hide", "{}"));
@@ -730,11 +731,15 @@ public class MainActivity extends Activity {
         "var t=(e.innerText||'');if(t.length<800&&/vpn|robot|روبوت|تحقق|verify|ad.?block|مانع/i.test(t)&&!e.querySelector('video'))return true;" + // lock/scam boxes: always closable
         "if(e.querySelectorAll('a[href]').length>5)return false;return !player(e)});" +
         "if(!cands.length)return 'none';cands.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});var o=cands[0];" +
+        "function sg(e){if(e.id&&!/\\d{3,}/.test(e.id))return '#'+CSS.escape(e.id);var c=[].slice.call(e.classList).filter(function(k){return !/\\d{3,}/.test(k)&&k.length<40}).slice(0,3);return c.length?e.tagName.toLowerCase()+'.'+c.map(CSS.escape).join('.'):''}" +
+        "var fr=[].slice.call(o.querySelectorAll('iframe'));if(o.tagName==='IFRAME')fr.push(o);" +
+        "var hs=fr.map(function(f){try{return new URL(f.src,location.href).hostname}catch(x){return ''}}).filter(function(h){return h&&h!==location.hostname});" +
+        "var sig='closed|'+JSON.stringify({s:sg(o),h:hs});" +
         "var btns=[].slice.call(o.querySelectorAll('button,a,span,div,i,svg,[role=button]')).filter(function(b){var t=(b.innerText||b.getAttribute('aria-label')||b.getAttribute('title')||'').trim().toLowerCase();" +
         "var c=((b.className&&b.className.baseVal!==undefined)?b.className.baseVal:(b.className||''))+' '+(b.id||'');var r=b.getBoundingClientRect();" +
         "return r.width>0&&r.width<90&&r.height<90&&(/^(×|✕|✖|x|close|إغلاق|اغلاق|skip|تخطي)$/i.test(t)||/close|dismiss|modal-x|btn-x/i.test(c))});" +
-        "if(btns.length){btns[0].dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));setTimeout(function(){if(o.isConnected&&getComputedStyle(o).display!=='none')o.remove()},400);return 'closed'}" +
-        "o.remove();document.documentElement.style.overflow='';document.body.style.overflow='';return 'closed'})()";
+        "if(btns.length){btns[0].dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window}));setTimeout(function(){if(o.isConnected&&getComputedStyle(o).display!=='none')o.remove()},400);return sig}" +
+        "o.remove();document.documentElement.style.overflow='';document.body.style.overflow='';return sig})()";
 
     private void watchForPlayer() {
         if (simple()) return;
@@ -880,12 +885,34 @@ public class MainActivity extends Activity {
         return super.onKeyDown(code, e);
     }
 
+    /** Remember a closed ad: hide the same box on this site from now on, and block the ad frames' addresses. */
+    private void learnFrom(String v) {
+        try {
+            String raw = new org.json.JSONTokener(v).nextValue().toString();
+            org.json.JSONObject j = new org.json.JSONObject(raw.substring(raw.indexOf('|') + 1));
+            String site = AdBlock.base(currentSite);
+            if (site.isEmpty()) return;
+            String sel = j.optString("s", "");
+            if (!sel.isEmpty()) {
+                android.content.SharedPreferences p = getSharedPreferences("adblock", MODE_PRIVATE);
+                org.json.JSONObject h = new org.json.JSONObject(p.getString("hide", "{}"));
+                org.json.JSONArray list = h.optJSONArray(site);
+                if (list == null) list = new org.json.JSONArray();
+                boolean have = false;
+                for (int i = 0; i < list.length(); i++) if (sel.equals(list.optString(i))) have = true;
+                if (!have) { list.put(sel); h.put(site, list); p.edit().putString("hide", h.toString()).apply(); applyCleaner(); }
+            }
+            org.json.JSONArray hs = j.optJSONArray("h");
+            if (hs != null) for (int i = 0; i < hs.length(); i++) adblock.learn(site, hs.getString(i));
+        } catch (Exception ignored) { }
+    }
+
     private void backAfterFullscreenCheck() {
             {
                 if (simple()) { goBackPage(); return; }
                 // a box covering the page? Back presses its ✕ (or removes it) instead of leaving the page
                 web.evaluateJavascript(CLOSE_OVERLAY, v -> {
-                    if (v != null && v.contains("closed")) { Toast.makeText(this, "✕ اتقفل", Toast.LENGTH_SHORT).show(); return; }
+                    if (v != null && v.contains("closed")) { learnFrom(v); Toast.makeText(this, "✕ اتقفل — ومش هيظهر تاني هنا", Toast.LENGTH_SHORT).show(); return; }
                     // nothing on the page itself: ask the frames (the player) to close their box
                     frameClosed = false;
                     web.evaluateJavascript("[].forEach.call(document.querySelectorAll('iframe'),function(f){try{f.contentWindow.postMessage({shashti:'close'},'*')}catch(e){}})", null);
@@ -961,6 +988,9 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void closedInFrame() { frameClosed = true; }
+
+        @JavascriptInterface
+        public void learnHost(String host) { runOnUiThread(() -> adblock.learn(AdBlock.base(currentSite), host)); }
 
         @JavascriptInterface
         public void reportWall(String frameUrl) { runOnUiThread(() -> autoAllow(web.getUrl())); }

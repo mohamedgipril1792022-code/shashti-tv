@@ -43,6 +43,7 @@ public class AdBlock {
         prefs = c.getSharedPreferences("adblock", Context.MODE_PRIVATE);
         cache = new File(c.getFilesDir(), "hosts.txt");
         Collections.addAll(hosts, BUILTIN);
+        loadLearned();
         new Thread(this::loadAndRefresh).start();
     }
 
@@ -65,17 +66,43 @@ public class AdBlock {
         if (host == null) return false;
         host = host.toLowerCase();
         while (host.indexOf('.') > 0) {
-            if (BUILTIN_SET.contains(host)) return true;
+            if (BUILTIN_SET.contains(host) || learned.contains(host)) return true;
             host = host.substring(host.indexOf('.') + 1);
         }
         return false;
+    }
+
+    // ---- learned from ads the user closed: {site: [ad hosts]} ----
+    private final Set<String> learned = Collections.synchronizedSet(new HashSet<>());
+    private void loadLearned() {
+        learned.clear();
+        try {
+            org.json.JSONObject j = new org.json.JSONObject(prefs.getString("learn", "{}"));
+            java.util.Iterator<String> it = j.keys();
+            while (it.hasNext()) { org.json.JSONArray a = j.getJSONArray(it.next()); for (int i = 0; i < a.length(); i++) learned.add(a.getString(i)); }
+        } catch (Exception ignored) { }
+    }
+    public void learn(String site, String host) {
+        if (site == null || site.isEmpty() || host == null || host.isEmpty() || sameSite(site, host)) return;
+        try {
+            org.json.JSONObject j = new org.json.JSONObject(prefs.getString("learn", "{}"));
+            org.json.JSONArray a = j.optJSONArray(site); if (a == null) a = new org.json.JSONArray();
+            for (int i = 0; i < a.length(); i++) if (host.equals(a.getString(i))) return;
+            a.put(host.toLowerCase()); j.put(site, a);
+            prefs.edit().putString("learn", j.toString()).apply();
+            loadLearned();
+        } catch (Exception ignored) { }
+    }
+    public void forget(String site) {
+        try { org.json.JSONObject j = new org.json.JSONObject(prefs.getString("learn", "{}")); j.remove(site); prefs.edit().putString("learn", j.toString()).apply(); loadLearned(); }
+        catch (Exception ignored) { }
     }
 
     public boolean isAd(String host) {
         if (host == null || !enabled()) return false;
         host = host.toLowerCase();
         while (host.indexOf('.') > 0) {
-            if (hosts.contains(host)) return true;
+            if (hosts.contains(host) || learned.contains(host)) return true;
             host = host.substring(host.indexOf('.') + 1);
         }
         return false;

@@ -25,7 +25,7 @@
       })[0];
       if (x) { x.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true,view:window})); return true; }
       // no ✕ at all: ask the page around this frame to remove the frame itself
-      try { parent.postMessage({shashti:'removeMe'}, '*'); return true; } catch(e) {}
+      try { parent.postMessage({shashti:'removeMe', host: location.hostname}, '*'); return true; } catch(e) {}
       return false;
     }
     c.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});
@@ -47,7 +47,7 @@
       for (var k=0;k<fs.length;k++){ if (fs[k].contentWindow===ev.source) {
         var t=fs[k]; for (var e=t; e && e!==document.body; e=e.parentElement){ if (getComputedStyle(e).position==='fixed') { t=e; break; } }
         if (t.tagName==='IFRAME' && t.hasAttribute('allowfullscreen')) return; // never the real player
-        t.remove(); try { window.Android && Android.closedInFrame(); } catch(x) {}
+        t.remove(); try { window.Android && Android.closedInFrame(); if (d.host && d.host!==location.hostname) Android.learnHost(d.host); } catch(x) {}
       } }
       return;
     }
