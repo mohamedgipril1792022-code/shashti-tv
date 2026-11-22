@@ -121,6 +121,10 @@ public class MainActivity extends Activity {
             public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
                 WebResourceResponse a = assets.shouldInterceptRequest(r.getUrl());
                 if (a != null) return a;
+                String accept = r.getRequestHeaders() == null ? null : r.getRequestHeaders().get("Accept");
+                boolean frameDoc = !r.isForMainFrame() && accept != null && accept.contains("text/html");
+                // a player page loading inside the site is never blocked by the big list — only known ad networks are
+                if (frameDoc && !adblock.isKnownAdNetwork(r.getUrl().getHost())) return null;
                 if (adblock.isAd(r.getUrl().getHost()) && !adblock.isAllowed(currentSite)) {
                     adblock.blocked++;
                     return new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));

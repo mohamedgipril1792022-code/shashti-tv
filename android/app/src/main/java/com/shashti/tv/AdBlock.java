@@ -58,6 +58,19 @@ public class AdBlock {
     }
     public void setEnabled(boolean on) { prefs.edit().putBoolean("on", on).apply(); }
 
+    private static final java.util.Set<String> BUILTIN_SET = new HashSet<>(java.util.Arrays.asList(BUILTIN));
+
+    /** Only the short built-in list of ad networks (the big public list sometimes contains video hosts). */
+    public boolean isKnownAdNetwork(String host) {
+        if (host == null) return false;
+        host = host.toLowerCase();
+        while (host.indexOf('.') > 0) {
+            if (BUILTIN_SET.contains(host)) return true;
+            host = host.substring(host.indexOf('.') + 1);
+        }
+        return false;
+    }
+
     public boolean isAd(String host) {
         if (host == null || !enabled()) return false;
         host = host.toLowerCase();
