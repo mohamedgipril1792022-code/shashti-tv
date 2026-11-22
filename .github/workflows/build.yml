@@ -49,6 +49,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - name: Publish version number for in-app updates
+        run: |
+          code=$(grep -oP 'versionCode \K[0-9]+' android/app/build.gradle)
+          echo "{\"code\": $code, \"name\": \"$code\"}" > web/version.json
+          cat web/version.json
       - uses: actions/upload-pages-artifact@v4
         with:
           path: web

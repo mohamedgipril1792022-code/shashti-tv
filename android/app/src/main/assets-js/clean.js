@@ -35,6 +35,26 @@
       if (parseFloat(st.opacity) < 0.15 || (!el.innerText.trim() && (st.backgroundColor === 'rgba(0, 0, 0, 0)' || st.backgroundColor === 'transparent'))) el.remove();
     }
   }
+  // a box that replaces the player (often inside the player's own frame): tell the app so it can retry without blocking
+  var WALL=/robot|روبوت|vpn|ad.?block|disable|verify|تحقق|عطّل|عطل|مانع/i, reported=false;
+  function wallCheck(){
+    if (reported || !document.body) return;
+    var vw=innerWidth, vh=innerHeight;
+    var els=document.body.querySelectorAll('div,section,aside,dialog');
+    for (var i=0;i<els.length;i++){
+      var e=els[i], st=getComputedStyle(e);
+      if (st.position!=='fixed' && st.position!=='absolute') continue;
+      if (st.display==='none' || st.visibility==='hidden' || parseFloat(st.opacity)<0.3) continue;
+      var r=e.getBoundingClientRect(); if (r.width*r.height < vw*vh*0.35) continue;
+      if (e.querySelector('video')) continue;
+      var txt=(e.innerText||'').slice(0,600);
+      if (WALL.test(txt) || (window!==top && e.querySelector('canvas,img,svg') && txt.length<200)) {
+        reported=true; try { window.Android && Android.reportWall(location.href); } catch(x) {}
+        return;
+      }
+    }
+  }
+  setInterval(wallCheck, 2000);
   function start(){ sweep(); try { new MutationObserver(function(){ clearTimeout(window.__shT); window.__shT=setTimeout(sweep,300); })
       .observe(document.documentElement,{childList:true,subtree:true}); } catch(e) {} }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();

@@ -206,6 +206,7 @@ public class MainActivity extends Activity {
 
         applyCleaner();
         if (b != null) web.restoreState(b); else web.loadUrl(HOME);
+        web.postDelayed(() -> Updater.check(this, false), 4000);
     }
 
     private void openPopup(String url, boolean gesture) {
@@ -513,13 +514,20 @@ public class MainActivity extends Activity {
     private void watchForPlayer() {
         if (atHome() || customView != null || !blocking()) return;
         final String page = web.getUrl();
-        web.evaluateJavascript(PLAYER_CHECK, before -> {
-            if (before != null && before.contains("player")) return; // player already there
+        {
             web.postDelayed(() -> {
                 if (customView != null || web.getUrl() == null || !web.getUrl().equals(page) || !blocking()) return;
                 web.evaluateJavascript(PLAYER_CHECK, after -> {
                     if (after == null || !after.contains("wall")) return;
-                    if (page.equals(checkedPage)) return;
+                    autoAllow(page);
+                });
+            }, 5000);
+        }
+    }
+
+    /** The site put a box where the player should be: run this site without blocking and reload. */
+    private void autoAllow(String page) {
+                    if (atHome() || !blocking() || page == null || page.equals(checkedPage)) return;
                     checkedPage = page;
                     // the site answered the blocker with a wall: let this site run unblocked and try again
                     adblock.toggleAllow(currentSite);
@@ -536,9 +544,6 @@ public class MainActivity extends Activity {
                         if (v != null && v.contains("wall"))
                             Toast.makeText(this, "الموقع ده لسه قافل المشغّل — جرّب موقع تاني", Toast.LENGTH_LONG).show();
                     }), 9000);
-                });
-            }, 5000);
-        });
     }
 
     private void hoverAtCursor() {
@@ -629,6 +634,15 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public void reportWall(String frameUrl) { runOnUiThread(() -> autoAllow(web.getUrl())); }
+
+        @JavascriptInterface
+        public void checkUpdate() { runOnUiThread(() -> Updater.check(MainActivity.this, true)); }
+
+        @JavascriptInterface
+        public String appVersion() { return String.valueOf(Updater.myCode(MainActivity.this)); }
 
         @JavascriptInterface
         public boolean adblockOn() { return adblock.enabled(); }

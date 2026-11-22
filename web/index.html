@@ -94,14 +94,14 @@ footer{text-align:center;margin-top:30px}
   <h2>⭐ مواقعي</h2>
   <div class="grid" id="siteGrid"></div>
 </main>
-<footer><button class="hbtn" id="ab" data-nav hidden></button> <button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button><br><button id="ver" data-nav></button></footer>
+<footer><button class="hbtn" id="ab" data-nav hidden></button> <button class="hbtn" id="up" data-nav hidden>🔄 تحديث</button> <button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button><br><button id="ver" data-nav></button></footer>
 
 <div id="modal"><div class="box" id="box"></div></div>
 <div id="push"><div class="box" id="pbox"></div></div>
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'٢٤',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٦:٣٠ م'};
+const VERSION={n:'٢٥',date:'٢٢-١١-٢٠٢٦',created:'الأحد ٢٢ نوفمبر ٢٠٢٦ – ٦:٣٥ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -448,7 +448,7 @@ document.addEventListener('keydown',e=>{
   add([...document.querySelectorAll('#visitRow .tile')]);
   const gridRows={};[...document.querySelectorAll('#siteGrid .tile')].forEach(t=>{const k=Math.round(t.offsetTop/10);(gridRows[k]=gridRows[k]||[]).push(t)});
   Object.keys(gridRows).map(Number).sort((a,b)=>a-b).forEach(k=>add(gridRows[k]));
-  add([$('#ab'),$('#bk'),$('#rs')]);
+  add([$('#ab'),$('#up'),$('#bk'),$('#rs')]);
   add([$('#ver')]);
   let ri=rows.findIndex(row=>row.includes(cur));
   e.preventDefault();
@@ -487,6 +487,7 @@ function drawAb(){const b=$('#ab');if(!AND)return;b.hidden=false;let on=true;try
   b.textContent=on?'🛡 مانع الإعلانات: شغال':'🛡 مانع الإعلانات: مقفول';b.classList.toggle('red',on)}
 $('#ab').onclick=()=>{try{const on=!Android.adblockOn();Android.setAdblock(on);drawAb();toast(on?'مانع الإعلانات اشتغل':'مانع الإعلانات اتقفل')}catch(e){}};
 drawAb();
+if(AND&&Android.checkUpdate){$('#up').hidden=false;$('#up').onclick=()=>Android.checkUpdate()}
 // inside the TV app: open links in the same screen (new windows are unreliable in Android WebView)
 if(window.Android){document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[target]');if(a)a.removeAttribute('target')},true)}
 window.quickAdd=function(kind,url,title){
