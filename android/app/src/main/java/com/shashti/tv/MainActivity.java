@@ -357,6 +357,8 @@ public class MainActivity extends Activity {
         web.setVisibility(View.VISIBLE);
         if (customCallback != null) customCallback.onCustomViewHidden();
         customCallback = null;
+        web.evaluateJavascript("(function(){var f=window.__shFs;if(!f)return;f.el.setAttribute('style',f.st);(f.anc||[]).forEach(function(z){if(z[1]==null)z[0].removeAttribute('style');else z[0].setAttribute('style',z[1])});document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';window.__shFs=null})()", null);
+        setStretched(false);
     }
 
     private boolean atHome() {
@@ -930,6 +932,10 @@ public class MainActivity extends Activity {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
+        @JavascriptInterface
+        public void fsOn() { runOnUiThread(() -> { setStretched(true); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }); }
+        @JavascriptInterface
+        public void fsOff() { runOnUiThread(() -> setStretched(false)); }
         @JavascriptInterface
         public void mediaInfo(String cmd, double cur, double dur, boolean paused) {
             runOnUiThread(() -> {
