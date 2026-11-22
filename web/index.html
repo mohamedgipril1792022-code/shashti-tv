@@ -103,7 +103,7 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'٦٥',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ١٢:٥٥ ص'};
+const VERSION={n:'٦٦',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ١٢:٥٨ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -279,7 +279,8 @@ function openSite(s){
    <label>الاسم اللي يظهر على الأيقونة</label><input id="fn" placeholder="اسم الموقع" value="${esc(s.name)}" data-nav>
    <label>الرابط (URL)</label><input id="fu" dir="ltr" inputmode="url" placeholder="https://example.com" value="${esc(s.url)}" data-nav>
    ${iconPicker()}
-   <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn" id="mvb" data-nav>↔ رتّب</button><button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  if(!isNew)$('#mvb').onclick=()=>{closeModal();startMove(s)};
   const st={icon:s.icon||'',nameFn:()=>$('#fn').value.trim()||hostOf(normUrl($('#fu').value))||'موقع'};
   const draw=wirePicker(st);
   const gq=()=>$('#gsq').value.trim()||$('#fn').value.trim();
@@ -437,15 +438,20 @@ function tileMenu(kind,s,v){
   openModal(`<h3>${esc(s.name||s.title)}</h3>`+items.map((it,i)=>`<button class="fbtn" style="display:block;width:100%;margin-top:8px" data-nav data-i="${i}">${esc(it[0])}</button>`).join(''));
   $('#box').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const f=items[+b.dataset.i][1];closeModal();f()});
 }
-// OK on a tile: opens on release (one press); holding it opens the tile menu
+// OK on a tile: opens on release (one press); held ~0.6 s opens the tile menu (works even when the box sends no key repeats)
 let okTile=null,okTimer=0,okLong=false;
 const isOk=e=>e.key==='Enter'||e.keyCode===13||e.keyCode===23;
-document.addEventListener('keydown',e=>{const a=e.target;if(!isOk(e)||!a.classList||!a.classList.contains('tile')||$('#modal').classList.contains('open'))return;
+// while OK is still held after the menu opened, its repeats must not press the menu's first button («افتح»)
+let okSwallow=false;
+window.addEventListener('keydown',e=>{if(okSwallow&&isOk(e)){e.preventDefault();e.stopImmediatePropagation()}},true);
+window.addEventListener('keyup',e=>{if(okSwallow&&isOk(e)){okSwallow=false;e.preventDefault();e.stopImmediatePropagation()}},true);
+document.addEventListener('keydown',e=>{const a=e.target;if(!isOk(e)||!a.classList||!a.classList.contains('tile')||$('#modal').classList.contains('open')||moveId)return;
   e.preventDefault();e.stopPropagation();
-  if(!e.repeat&&okTile!==a){okTile=a;okLong=false;clearTimeout(okTimer);okTimer=setTimeout(()=>{if(okTile===a&&!okLong){okTile=null;a.click()}},900)}
-  else if(e.repeat&&!okLong){okLong=true;clearTimeout(okTimer);okTile=null;a._menu&&a._menu()}},true);
-document.addEventListener('keyup',e=>{const a=e.target;if(!isOk(e)||!a.classList||!a.classList.contains('tile'))return;
-  e.preventDefault();clearTimeout(okTimer);if(okTile===a&&!okLong){okTile=null;a.click()}okTile=null;okLong=false},true);
+  if(okTile===a)return;                       // auto-repeat while held
+  okTile=a;okLong=false;clearTimeout(okTimer);
+  okTimer=setTimeout(()=>{if(okTile===a){okLong=true;okTile=null;okSwallow=true;a._menu&&a._menu()}},600)},true);
+document.addEventListener('keyup',e=>{const a=e.target;if(!isOk(e))return;
+  if(okTile){e.preventDefault();clearTimeout(okTimer);const t=okTile;okTile=null;if(!okLong&&t===a)t.click();okLong=false}},true);
 window.tileMenuFocused=function(){const a=document.activeElement;if(a&&a._menu){a._menu();return 1}return 0};
 document.addEventListener('keydown',e=>{if((e.key==='ContextMenu'||e.key==='F10')&&!$('#modal').classList.contains('open')){if(tileMenuFocused())e.preventDefault()}});
 document.addEventListener('contextmenu',e=>{const a=e.target.closest&&e.target.closest('.tile');if(a&&a._menu){e.preventDefault();a._menu()}});
