@@ -55,6 +55,7 @@ public class MainActivity extends Activity {
     private int repeat = 0;
     private boolean longPressed = false;
     private boolean backLong = false;
+    private volatile boolean frameClosed = false;
     private ScriptHandler cleaner;
     private String cleanJs = "";
     private volatile String currentSite = null;
@@ -610,7 +611,13 @@ public class MainActivity extends Activity {
                 // a box covering the page? Back presses its ✕ (or removes it) instead of leaving the page
                 web.evaluateJavascript(CLOSE_OVERLAY, v -> {
                     if (v != null && v.contains("closed")) { Toast.makeText(this, "✕ اتقفل", Toast.LENGTH_SHORT).show(); return; }
-                    if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME);
+                    // nothing on the page itself: ask the frames (the player) to close their box
+                    frameClosed = false;
+                    web.evaluateJavascript("[].forEach.call(document.querySelectorAll('iframe'),function(f){try{f.contentWindow.postMessage({shashti:'close'},'*')}catch(e){}})", null);
+                    web.postDelayed(() -> {
+                        if (frameClosed) { Toast.makeText(this, "✕ اتقفل", Toast.LENGTH_SHORT).show(); return; }
+                        if (web.canGoBack()) web.goBack(); else web.loadUrl(HOME);
+                    }, 450);
                 });
                 return true;
             }
@@ -673,6 +680,9 @@ public class MainActivity extends Activity {
                 }
             });
         }
+
+        @JavascriptInterface
+        public void closedInFrame() { frameClosed = true; }
 
         @JavascriptInterface
         public void reportWall(String frameUrl) { runOnUiThread(() -> autoAllow(web.getUrl())); }

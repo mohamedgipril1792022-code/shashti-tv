@@ -1,5 +1,37 @@
 (function(){
   if (window.__shashtiClean) return; window.__shashtiClean = 1;
+  // Back on the remote: close a box inside this frame (e.g. a box drawn inside the player)
+  function closeHere(){
+    if (!document.body) return false;
+    var vw=innerWidth, vh=innerHeight, c=[];
+    var all=document.body.querySelectorAll('*');
+    for (var i=0;i<all.length;i++){
+      var e=all[i], st=getComputedStyle(e);
+      if (st.position!=='fixed' && st.position!=='absolute') continue;
+      if (st.display==='none' || st.visibility==='hidden' || parseFloat(st.opacity)<0.3) continue;
+      if (e.tagName==='VIDEO' || e.querySelector('video')) continue;
+      var r=e.getBoundingClientRect(); if (r.width*r.height < vw*vh*0.3) continue;
+      c.push(e);
+    }
+    if (!c.length) return false;
+    c.sort(function(a,b){return (parseInt(getComputedStyle(b).zIndex)||0)-(parseInt(getComputedStyle(a).zIndex)||0)});
+    var o=c[0];
+    var btn=[].slice.call(o.querySelectorAll('button,a,span,div,i,svg,[role=button]')).filter(function(b){
+      var t=(b.innerText||b.getAttribute('aria-label')||b.getAttribute('title')||'').trim().toLowerCase();
+      var cl=((b.className&&b.className.baseVal!==undefined)?b.className.baseVal:(b.className||''))+' '+(b.id||'');
+      var r=b.getBoundingClientRect();
+      return r.width>0 && r.width<90 && r.height<90 && (/^(×|✕|✖|x|close|إغلاق|اغلاق|skip|تخطي)$/i.test(t) || /close|dismiss|btn-x/i.test(cl));
+    })[0];
+    if (btn) { btn.click(); setTimeout(function(){ if (o.isConnected && getComputedStyle(o).display!=='none') o.remove(); }, 400); }
+    else o.remove();
+    return true;
+  }
+  window.addEventListener('message', function(ev){
+    var d=ev.data; if (!d || d.shashti!=='close') return;
+    var fr=document.querySelectorAll('iframe');
+    for (var i=0;i<fr.length;i++){ try { fr[i].contentWindow.postMessage({shashti:'close'}, '*'); } catch(x) {} }
+    if (window!==top && closeHere()) { try { window.Android && Android.closedInFrame(); } catch(x) {} }
+  });
   try { // allowed sites: do nothing there
     var top = (location.ancestorOrigins && location.ancestorOrigins.length) ? location.ancestorOrigins[location.ancestorOrigins.length-1] : location.origin;
     var th = top.replace(/^https?:\/\//,'').split('/')[0].split('.').slice(-2).join('.');
