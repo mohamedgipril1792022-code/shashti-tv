@@ -1469,6 +1469,36 @@ public class MainActivity extends Activity {
     private boolean askedNotif = false;
     @Override protected void onDestroy() { PlayService.stop(this); super.onDestroy(); }
 
+    // phone + YouTube: turn the phone sideways = the video fills the screen (like the YouTube app); upright = back
+    private static final String YT_FILL_JS = "(function(){if(window.__shFs)return 'on';var p=document.querySelector('#player-container-id,.html5-video-player,#movie_player,#player');" +
+        "if(!p){var v=document.querySelector('video');p=v&&v.parentElement}if(!p)return '';" +
+        "var st=p.getAttribute('style')||'';window.__shFs={el:p,st:st,anc:[]};" +
+        "p.setAttribute('style',st+';position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;margin:0!important;transform:none!important');" +
+        "for(var q=p.parentElement;q&&q!==document.documentElement;q=q.parentElement){window.__shFs.anc.push([q,q.getAttribute('style')]);q.setAttribute('style',(q.getAttribute('style')||'')+';transform:none!important;filter:none!important;contain:none!important;overflow:visible!important;z-index:2147483647!important')}" +
+        "var vs=p.querySelectorAll('video');for(var i=0;i<vs.length;i++){vs[i].dataset.sajoSt=vs[i].getAttribute('style')||'';vs[i].style.cssText+=';width:100vw!important;height:100vh!important;left:0!important;top:0!important;object-fit:contain!important'}" +
+        "document.documentElement.style.overflow='hidden';window.dispatchEvent(new Event('resize'));return 'on'})()";
+
+    @Override public void onConfigurationChanged(android.content.res.Configuration c) {
+        super.onConfigurationChanged(c);
+        if (isTv || customView != null || pageHost == null || !isYt(pageHost)) return;
+        boolean land = c.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        if (land) {
+            web.evaluateJavascript("document.querySelector('video')&&!document.querySelector('video').paused", v -> {
+                if (!"true".equals(v)) return;
+                web.evaluateJavascript(YT_FILL_JS, null);
+                getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+                if (zoomBar != null) zoomBar.setVisibility(View.GONE);
+                if (phoneMenu != null) phoneMenu.setVisibility(View.GONE);
+            });
+        } else {
+            web.evaluateJavascript("(function(){var vs=document.querySelectorAll('video');for(var i=0;i<vs.length;i++){if(vs[i].dataset.sajoSt!==undefined){vs[i].setAttribute('style',vs[i].dataset.sajoSt);delete vs[i].dataset.sajoSt}}})()", null);
+            web.evaluateJavascript(UNSTRETCH_JS, null);
+            web.evaluateJavascript("window.dispatchEvent(new Event('resize'))", null);
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+            updatePhoneButton();
+        }
+    }
+
     private class Bridge {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
