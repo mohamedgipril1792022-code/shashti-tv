@@ -200,6 +200,11 @@ public class MainActivity extends Activity {
                 root.addView(view, new FrameLayout.LayoutParams(-1, -1));
                 web.setVisibility(View.GONE);
                 view.requestFocus();
+                // the mouse stays on top of the full-screen player and jumps between its buttons
+                cursor.setVisibility(View.VISIBLE);
+                cursor.bringToFront();
+                if (mediaBar != null) mediaBar.bringToFront();
+                setStretched(true);
                 autoCloseAds();
             }
             @Override
@@ -397,7 +402,7 @@ public class MainActivity extends Activity {
             }
             return true;
         }
-        boolean pointer = customView == null && !atHome();
+        boolean pointer = !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
         navBar.setVisibility(View.GONE);   // the side ⬅/🏠 buttons are off (Back and Menu do it)
         if (!pointer) return super.dispatchKeyEvent(e);
@@ -410,7 +415,8 @@ public class MainActivity extends Activity {
                 // one press jumps to the next box (link/button) or nudges the mouse; holding the arrow = the mouse
                 // glides smoothly and picks up speed (like a browser's mouse), frame by frame instead of jumping
                 // full screen: the mouse is locked and jumps from button to button of the player
-                if (stretched) { if (e.getRepeatCount() % 4 == 0) snapFs(code); return true; }
+                boolean haveFs; synchronized (fsBoxes) { haveFs = !fsBoxes.isEmpty(); }
+                if (stretched && haveFs) { if (e.getRepeatCount() % 4 == 0) snapFs(code); return true; }   // no buttons found: the free mouse instead
                 if (e.getRepeatCount() == 0) { if (snapMode()) snapTo(code); else freeMove(code, 0); }
                 else if (glideKey != code) startGlide(code);
                 return true;
@@ -452,10 +458,11 @@ public class MainActivity extends Activity {
 
     private void setStretched(boolean on) {
         stretched = on;
+        if (on) cursor.bringToFront();
         root.removeCallbacks(fsBoxRefresher);
         if (on) { synchronized (fsBoxes) { fsBoxes.clear(); } root.postDelayed(fsBoxRefresher, 400); }
         if (!on) web.evaluateJavascript("window.__sajoFsClear&&__sajoFsClear()", null);
-        boolean pointer = customView == null && !atHome();
+        boolean pointer = !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
         navBar.setVisibility(View.GONE);   // the side ⬅/🏠 buttons are off (Back and Menu do it)
         if (!on) hideBar.run();
@@ -803,7 +810,7 @@ public class MainActivity extends Activity {
         lastHover = t;
         MotionEvent m = MotionEvent.obtain(t, t, MotionEvent.ACTION_HOVER_MOVE, cursor.x, cursor.y, 0);
         m.setSource(android.view.InputDevice.SOURCE_MOUSE);
-        web.dispatchGenericMotionEvent(m);
+        (customView != null ? customView : web).dispatchGenericMotionEvent(m);
         m.recycle();
     }
 
@@ -821,7 +828,7 @@ public class MainActivity extends Activity {
                 + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", v -> {
             long now = System.currentTimeMillis();
             if (v != null && v.contains("P")) {
-                if (now - lastPlayerTap < 500) { lastPlayerTap = 0; fullscreenAtCursor(); return; } // double OK on the player
+                if (customView == null && now - lastPlayerTap < 500) { lastPlayerTap = 0; fullscreenAtCursor(); return; } // double OK on the player
                 lastPlayerTap = now;
             }
             long t = SystemClock.uptimeMillis();
@@ -829,8 +836,9 @@ public class MainActivity extends Activity {
             MotionEvent up = MotionEvent.obtain(t, t + 60, MotionEvent.ACTION_UP, cursor.x, cursor.y, 0);
             down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
             up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
-            web.dispatchTouchEvent(down);
-            web.dispatchTouchEvent(up);
+            View target = customView != null ? customView : web;
+            target.dispatchTouchEvent(down);
+            target.dispatchTouchEvent(up);
             down.recycle();
             up.recycle();
             { web.removeCallbacks(boxesLater); web.postDelayed(boxesLater, 800); }
@@ -840,13 +848,13 @@ public class MainActivity extends Activity {
     private static final String FS_JS =
         "(function(x,y){var e=document.elementFromPoint(x,y),p=null;for(;e;e=e.parentElement){if(e.tagName==='IFRAME'||e.tagName==='VIDEO'){p=e;break}}if(!p)return '';" +
         "function css(){if(window.__shFs)return;window.__shFs={el:p,st:p.getAttribute('style')||''};p.setAttribute('style',(window.__shFs.st)+';position:fixed!important;left:0!important;top:0!important;width:100vw!important;height:100vh!important;z-index:2147483647!important;background:#000!important;border:0!important;max-width:none!important;max-height:none!important');var a=[];for(var q=p.parentElement;q&&q!==document.documentElement;q=q.parentElement){a.push([q,q.getAttribute('style')]);q.setAttribute('style',(q.getAttribute('style')||'')+';transform:none!important;filter:none!important;backdrop-filter:none!important;contain:none!important;perspective:none!important;will-change:auto!important;overflow:visible!important;z-index:2147483647!important')}window.__shFs.anc=a;document.documentElement.style.overflow='hidden';document.body.style.overflow='hidden'}" +
-        "css();return 'ok'})";
+        "try{var f=p.requestFullscreen||p.webkitRequestFullscreen;var r=f?f.call(p):null;if(r&&r.catch)r.catch(css);else if(!f)css()}catch(z){css()}return 'ok'})";
 
     /** Double OK on the player: full screen (real full screen, or the player stretched over the whole page). */
     private void fullscreenAtCursor() {
         float d = getResources().getDisplayMetrics().density;
         web.evaluateJavascript(FS_JS + "(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", v -> {
-            if (v != null && v.contains("ok")) { setStretched(true); autoCloseAds(); showMediaBar("⛶ ملء الشاشة — Back للخروج"); }
+            if (v != null && v.contains("ok")) { web.postDelayed(() -> { if (customView == null) { setStretched(true); autoCloseAds(); } }, 600); }
         });
     }
 
