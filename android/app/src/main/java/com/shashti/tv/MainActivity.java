@@ -416,8 +416,9 @@ public class MainActivity extends Activity {
                 // glides smoothly and picks up speed (like a browser's mouse), frame by frame instead of jumping
                 // full screen: the mouse is locked and jumps from button to button of the player
                 boolean haveFs; synchronized (fsBoxes) { haveFs = !fsBoxes.isEmpty(); }
-                if (stretched && haveFs) { if (e.getRepeatCount() % 4 == 0) snapFs(code); return true; }   // no buttons found: the free mouse instead
-                if (e.getRepeatCount() == 0) { if (snapMode()) snapTo(code); else freeMove(code, 0); }
+                // full screen: a press jumps to the player's next button (or nudges the mouse if none is there); holding glides freely
+                if (stretched && haveFs && e.getRepeatCount() == 0) { snapFs(code); return true; }
+                if (e.getRepeatCount() == 0) { if (snapMode() && !stretched) snapTo(code); else freeMove(code, 0); }
                 else if (glideKey != code) startGlide(code);
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER: case KeyEvent.KEYCODE_NUMPAD_ENTER:
@@ -649,8 +650,8 @@ public class MainActivity extends Activity {
                 if (sc < bs) { bs = sc; best = b; }
             }
         }
-        if (best == null) {                                    // nothing there: the controls may be hidden — wake them up
-            hoverAtCursorNow();
+        if (best == null) {                                    // nothing that way: move the mouse anyway (never frozen) and wake the controls
+            freeMove(code, 0);
             web.evaluateJavascript("window.__sajoBoxes&&__sajoBoxes()", null);
             return;
         }
