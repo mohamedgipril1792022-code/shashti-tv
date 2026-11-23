@@ -101,6 +101,8 @@
     }, 300);
   })();
 
+  // YouTube gets only its own module above (exactly what works on the box); the list scriptlets and the rest stay off there
+  if (/(^|\.)youtube(-nocookie)?\.com$/.test(location.hostname)) return;
   if (window.__sajoSL || window.__sajoWait) return;
   if (!(window.Android && window.Android.sl)) {
     window.__sajoWait = true;
