@@ -412,7 +412,7 @@ public class MainActivity extends Activity {
         android.content.SharedPreferences zp = getSharedPreferences("adblock", MODE_PRIVATE);
         // ⋮ and A−/A+ move together, as one group
         final View[] group = phoneMenu != null ? new View[]{zoomBar, phoneMenu} : new View[]{zoomBar};
-        for (View g : group) { g.setTranslationX(zp.getFloat("zbx", 0)); g.setTranslationY(zp.getFloat("zby", 0)); }
+        for (View gv : group) { gv.setTranslationX(zp.getFloat("zbx", 0)); gv.setTranslationY(zp.getFloat("zby", 0)); }
         View.OnTouchListener drag = new View.OnTouchListener() {
             float sx, sy, tx, ty; boolean moved;
             @Override public boolean onTouch(View v, MotionEvent e) {
@@ -426,12 +426,12 @@ public class MainActivity extends Activity {
                         if (moved) {
                             // keep the whole group on the screen
                             float minX = -1e9f, maxX = 1e9f, minY = -1e9f, maxY = 1e9f;
-                            for (View g : group) {
-                                minX = Math.max(minX, -g.getLeft()); maxX = Math.min(maxX, root.getWidth() - g.getRight());
-                                minY = Math.max(minY, -g.getTop()); maxY = Math.min(maxY, root.getHeight() - g.getBottom());
+                            for (View gv : group) {
+                                minX = Math.max(minX, -gv.getLeft()); maxX = Math.min(maxX, root.getWidth() - gv.getRight());
+                                minY = Math.max(minY, -gv.getTop()); maxY = Math.min(maxY, root.getHeight() - gv.getBottom());
                             }
                             float nx = Math.max(minX, Math.min(maxX, tx + dx)), ny = Math.max(minY, Math.min(maxY, ty + dy));
-                            for (View g : group) { g.setTranslationX(nx); g.setTranslationY(ny); }
+                            for (View gv : group) { gv.setTranslationX(nx); gv.setTranslationY(ny); }
                         }
                         return true;
                     }
