@@ -117,6 +117,7 @@ public class MainActivity extends Activity {
         cm.setAcceptCookie(true);
         if (Build.VERSION.SDK_INT >= 21) cm.setAcceptThirdPartyCookies(web, true);
         s.setUserAgentString(s.getUserAgentString().replace("; wv", "").replace(" Version/4.0", ""));
+        baseUA = s.getUserAgentString();
 
         // don't announce the app's package in every request (some video hosts refuse in-app browsers)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST))
@@ -126,6 +127,11 @@ public class MainActivity extends Activity {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, CSS_JS, Collections.singleton("*"));
             String st = fullMode() ? asset("stealth.js") : null;   // box: only after the user says so (see fullMode)
+            // YouTube's ad blocking alone, on youtube.com only (the box gets it without the rest)
+            if (!fullMode()) {
+                String yt = asset("yt.js");
+                if (yt != null) WebViewCompat.addDocumentStartJavaScript(web, yt, new java.util.HashSet<>(java.util.Arrays.asList("https://www.youtube.com", "https://m.youtube.com", "https://youtube.com", "https://*.youtube.com")));
+            }
             if (st != null) WebViewCompat.addDocumentStartJavaScript(web, st, Collections.singleton("*"));
             // phone: pages that forbid zooming are allowed to zoom (two-finger pinch)
             if (!isTv) WebViewCompat.addDocumentStartJavaScript(web,
@@ -199,6 +205,8 @@ public class MainActivity extends Activity {
                 // frames built from about:/data:/blob: (many players) must load; only app links (intent://, market://) on the page itself stop
                 if (sc == null || sc.equals("about") || sc.equals("data") || sc.equals("blob") || sc.equals("javascript")) return false;
                 if (!"http".equals(sc) && !"https".equals(sc)) { logLine("⛔ رابط تطبيق: " + r.getUrl()); return r.isForMainFrame() || r.hasGesture(); }
+                // box: YouTube opens in its TV interface (made for the remote, full-screen video)
+                if (r.isForMainFrame() && ytRoute(v, r.getUrl().toString())) return true;
                 // a page that jumps to a listed ad page (a popup-ad listed in the filter lists)
                 if (pageHost != null && r.isForMainFrame() && adblock.shouldBlock(r.getUrl().toString(), pageHost, FilterEngine.POPUP)) {
                     blockedToast();
@@ -538,6 +546,18 @@ public class MainActivity extends Activity {
     @Override
     public boolean dispatchKeyEvent(KeyEvent e) {
         int code = e.getKeyCode();
+        if (ytTvPage() && customView == null && code != KeyEvent.KEYCODE_MENU && code != KeyEvent.KEYCODE_GUIDE) {
+            cursor.setVisibility(View.GONE);
+            if (code == KeyEvent.KEYCODE_BACK) {
+                if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() >= 6 && !backLong) {
+                    backLong = true; web.loadUrl(HOME); Toast.makeText(this, "🏠 الرئيسية", Toast.LENGTH_SHORT).show();
+                } else if (e.getAction() == KeyEvent.ACTION_UP) { if (!backLong) ytKey(KeyEvent.KEYCODE_ESCAPE); backLong = false; }
+                else if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) backLong = false;
+                return true;
+            }
+            if (!web.hasFocus()) web.requestFocus();
+            return web.dispatchKeyEvent(e);
+        }
         if (code == KeyEvent.KEYCODE_BACK) {   // short = back, held = home
             if (e.getAction() == KeyEvent.ACTION_DOWN) {
                 if (e.getRepeatCount() == 0) backLong = false;
@@ -1222,7 +1242,8 @@ public class MainActivity extends Activity {
             "🧹 شيل الإعلان اللي تحت الماوس",
             "🔬 افحص اللي تحت الماوس (صوّرهولي)",
             autoFs() ? "⛶ ملء الشاشة أول ما أدوس على المشغّل: شغال (اقفله)" : "⛶ ملء الشاشة أول ما أدوس على المشغّل: مقفول (شغّله)",
-            !isTv ? "ℹ أدوات المواقع شغالة على الموبايل" : fullMode() ? "🧪 أدوات المواقع الجديدة على البوكس: شغالة (اقفلها)" : "🧪 أدوات المواقع الجديدة على البوكس: مقفولة (شغّلها)"
+            !isTv ? "ℹ أدوات المواقع شغالة على الموبايل" : fullMode() ? "🧪 أدوات المواقع الجديدة على البوكس: شغالة (اقفلها)" : "🧪 أدوات المواقع الجديدة على البوكس: مقفولة (شغّلها)",
+            !isTv ? "ℹ يوتيوب على الموبايل بشكله العادي" : ytTv() ? "📺 يوتيوب بواجهة التليفزيون: شغالة (رجّع الشكل العادي)" : "📺 يوتيوب بواجهة التليفزيون: مقفولة (شغّلها)"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -1294,6 +1315,15 @@ public class MainActivity extends Activity {
                     case 12: showLog(); break;
                     case 13: zapAtCursor(); break;
                     case 14: probeAtCursor(); break;
+                    case 17: {
+                        if (!isTv) break;
+                        boolean on = !ytTv();
+                        getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("yttv", on).apply();
+                        if (!on && baseUA != null) web.getSettings().setUserAgentString(baseUA);
+                        Toast.makeText(this, on ? "📺 يوتيوب هيفتح بواجهة التليفزيون" : "يوتيوب هيفتح بشكله العادي", Toast.LENGTH_SHORT).show();
+                        if (pageHost != null && isYt(pageHost)) web.loadUrl(on ? "https://www.youtube.com/tv#/" : "https://m.youtube.com/");
+                        break;
+                    }
                     case 16: {
                         if (!isTv) break;
                         boolean on = !fullMode();
@@ -1324,12 +1354,49 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onSaveInstanceState(Bundle o) { super.onSaveInstanceState(o); web.saveState(o); }
+    // ---- box: YouTube's TV interface (youtube.com/tv) — the remote drives it directly, like the YouTube app
+    private String baseUA;
+    private static final String TV_UA = "Mozilla/5.0 (Linux; Android 9; SMART-TV) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Cobalt/25.lts.30.1034943-gold (unlike Gecko) v8/8.8.278.17-jit gles Starboard/15, SystemIntegratorName_TV_2025/FirmwareVersion (Brand, Model, Wired)";
+    private boolean ytTv() { return isTv && getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("yttv", true); }
+    private static boolean isYt(String host) { return host != null && (host.equals("youtube.com") || host.endsWith(".youtube.com") || host.equals("youtu.be")); }
+    private boolean ytTvPage() { String u = web.getUrl(); return ytTv() && u != null && isYt(Uri.parse(u).getHost()) && Uri.parse(u).getPath() != null && Uri.parse(u).getPath().startsWith("/tv"); }
+
+    /** true = handled (we load the TV interface instead) */
+    private boolean ytRoute(WebView v, String url) {
+        if (!isTv) return false;
+        String host = Uri.parse(url).getHost();
+        WebSettings st = v.getSettings();
+        if (ytTv() && isYt(host)) {
+            if (!TV_UA.equals(st.getUserAgentString())) st.setUserAgentString(TV_UA);
+            String path = Uri.parse(url).getPath();
+            if (path == null || !path.startsWith("/tv")) {
+                String vid = Uri.parse(url).getQueryParameter("v");
+                v.loadUrl("https://www.youtube.com/tv" + (vid != null ? "#/watch?v=" + vid : "#/"));
+                return true;
+            }
+            return false;
+        }
+        if (baseUA != null && !baseUA.equals(st.getUserAgentString())) st.setUserAgentString(baseUA);
+        return false;
+    }
+
+    private void ytKey(int code) {
+        long t = SystemClock.uptimeMillis();
+        web.dispatchKeyEvent(new KeyEvent(t, t, KeyEvent.ACTION_DOWN, code, 0));
+        web.dispatchKeyEvent(new KeyEvent(t, t + 40, KeyEvent.ACTION_UP, code, 0));
+    }
+
     // phone + YouTube: the video keeps playing with the phone locked or the app in the background
     private boolean ytBackground() { return !isTv && pageHost != null && (pageHost.endsWith("youtube.com") || pageHost.equals("youtu.be")); }
 
     @Override protected void onPause() {
         super.onPause();
-        if (ytBackground()) PlayService.start(this);   // keep playing: the page is not paused
+        if (ytBackground()) {
+            PlayService.start(this);   // keep playing: the page is not paused
+            // if the page paused itself when the screen went off, play it again
+            for (int t : new int[]{400, 1200, 2500, 5000, 9000})
+                web.postDelayed(() -> web.evaluateJavascript("document.querySelectorAll('video').forEach(function(v){if(v.paused&&v.currentTime>0&&!v.ended){var p=v.play();if(p&&p.catch)p.catch(function(){})}})", null), t);
+        }
         else web.onPause();
     }
     @Override protected void onResume() {
