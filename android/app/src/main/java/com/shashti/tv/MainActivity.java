@@ -403,8 +403,9 @@ public class MainActivity extends Activity {
         zoomMinus.setOnClickListener(v -> zoomText(-10));
         zoomPlus.setOnClickListener(v -> zoomText(10));
         zoomBar.setAlpha(0.85f);
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.LEFT);
-        lp.setMargins((int) (10 * d), (int) (8 * d), 0, 0);
+        // bottom, next to the ⋮ button: the top is where sites keep their own search/menu buttons
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, android.view.Gravity.BOTTOM | android.view.Gravity.LEFT);
+        lp.setMargins((int) (70 * d), 0, 0, (int) (26 * d));
         zoomBar.setVisibility(View.GONE);
         root.addView(zoomBar, lp);
     }
