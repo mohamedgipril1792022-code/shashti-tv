@@ -127,6 +127,9 @@ public class MainActivity extends Activity {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, CSS_JS, Collections.singleton("*"));
             String st = fullMode() ? asset("stealth.js") : null;   // box: only after the user says so (see fullMode)
+            // continue watching (progress + resume): every page, box and phone
+            String wt = asset("watch.js");
+            if (wt != null) WebViewCompat.addDocumentStartJavaScript(web, wt, Collections.singleton("*"));
             // YouTube's ad blocking alone, on youtube.com only (the box gets it without the rest)
             if (!fullMode()) {
                 String yt = asset("yt.js");
@@ -162,6 +165,11 @@ public class MainActivity extends Activity {
                 hd.put("Cache-Control", "no-store");
                 rep.setResponseHeaders(hd);
                 return rep;
+            }
+            // pages that change without loading (YouTube, other one-page sites): keep the address/title current
+            @Override
+            public void doUpdateVisitedHistory(WebView v, String u, boolean reload) {
+                if (u != null && pageHost != null && !u.startsWith("https://appassets.androidplatform.net/")) { pageUrl = u; if (v.getTitle() != null) pageTitle = v.getTitle(); }
             }
             @Override
             public void onReceivedError(WebView v, WebResourceRequest r, android.webkit.WebResourceError e) {
@@ -217,6 +225,8 @@ public class MainActivity extends Activity {
         });
 
         web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onReceivedTitle(WebView v, String t) { if (pageHost != null && t != null) pageTitle = t; }
             @Override
             public boolean onConsoleMessage(android.webkit.ConsoleMessage m) {
                 if (m.messageLevel() == android.webkit.ConsoleMessage.MessageLevel.ERROR)

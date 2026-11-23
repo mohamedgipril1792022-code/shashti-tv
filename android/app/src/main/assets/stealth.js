@@ -130,27 +130,8 @@
     if (screen.lockOrientation) screen.lockOrientation = function () { return true; };
   } catch (e) { }
 
-  // ------------------------------------------------------------------ continue watching: progress + resume
-  (function () {
-    var last = 0, resumed = [];
-    document.addEventListener('timeupdate', function (ev) {
-      var v = ev.target;
-      if (!v || v.tagName !== 'VIDEO' || !(v.duration > 60) || !isFinite(v.duration)) return;
-      var now = Date.now();
-      if (now - last < 5000 && v.currentTime / v.duration < 0.97) return;
-      last = now;
-      try { if (A.progress) A.progress(v.currentTime, v.duration); } catch (e) { }
-    }, true);
-    document.addEventListener('playing', function (ev) {
-      var v = ev.target;
-      if (!v || v.tagName !== 'VIDEO' || resumed.indexOf(v) >= 0) return;
-      resumed.push(v);
-      if (!(v.duration > 60)) return;
-      var t = 0;
-      try { t = A.resumeAt ? +A.resumeAt() : 0; } catch (e) { }
-      if (t > 30 && v.currentTime < 5 && t < v.duration * 0.97) { try { v.currentTime = t - 3; } catch (e) { } }
-    }, true);
-  })();
+  // continue watching lives in watch.js (runs on every page, box and phone)
+
 
   // ------------------------------------------------------------------ Back closes an ad laid over the page/player
   // never touches a video or the player itself; prefers the ad's own close (×) button
