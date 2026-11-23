@@ -693,6 +693,8 @@ public class MainActivity extends Activity {
     private void startGlide(int code) { glideKey = code; root.removeCallbacks(glide); root.postOnAnimation(glide); }
     private void stopGlide() { glideKey = 0; root.removeCallbacks(glide); }
 
+    private boolean autoFs() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autofs", true); }
+
     private boolean snapMode() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("snap", true); }
 
     private static final String COLLECT_JS = "(function(){var vw=innerWidth,vh=innerHeight,sx=scrollX,sy=scrollY,out=[],seen=[];var sel='a[href],button,input:not([type=hidden]),select,textarea,summary,video,iframe,[role=button],[role=link],[role=tab],[role=menuitem],[onclick],[tabindex]:not([tabindex=\"-1\"]),label[for]';function ok(e,r){if(r.width<8||r.height<8)return false;if(r.bottom+sy<0)return false;var st=getComputedStyle(e);return st.visibility!=='hidden'&&st.display!=='none'&&parseFloat(st.opacity)>0.1}function add(e){var r=e.getBoundingClientRect();if(!ok(e,r))return; for(var i=0;i<seen.length;i++){var p=seen[i];if(p.contains(e)||e.contains(p)){var q=p.getBoundingClientRect();if(Math.abs(q.width-r.width)<12&&Math.abs(q.height-r.height)<12)return}} seen.push(e);out.push([Math.round(r.left+sx),Math.round(r.top+sy),Math.round(r.width),Math.round(r.height)])}var a=document.querySelectorAll(sel);for(var i=0;i<a.length&&out.length<1200;i++)add(a[i]);var b=document.querySelectorAll('div,span,li,img,article,section,figure,h2,h3');for(var j=0;j<b.length&&j<1500&&out.length<1500;j++){var e=b[j];if(e.closest(sel))continue;try{if(getComputedStyle(e).cursor==='pointer')add(e)}catch(x){}}return JSON.stringify({sx:sx,sy:sy,vw:vw,vh:vh,dh:document.documentElement.scrollHeight,it:out})})()";
@@ -838,6 +840,9 @@ public class MainActivity extends Activity {
             if (v != null && v.contains("P")) {
                 if (customView == null && now - lastPlayerTap < 500) { lastPlayerTap = 0; fullscreenAtCursor(); return; } // double OK on the player
                 lastPlayerTap = now;
+                // the first press on the player goes full screen right away: the ad that shows in the seconds
+                // before the player appears only shows outside full screen
+                if (customView == null && !stretched && autoFs()) web.postDelayed(this::fullscreenAtCursor, 120);
             }
             long t = SystemClock.uptimeMillis();
             MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
@@ -970,7 +975,8 @@ public class MainActivity extends Activity {
             "🔍 المشغّل مش شغال؟ شوف اللي اتمنع في الصفحة دي",
             "🧾 سجل أخطاء الصفحة",
             "🧹 شيل الإعلان اللي تحت الماوس",
-            "🔬 افحص اللي تحت الماوس (صوّرهولي)"
+            "🔬 افحص اللي تحت الماوس (صوّرهولي)",
+            autoFs() ? "⛶ ملء الشاشة أول ما أدوس على المشغّل: شغال (اقفله)" : "⛶ ملء الشاشة أول ما أدوس على المشغّل: مقفول (شغّله)"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -1026,6 +1032,12 @@ public class MainActivity extends Activity {
                     case 12: showLog(); break;
                     case 13: zapAtCursor(); break;
                     case 14: probeAtCursor(); break;
+                    case 15: {
+                        boolean on = !autoFs();
+                        getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("autofs", on).apply();
+                        Toast.makeText(this, on ? "⛶ هيملا الشاشة أول ما تدوس على المشغّل" : "ملء الشاشة التلقائي اتقفل", Toast.LENGTH_SHORT).show();
+                        break;
+                    }
                 }
             })
             .show();
