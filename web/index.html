@@ -76,6 +76,14 @@ footer{text-align:center;margin-top:30px}
 .fbtn.del{background:transparent;color:#ff6b6b;border-color:#6b2a2a}
 .hint{color:var(--mut);font-size:13px;margin-top:4px}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;color:#000;border-radius:14px;padding:8px 16px;font-weight:700;display:none;z-index:30}
+/* phone (the app on a phone): three tiles a row, finger-sized */
+.phone .grid{grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:10px}
+.phone .row .tile{flex-basis:118px}
+.phone .row.wide .tile{flex-basis:170px}
+.phone .tile{border-radius:14px}
+.phone .tile .name{font-size:17px;padding:6px}
+.phone .tile .sub{font-size:11px}
+.phone .fav{width:30px;height:30px;font-size:16px;top:5px;right:5px}
 @media (max-width:520px){.hbtn .t{display:none}.hbtn{padding:8px 11px}}
 </style>
 </head>
@@ -103,7 +111,8 @@ footer{text-align:center;margin-top:30px}
 <div id="toast"></div>
 
 <script>
-const VERSION={n:'٩٧',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ٥:٥٠ ص'};
+try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
+const VERSION={n:'٩٨',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ٦:١٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;

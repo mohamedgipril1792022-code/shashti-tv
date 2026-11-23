@@ -77,6 +77,10 @@ public class MainActivity extends Activity {
         super.onCreate(b);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         freshStartOnce();
+        android.app.UiModeManager um = (android.app.UiModeManager) getSystemService(UI_MODE_SERVICE);
+        isTv = (um != null && um.getCurrentModeType() == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)
+                || getPackageManager().hasSystemFeature("android.software.leanback")
+                || !getPackageManager().hasSystemFeature("android.hardware.touchscreen");
         root = new FrameLayout(this);
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
@@ -84,6 +88,7 @@ public class MainActivity extends Activity {
         cursor = new CursorView(this);
         cursor.setVisibility(View.GONE);
         root.addView(cursor, new FrameLayout.LayoutParams(-1, -1));
+        if (!isTv) buildPhoneMenuButton();
         setContentView(root);
 
         assets = new WebViewAssetLoader.Builder()
@@ -159,12 +164,14 @@ public class MainActivity extends Activity {
                 boxes = new float[0][];
                 adblock.clearLog();
                 if (stretched) setStretched(false);
+                updatePhoneButton();
                 synchronized (pageLog) { pageLog.clear(); }
             }
             @Override
             public void onPageFinished(WebView v, String u) {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && pageHost != null) { v.evaluateJavascript(CSS_JS, null); ensureStealth(null); }
                 v.postDelayed(MainActivity.this::refreshBoxes, 600);
+                updatePhoneButton();
                 if (pendingAdd != null && atHome()) {
                     final String js = pendingAdd;
                     pendingAdd = null;
@@ -201,8 +208,13 @@ public class MainActivity extends Activity {
                 web.setVisibility(View.GONE);
                 view.requestFocus();
                 // the mouse stays on top of the full-screen player and jumps between its buttons
-                cursor.setVisibility(View.VISIBLE);
-                cursor.bringToFront();
+                if (isTv) { cursor.setVisibility(View.VISIBLE); cursor.bringToFront(); }
+                else {
+                    // phone: turn to landscape and hide the bars while the video is full screen
+                    setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+                    getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
+                }
+                updatePhoneButton();
                 if (mediaBar != null) mediaBar.bringToFront();
                 setStretched(true);
                 autoCloseAds();
@@ -315,6 +327,33 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------------ on-screen buttons
 
+    /** Phone or TV: the phone gets touch (no pointer), a ⋮ button for the site menu, and turns for full-screen video. */
+    private boolean isTv = true;
+    private android.widget.TextView phoneMenu;
+
+    private void buildPhoneMenuButton() {
+        float d = getResources().getDisplayMetrics().density;
+        phoneMenu = new android.widget.TextView(this);
+        phoneMenu.setText("⋮");
+        phoneMenu.setTextColor(0xFFFFFFFF);
+        phoneMenu.setTextSize(24);
+        phoneMenu.setGravity(android.view.Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+        bg.setColor(0xB3000000);
+        bg.setStroke((int) (1.5f * d), 0x66FFFFFF);
+        phoneMenu.setBackground(bg);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams((int) (46 * d), (int) (46 * d), android.view.Gravity.BOTTOM | android.view.Gravity.LEFT);
+        lp.setMargins((int) (14 * d), 0, 0, (int) (18 * d));
+        phoneMenu.setOnClickListener(v -> showSiteMenu());
+        phoneMenu.setVisibility(View.GONE);
+        root.addView(phoneMenu, lp);
+    }
+
+    private void updatePhoneButton() {
+        if (phoneMenu != null) phoneMenu.setVisibility(!atHome() && customView == null ? View.VISIBLE : View.GONE);
+    }
+
     private void buildNavButtons() {
         navBar = new android.widget.LinearLayout(this);
         navBar.setOrientation(android.widget.LinearLayout.VERTICAL);
@@ -363,6 +402,11 @@ public class MainActivity extends Activity {
         web.setVisibility(View.VISIBLE);
         if (customCallback != null) customCallback.onCustomViewHidden();
         customCallback = null;
+        if (!isTv) {
+            setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED);
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+        }
+        updatePhoneButton();
         web.evaluateJavascript("(function(){var f=window.__shFs;if(!f)return;f.el.setAttribute('style',f.st);(f.anc||[]).forEach(function(z){if(z[1]==null)z[0].removeAttribute('style');else z[0].setAttribute('style',z[1])});document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';window.__shFs=null})()", null);
         setStretched(false);
     }
@@ -403,7 +447,7 @@ public class MainActivity extends Activity {
             return true;
         }
         boolean pointer = !atHome();
-        cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        cursor.setVisibility(pointer && isTv ? View.VISIBLE : View.GONE);
         navBar.setVisibility(View.GONE);   // the side ⬅/🏠 buttons are off (Back and Menu do it)
         if (!pointer) return super.dispatchKeyEvent(e);
         switch (code) {
@@ -465,7 +509,7 @@ public class MainActivity extends Activity {
         if (on) { synchronized (fsBoxes) { fsBoxes.clear(); } root.postDelayed(fsBoxRefresher, 400); }
         if (!on) web.evaluateJavascript("window.__sajoFsClear&&__sajoFsClear()", null);
         boolean pointer = !atHome();
-        cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        cursor.setVisibility(pointer && isTv ? View.VISIBLE : View.GONE);
         navBar.setVisibility(View.GONE);   // the side ⬅/🏠 buttons are off (Back and Menu do it)
         if (!on) hideBar.run();
     }
@@ -1187,6 +1231,8 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void checkUpdate() { runOnUiThread(() -> Updater.check(MainActivity.this, true)); }
 
+        @JavascriptInterface
+        public boolean isPhone() { return !isTv; }
         @JavascriptInterface
         public String appVersion() { return String.valueOf(Updater.myCode(MainActivity.this)); }
 
