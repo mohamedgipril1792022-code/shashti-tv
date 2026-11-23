@@ -33,14 +33,14 @@
     });
     // 2) every later JSON the page reads (next videos, mobile site)
     var jp = JSON.parse;
-    JSON.parse = function () { var r = jp.apply(this, arguments); try { if (r && typeof r === 'object' && (r.adPlacements || r.playerAds || r.adSlots || r.playerResponse)) strip(r, 0); } catch (e) { } return r; };
+    JSON.parse = function (txt) { var r = jp.apply(this, arguments); try { if (r && typeof r === 'object' && typeof txt === 'string' && txt.length > 2000 && (r.adPlacements || r.playerAds || r.adSlots || r.playerResponse)) strip(r, 0); } catch (e) { } return r; };
     // 3) the player API answers (fetch / XHR to /youtubei/v1/player)
     if (window.fetch) {
       var of = window.fetch;
       window.fetch = function (input, init) {
         var url = typeof input === 'string' ? input : (input && input.url) || '';
         var p = of.apply(this, arguments);
-        if (!/\/youtubei\/v1\/(player|next)/.test(url)) return p;
+        if (!/\/youtubei\/v1\/player/.test(url)) return p;
         return p.then(function (res) {
           return res.clone().text().then(function (t) {
             if (!/adPlacements|playerAds|adSlots/.test(t)) return res;
@@ -53,7 +53,7 @@
       };
     }
     var xo = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function (m, u) { this.__sajoYt = /\/youtubei\/v1\/(player|next)/.test(String(u)); return xo.apply(this, arguments); };
+    XMLHttpRequest.prototype.open = function (m, u) { this.__sajoYt = /\/youtubei\/v1\/player/.test(String(u)); return xo.apply(this, arguments); };
     ['responseText', 'response'].forEach(function (k) {
       var d = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, k);
       if (!d || !d.get) return;
@@ -62,11 +62,14 @@
         get: function () {
           var v = d.get.call(this);
           if (!this.__sajoYt || this.readyState !== 4) return v;
+          if (this.__sajoOut !== undefined && this.__sajoIn === v) return this.__sajoOut;   // cleaned once, not at every read
+          var out = v;
           try {
-            if (typeof v === 'string' && /adPlacements|playerAds|adSlots/.test(v)) return JSON.stringify(strip(jp(v), 0));
-            if (v && typeof v === 'object') return strip(v, 0);
+            if (typeof v === 'string' && /adPlacements|playerAds|adSlots/.test(v)) out = JSON.stringify(strip(jp(v), 0));
+            else if (v && typeof v === 'object') out = strip(v, 0);
           } catch (e) { }
-          return v;
+          this.__sajoIn = v; this.__sajoOut = out;
+          return out;
         }
       });
     });
