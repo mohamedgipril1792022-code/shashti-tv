@@ -60,6 +60,8 @@ public class MainActivity extends Activity {
     private android.widget.TextView backBtn, homeBtn;
     private android.widget.LinearLayout navBar;
     private volatile String pageHost = null;   // host of the page on screen (null on the launcher)
+    private volatile String pageUrl = null;    // its address (continue watching is kept per page)
+    private volatile String pageTitle = "";
     private boolean longPressed = false, backLong = false;
     private long lastPlayerTap = 0, pressStart = 0, lastToast = 0;
     private String pendingAdd = null;
@@ -171,6 +173,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView v, String u, android.graphics.Bitmap f) {
                 pageHost = (u == null || u.startsWith("https://appassets.androidplatform.net/")) ? null : Uri.parse(u).getHost();
+                pageUrl = pageHost == null ? null : u;
                 boxes = new float[0][];
                 adblock.clearLog();
                 if (stretched) setStretched(false);
@@ -181,7 +184,8 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView v, String u) {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && pageHost != null) { v.evaluateJavascript(CSS_JS, null); ensureStealth(null); }
-                if (isTv) v.postDelayed(MainActivity.this::refreshBoxes, 600);   // the remote's box map: TV only
+                if (isTv) v.postDelayed(MainActivity.this::refreshBoxes, 600);
+                if (pageHost != null) { pageUrl = u; pageTitle = v.getTitle() == null ? "" : v.getTitle(); }   // the remote's box map: TV only
                 updatePhoneButton();
                 if (pendingAdd != null && atHome()) {
                     final String js = pendingAdd;
@@ -556,6 +560,40 @@ public class MainActivity extends Activity {
     private static final String BACK_JS = "(function(){if(window.__sajoCloseAd){if(__sajoCloseAd())return 'ad';var n=0;for(var i=0;i<frames.length;i++){try{frames[i].postMessage({sajoCloseAd:1},'*');n++}catch(e){}}if(n)return 'ask';var f=window.__shFs;if(f){f.el.setAttribute('style',f.st);(f.anc||[]).forEach(function(z){if(z[1]==null)z[0].removeAttribute('style');else z[0].setAttribute('style',z[1])});if(document.body)document.body.style.overflow='';window.__shFs=null;document.documentElement.style.overflow='';return 'fs'}return ''}var vw=innerWidth,vh=innerHeight,va=vw*vh,fs=document.fullscreenElement||document.webkitFullscreenElement;function isPlayer(e){if(e.tagName==='VIDEO'||e.querySelector('video'))return true;var fr=e.tagName==='IFRAME'?[e]:e.querySelectorAll('iframe');for(var i=0;i<fr.length;i++){var x=fr[i];if(x.hasAttribute('allowfullscreen')||x.hasAttribute('webkitallowfullscreen')||/fullscreen/i.test(x.getAttribute('allow')||'')||/embed|player|video|stream/i.test(x.src||''))return true}return false}function cands(e){var l=[];for(var n=e;n&&n!==document.body&&n!==document.documentElement;n=n.parentElement){var st=getComputedStyle(n),p=st.position;if(p!=='fixed'&&!(p==='absolute'&&(parseInt(st.zIndex)||0)>=1000))continue;var r=n.getBoundingClientRect();var a=Math.max(0,Math.min(r.right,vw)-Math.max(r.left,0))*Math.max(0,Math.min(r.bottom,vh)-Math.max(r.top,0));if(a<va*0.04)continue;if(r.top<=4&&r.height<vh*0.2&&r.width>vw*0.8)continue;l.unshift(n)}return l}var pts=[[.5,.5],[.3,.45],[.7,.45],[.5,.75],[.3,.7],[.7,.7],[.5,.92],[.5,.3]];for(var i=0;i<pts.length;i++){var x=vw*pts[i][0],y=vh*pts[i][1];var st=document.elementsFromPoint?document.elementsFromPoint(x,y):[document.elementFromPoint(x,y)];var top=st[0];if(!top)continue;var l=cands(top);for(var j=0;j<l.length;j++){var c=l[j];if(fs&&(c.contains(fs)||fs.contains(c)))continue;if(isPlayer(c))continue;c.remove();document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';return 'ad'}}return ''})()";
 
     private volatile boolean adClosedInFrame = false;
+
+    // best icon the page offers (apple-touch-icon / largest icon), else a 256px favicon by Google
+    private static final String ICON_JS = "(function(){var best='',bs=-1,ls=document.querySelectorAll('link[rel~=icon],link[rel*=apple-touch-icon],link[rel=\"shortcut icon\"]');" +
+        "for(var i=0;i<ls.length;i++){var l=ls[i],h=l.href;if(!h)continue;var sz=16,m=/(\\d+)x(\\d+)/.exec(l.getAttribute('sizes')||'');if(m)sz=+m[1];if(/apple-touch/i.test(l.rel))sz=Math.max(sz,180);if(/\\.svg/i.test(h))sz=Math.max(sz,150);if(sz>bs){bs=sz;best=h}}" +
+        "if(bs<96)best='https://www.google.com/s2/favicons?domain='+location.hostname+'&sz=256';return best})()";
+
+    // ---- continue watching: where each episode page was left, and its next episode
+    private static final String NEXT_JS = "(function(){var re=/(الحلق[هة]\\s*(ال)?(تالي[هة]|القادم[هة])|التالي[هة]?|next\\s*(episode|ep)?|الحلقة\\s*الجاية)/i,a=document.querySelectorAll('a[href]'),here=location.href.split('#')[0];" +
+        "for(var i=0;i<a.length;i++){var t=(a[i].innerText||a[i].title||a[i].getAttribute('aria-label')||'').trim();if(t.length>40||!re.test(t))continue;var h=a[i].href.split('#')[0];if(h&&h!==here&&/^https?:/.test(h))return h}return ''})()";
+
+    private org.json.JSONObject watchAll() {
+        try { return new org.json.JSONObject(getSharedPreferences("adblock", MODE_PRIVATE).getString("watch", "{}")); }
+        catch (Exception e) { return new org.json.JSONObject(); }
+    }
+
+    private synchronized void saveWatch(String url, double t, double d, String title, String next) {
+        try {
+            org.json.JSONObject all = watchAll();
+            org.json.JSONObject o = all.optJSONObject(url);
+            if (o == null) o = new org.json.JSONObject();
+            o.put("t", t); o.put("d", d); o.put("at", System.currentTimeMillis());
+            if (title != null && !title.isEmpty()) o.put("title", title);
+            if (next != null && !next.isEmpty()) o.put("next", next);
+            all.put(url, o);
+            // keep the latest 80 pages
+            if (all.length() > 80) {
+                String oldest = null; long oa = Long.MAX_VALUE;
+                java.util.Iterator<String> it = all.keys();
+                while (it.hasNext()) { String k = it.next(); long a = all.optJSONObject(k) == null ? 0 : all.optJSONObject(k).optLong("at"); if (a < oa) { oa = a; oldest = k; } }
+                if (oldest != null) all.remove(oldest);
+            }
+            getSharedPreferences("adblock", MODE_PRIVATE).edit().putString("watch", all.toString()).apply();
+        } catch (Exception ignored) { }
+    }
 
     private static final String UNSTRETCH_JS = "(function(){var f=window.__shFs;if(!f)return '';f.el.setAttribute('style',f.st);(f.anc||[]).forEach(function(z){if(z[1]==null)z[0].removeAttribute('style');else z[0].setAttribute('style',z[1])});document.documentElement.style.overflow='';if(document.body)document.body.style.overflow='';window.__shFs=null;return 'fs'})()";
     private static final String ASK_FRAMES_JS = "(function(){var c=window.__sajoCloseAd&&__sajoCloseAd();for(var i=0;i<frames.length;i++){try{frames[i].postMessage({sajoCloseAd:1},'*')}catch(e){}}return c?'ad':''})()";
@@ -1150,8 +1188,13 @@ public class MainActivity extends Activity {
                         new android.app.AlertDialog.Builder(this).setTitle("➕ تضيف إيه لمواقعي؟")
                             .setItems(new String[]{"🏠 الموقع كله (صفحته الرئيسية)", "📌 الصفحة دي بالظبط (القسم/التبويب ده)"}, (d2, w2) -> {
                                 String target = w2 == 0 ? root : url;
-                                pendingAdd = "quickAdd('site'," + org.json.JSONObject.quote(target) + "," + org.json.JSONObject.quote(title) + ")";
-                                web.loadUrl(HOME);
+                                // the site's own icon goes on the tile by itself
+                                web.evaluateJavascript(ICON_JS, ic -> {
+                                    String icon = "";
+                                    try { icon = ic == null || ic.equals("null") ? "" : (String) new org.json.JSONTokener(ic).nextValue(); } catch (Exception ignored) { }
+                                    pendingAdd = "quickAdd('site'," + org.json.JSONObject.quote(target) + "," + org.json.JSONObject.quote(title) + "," + org.json.JSONObject.quote(icon) + ")";
+                                    web.loadUrl(HOME);
+                                });
                             }).show();
                         break;
                     }
@@ -1232,6 +1275,33 @@ public class MainActivity extends Activity {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
+        /** a video on the page is at t of d seconds (sent every few seconds while it plays) */
+        @JavascriptInterface
+        public void progress(double t, double d) {
+            final String url = pageUrl, title = pageTitle;
+            if (url == null || !(d > 60)) return;
+            saveWatch(url, t, d, title, null);
+            if (t / d >= 0.97) runOnUiThread(() -> web.evaluateJavascript(NEXT_JS, v -> {
+                try { String n = v == null || v.equals("null") ? "" : (String) new org.json.JSONTokener(v).nextValue(); if (!n.isEmpty()) saveWatch(url, t, d, title, n); } catch (Exception ignored) { }
+            }));
+        }
+        /** where to resume this page's video (0 = from the start) */
+        @JavascriptInterface
+        public double resumeAt() {
+            String url = pageUrl;
+            if (url == null) return 0;
+            org.json.JSONObject o = watchAll().optJSONObject(url);
+            if (o == null) return 0;
+            double t = o.optDouble("t", 0), d = o.optDouble("d", 0);
+            if (t > 30 && d > 0 && t / d < 0.97) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this, "⏯ كمّلنا من " + hms(t), Toast.LENGTH_SHORT).show());
+                return t;
+            }
+            return 0;
+        }
+        /** for the launcher: every page's progress */
+        @JavascriptInterface
+        public String watchList() { return watchAll().toString(); }
         @JavascriptInterface
         public void fsPressed() { fsPressed = true; }
         @JavascriptInterface

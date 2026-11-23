@@ -46,6 +46,7 @@ h2 small{font-size:.55em;color:var(--mut);font-weight:400}
 .tile .bg{position:absolute;inset:0;background-size:cover;background-position:center}
 .tile .shade{position:absolute;inset:0;background:linear-gradient(transparent 30%,rgba(0,0,0,.55))}
 .tile .name{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-weight:900;font-size:clamp(22px,2.6vw,44px);line-height:1.15;text-shadow:0 3px 10px rgba(0,0,0,.85),0 0 2px #000;word-break:break-word}
+.tile .pbar{position:absolute;left:0;right:0;bottom:0;height:5px;background:rgba(255,255,255,.25)}.tile .pbar i{display:block;height:100%;background:var(--red)}
 .tile .sub{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;background:rgba(0,0,0,.65);font-size:clamp(12px,1.2vw,20px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile .ago{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);border-radius:10px;padding:1px 8px;font-size:clamp(11px,1vw,17px)}
 .tile:focus-visible,.tile:hover{transform:scale(1.05);box-shadow:0 0 0 4px var(--red),0 10px 30px rgba(0,0,0,.6)}
@@ -112,7 +113,7 @@ footer{text-align:center;margin-top:30px}
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٠٣',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ٧:٣٥ ص'};
+const VERSION={n:'١٠٤',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ٨:٠٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -219,16 +220,45 @@ function render(){
   });
 
   const cr=$('#contRow');cr.innerHTML='';
+  syncWatch();
+  const W=watchMap();
   const cs=[...items.values()].filter(o=>o.kind==='cont'&&qMatch(o.title,o.note,o.url)).sort((a,b)=>b.lastAt-a.lastAt);
   if(!cs.length&&qv)cr.innerHTML=noRes;else if(!cs.length)cr.innerHTML='<div class="empty">وانت بتتفرج، دوس «▶ تكملة» واحفظ رابط الحلقة والدقيقة اللي وقفت عندها.</div>';
   cs.forEach(c=>{
     const s=siteById(c.siteId);
     const icon=c.icon||(s&&s.icon)||'';
-    const t=tileEl({name:c.title,url:c.url,icon,sub:c.note||(s?s.name:hostOf(c.url)),agoT:c.lastAt,menu:()=>tileMenu('cont',c)});
+    const w=W[c.url];let sub=c.note||(s?s.name:hostOf(c.url)),pct=0;
+    if(w&&w.d>0){pct=Math.min(1,w.t/w.d);sub=pct>=0.97?'✓ خلصتها':'⏱ '+fmtT(w.t)+' من '+fmtT(w.d)}
+    const t=tileEl({name:c.title,url:c.url,icon,sub,agoT:c.lastAt,menu:()=>tileMenu('cont',c)});
+    if(pct>0&&pct<0.97){const b=document.createElement('div');b.className='pbar';b.innerHTML='<i style="width:'+Math.round(pct*100)+'%"></i>';t.appendChild(b)}
     t.onclick=e=>{if(editMode){e.preventDefault();openCont(c)}else{put(Object.assign({},c,{lastAt:Date.now()}));if(c.siteId&&siteById(c.siteId))visit(c.siteId,true)}};
     cr.appendChild(t);
   });
 }
+/* ---------- continue watching, kept by the app: how far each episode got, and its next episode ---------- */
+function watchMap(){try{return window.Android&&Android.watchList?JSON.parse(Android.watchList()||'{}'):{}}catch(e){return {}}}
+function fmtT(t){t=Math.max(0,Math.floor(t));const h=Math.floor(t/3600),m=Math.floor(t/60)%60,x=t%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
+function dismissed(){try{return JSON.parse(localStorage.getItem('sajo-dismiss')||'[]')}catch(e){return []}}
+function dismiss(url){try{const d=dismissed();if(d.indexOf(url)<0){d.push(url);localStorage.setItem('sajo-dismiss',JSON.stringify(d.slice(-200)))}}catch(e){}}
+function nextTitle(t){const m=String(t||'').match(/^(.*?)(\d+)(\D*)$/);return m?m[1]+(+m[2]+1)+m[3]:(t||'')+' — الحلقة التالية'}
+let syncing=false;
+function syncWatch(){
+  if(syncing)return;const W=watchMap(),keys=Object.keys(W);if(!keys.length)return;
+  const conts=[...items.values()].filter(o=>o.kind==='cont'),urls=new Set(conts.map(c=>c.url)),gone=dismissed(),ups=[];
+  // finished (97%) and its next episode is known: the tile moves on to it
+  conts.forEach(c=>{const w=W[c.url];if(w&&w.d>0&&w.t/w.d>=0.97&&w.next&&!urls.has(w.next)){urls.add(w.next);ups.push(Object.assign({},c,{url:w.next,title:nextTitle(c.title),note:'',lastAt:Date.now()}))}});
+  // watched more than 2 minutes: it joins continue watching by itself
+  keys.forEach(u=>{const w=W[u];if(!w||!(w.d>0)||w.t<120||urls.has(u)||gone.indexOf(u)>=0)return;
+    if(w.t/w.d>=0.97&&!w.next)return;
+    const nu=w.t/w.d>=0.97?w.next:u;if(urls.has(nu)||gone.indexOf(nu)>=0)return;urls.add(nu);
+    const title=String(w.title||'').split(/[|–—]/)[0].trim().slice(0,50)||hostOf(u);
+    const site=sites().find(x=>hostOf(x.url)===hostOf(u));
+    ups.push({id:'c-'+uid(),kind:'cont',title:nu===u?title:nextTitle(title),url:nu,note:'',siteId:site?site.id:'',icon:'',auto:true,lastAt:w.at||Date.now()})});
+  if(!ups.length)return;
+  syncing=true;ups.forEach(o=>items.set(o.id,o));saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}syncing=false;
+}
+function autoIcon(url){const h=hostOf(url);return h?'https://www.google.com/s2/favicons?domain='+h+'&sz=256':''}
+
 function visit(siteId,silent){
   const id='v-'+siteId;
   const o={id,kind:'visit',siteId,lastAt:Date.now()};
@@ -276,12 +306,12 @@ function wirePicker(state){
   const draw=()=>{const pv=$('#pv');pv.innerHTML='';const t=tileEl({name:state.nameFn(),icon:state.icon});t.removeAttribute('data-nav');t.removeAttribute('href');t.tabIndex=-1;pv.appendChild(t)};
   draw();
   $('#fi').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{state.icon=await fileToIcon(f);draw()}catch(_){toast('تعذّر قراءة الصورة')}};
-  $('#rmImg').onclick=()=>{state.icon='';draw()};
+  $('#rmImg').onclick=()=>{state.icon='';state.removed=true;draw()};
   return draw;
 }
 
-function openSite(s){
-  const isNew=!s;s=s||{};
+function openSite(s,pre){
+  const isNew=!s;s=s||{};pre=pre||{};
   openModal(`<h3>${isNew?'إضافة موقع':'تعديل الموقع'}</h3>
    <label>🔎 دوّر على الموقع في جوجل</label><input id="gsq" type="search" placeholder="اكتب اسم الموقع" data-nav>
    <a class="fbtn g" id="gs2" data-nav target="_blank" rel="noopener" href="https://www.google.com/">🔎 ابحث في جوجل</a>
@@ -291,7 +321,7 @@ function openSite(s){
    ${iconPicker()}
    <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn" id="mvb" data-nav>↔ رتّب</button><button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
   if(!isNew)$('#mvb').onclick=()=>{closeModal();startMove(s)};
-  const st={icon:s.icon||'',nameFn:()=>$('#fn').value.trim()||hostOf(normUrl($('#fu').value))||'موقع'};
+  const st={icon:s.icon||pre.icon||'',nameFn:()=>$('#fn').value.trim()||hostOf(normUrl($('#fu').value))||'موقع'};
   const draw=wirePicker(st);
   const gq=()=>$('#gsq').value.trim()||$('#fn').value.trim();
   const gl=()=>{const n=gq();$('#gs2').href=n?'https://www.google.com/search?q='+encodeURIComponent(n):'https://www.google.com/'};gl();
@@ -304,7 +334,9 @@ function openSite(s){
   $('#sv').onclick=()=>{
     const url=normUrl($('#fu').value);if(!url){toast('اكتب رابط صحيح');$('#fu').focus();return}
     const name=$('#fn').value.trim()||hostOf(url);
-    put({id:s.id||('s-'+uid()),kind:'site',name,url,icon:st.icon,createdAt:s.createdAt||Date.now()});
+    // no picture chosen: the site's own icon, by itself
+    const icon=st.icon||(isNew&&!st.removed?autoIcon(url):'');
+    put({id:s.id||('s-'+uid()),kind:'site',name,url,icon,createdAt:s.createdAt||Date.now()});
     closeModal();toast(isNew?'اتضاف الموقع':'اتحفظ التعديل');
   };
 }
@@ -451,7 +483,7 @@ function tileMenu(kind,s,v){
   }else{
     items.push(['▶ افتح',()=>{location.href=s.url}]);
     items.push(['✎ تعديل',()=>openCont(s)]);
-    items.push(['✓ خلصته — شيله',()=>del(s.id)]);
+    items.push(['✓ خلصته — شيله',()=>{dismiss(s.url);del(s.id)}]);
   }
   openModal(`<h3>${esc(s.name||s.title)}</h3>`+items.map((it,i)=>`<button class="fbtn" style="display:block;width:100%;margin-top:8px" data-nav data-i="${i}">${esc(it[0])}</button>`).join(''));
   $('#box').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const f=items[+b.dataset.i][1];closeModal();f()});
@@ -548,11 +580,11 @@ drawAb();
 if(AND&&Android.checkUpdate){$('#up').hidden=false;$('#up').onclick=()=>Android.checkUpdate()}
 // inside the TV app: open links in the same screen (new windows are unreliable in Android WebView)
 if(window.Android){document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[target]');if(a)a.removeAttribute('target')},true)}
-window.quickAdd=function(kind,url,title){
+window.quickAdd=function(kind,url,title,icon){
   title=(title||'').split(/[|\-–—]/)[0].trim().slice(0,40);
   if(kind==='site'){const nu=u=>String(u||'').replace(/^https?:\/\//,'').replace(/\/+$/,'').toLowerCase();const ex=sites().find(x=>nu(x.url)===nu(url));   // same page twice (a site and one of its pages can both be tiles)
    if(ex){toast('«'+ex.name+'» موجود عندك بالفعل');return}
-    openSite();$('#fu').value=url;$('#fn').value=title;$('#fn').dispatchEvent(new Event('input'));}
+    openSite(null,{icon:icon||''});$('#fu').value=url;$('#fn').value=title;$('#fn').dispatchEvent(new Event('input'));}
   else{openCont();$('#cu').value=url;$('#ct').value=title;$('#ct').dispatchEvent(new Event('input'));
     const s=sites().find(x=>hostOf(x.url)===hostOf(url));if(s)$('#cs').value=s.id}
   setTimeout(()=>{const f=kind==='site'?$('#fn'):$('#cn2');f&&f.focus()},80);

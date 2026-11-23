@@ -7,8 +7,8 @@ android {
         applicationId 'com.shashti.tv'
         minSdk 21
         targetSdk 34
-        versionCode 103
-        versionName '103'
+        versionCode 104
+        versionName '104'
     }
     signingConfigs {
         shashti {
