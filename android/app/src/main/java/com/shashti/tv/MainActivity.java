@@ -404,11 +404,13 @@ public class MainActivity extends Activity {
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_DPAD_RIGHT:
-                if (e.getAction() != KeyEvent.ACTION_DOWN) { hoverAtCursorNow(); return true; }
+                if (e.getAction() != KeyEvent.ACTION_DOWN) { stopGlide(); hoverAtCursorNow(); return true; }
                 lastKeyAt = SystemClock.uptimeMillis();
                 if (e.getRepeatCount() == 0) pressStart = SystemClock.uptimeMillis();
-                // one press jumps to the next box (link/button); holding the arrow = free mouse
-                if (e.getRepeatCount() == 0 && snapMode()) snapTo(code); else freeMove(code, e.getRepeatCount());
+                // one press jumps to the next box (link/button) or nudges the mouse; holding the arrow = the mouse
+                // glides smoothly and picks up speed (like a browser's mouse), frame by frame instead of jumping
+                if (e.getRepeatCount() == 0) { if (snapMode()) snapTo(code); else freeMove(code, 0); }
+                else if (glideKey != code) startGlide(code);
                 return true;
             case KeyEvent.KEYCODE_DPAD_CENTER: case KeyEvent.KEYCODE_ENTER: case KeyEvent.KEYCODE_NUMPAD_ENTER:
                 if (e.getAction() == KeyEvent.ACTION_DOWN) {
@@ -606,6 +608,31 @@ public class MainActivity extends Activity {
                 cursor.invalidate();
                 hoverAtCursor();
     }
+
+    private int glideKey = 0;
+    private final Runnable glide = new Runnable() {
+        @Override public void run() {
+            if (glideKey == 0) return;
+            if (SystemClock.uptimeMillis() - lastKeyAt > 300) { glideKey = 0; return; }   // key released somewhere we didn't see
+            float d = getResources().getDisplayMetrics().density;
+            int w = root.getWidth(), h = root.getHeight();
+            long held = SystemClock.uptimeMillis() - pressStart;
+            float v = d * Math.min(2.5f + held / 70f, 24f);          // per frame: slow and precise at first, then fast
+            if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
+            float margin = 30 * d;
+            switch (glideKey) {
+                case KeyEvent.KEYCODE_DPAD_UP: if (cursor.y - v < margin) scrollPage(-v * 2.5f); else cursor.y -= v; break;
+                case KeyEvent.KEYCODE_DPAD_DOWN: if (cursor.y + v > h - margin) scrollPage(v * 2.5f); else cursor.y += v; break;
+                case KeyEvent.KEYCODE_DPAD_LEFT: cursor.x = Math.max(0, cursor.x - v); break;
+                default: cursor.x = Math.min(w - 4 * d, cursor.x + v);
+            }
+            cursor.invalidate();
+            hoverAtCursor();
+            root.postOnAnimation(this);
+        }
+    };
+    private void startGlide(int code) { glideKey = code; root.removeCallbacks(glide); root.postOnAnimation(glide); }
+    private void stopGlide() { glideKey = 0; root.removeCallbacks(glide); }
 
     private boolean snapMode() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("snap", true); }
 
