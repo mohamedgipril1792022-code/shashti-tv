@@ -409,6 +409,8 @@ public class MainActivity extends Activity {
                 if (e.getRepeatCount() == 0) pressStart = SystemClock.uptimeMillis();
                 // one press jumps to the next box (link/button) or nudges the mouse; holding the arrow = the mouse
                 // glides smoothly and picks up speed (like a browser's mouse), frame by frame instead of jumping
+                // full screen: the mouse is locked and jumps from button to button of the player
+                if (stretched) { if (e.getRepeatCount() % 4 == 0) snapFs(code); return true; }
                 if (e.getRepeatCount() == 0) { if (snapMode()) snapTo(code); else freeMove(code, 0); }
                 else if (glideKey != code) startGlide(code);
                 return true;
@@ -450,6 +452,8 @@ public class MainActivity extends Activity {
 
     private void setStretched(boolean on) {
         stretched = on;
+        root.removeCallbacks(fsBoxRefresher);
+        if (on) { synchronized (fsBoxes) { fsBoxes.clear(); } root.postDelayed(fsBoxRefresher, 400); }
         if (!on) web.evaluateJavascript("window.__sajoFsClear&&__sajoFsClear()", null);
         boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
@@ -608,6 +612,45 @@ public class MainActivity extends Activity {
                 }
                 cursor.invalidate();
                 hoverAtCursor();
+    }
+
+    // ---- full screen: boxes of the player's buttons, reported by every frame in screen coordinates
+    private final java.util.List<float[]> fsBoxes = new java.util.ArrayList<>();
+    private final Runnable fsBoxRefresher = new Runnable() {
+        @Override public void run() {
+            if (!stretched) return;
+            web.evaluateJavascript("window.__sajoBoxes&&__sajoBoxes()", null);
+            root.postDelayed(this, 1500);
+        }
+    };
+
+    private void snapFs(int code) {
+        float d = getResources().getDisplayMetrics().density;
+        float cx = cursor.x / d, cy = cursor.y / d;
+        if (cursor.x < 0) { cx = root.getWidth() / d / 2; cy = root.getHeight() / d / 2; }
+        int dx = code == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
+        int dy = code == KeyEvent.KEYCODE_DPAD_UP ? -1 : code == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : 0;
+        float[] best = null; double bs = 1e18;
+        synchronized (fsBoxes) {
+            for (float[] b : fsBoxes) {
+                float bx = b[0] + b[2] / 2, by = b[1] + b[3] / 2;
+                float ex = bx - cx, ey = by - cy;
+                float main = dx != 0 ? ex * dx : ey * dy, side = dx != 0 ? Math.abs(ey) : Math.abs(ex);
+                if (main < 4) continue;                        // not in that direction
+                if (side > main * 2.5f + 40) continue;           // too far off to the side
+                double sc = main + side * 2.2;
+                if (sc < bs) { bs = sc; best = b; }
+            }
+        }
+        if (best == null) {                                    // nothing there: the controls may be hidden — wake them up
+            hoverAtCursorNow();
+            web.evaluateJavascript("window.__sajoBoxes&&__sajoBoxes()", null);
+            return;
+        }
+        cursor.x = (best[0] + best[2] / 2) * d;
+        cursor.y = (best[1] + best[3] / 2) * d;
+        cursor.invalidate();
+        hoverAtCursorNow();
     }
 
     private int glideKey = 0;
@@ -980,6 +1023,25 @@ public class MainActivity extends Activity {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
+        @JavascriptInterface
+        public void boxes(String json) {
+            try {
+                org.json.JSONArray a = new org.json.JSONArray(json);
+                float now = (float) (SystemClock.uptimeMillis() % 100000000L);
+                synchronized (fsBoxes) {
+                    // keep the latest report of every frame: drop boxes older than ~3 s (the frames re-report every 1.5 s)
+                    java.util.Iterator<float[]> it = fsBoxes.iterator();
+                    while (it.hasNext()) { float[] b = it.next(); if (now - b[4] > 3200 || now < b[4]) it.remove(); }
+                    for (int i = 0; i < a.length() && fsBoxes.size() < 300; i++) {
+                        org.json.JSONArray q = a.getJSONArray(i);
+                        float x = (float) q.getDouble(0), y = (float) q.getDouble(1);
+                        java.util.Iterator<float[]> it2 = fsBoxes.iterator();
+                        while (it2.hasNext()) { float[] b = it2.next(); if (Math.abs(b[0] - x) < 3 && Math.abs(b[1] - y) < 3) it2.remove(); }
+                        fsBoxes.add(new float[]{x, y, (float) q.getDouble(2), (float) q.getDouble(3), now});
+                    }
+                }
+            } catch (Exception ignored) { }
+        }
         @JavascriptInterface
         public void probe(String line) { synchronized (probeLines) { if (probeLines.size() < 12) probeLines.add(line); } }
         @JavascriptInterface
