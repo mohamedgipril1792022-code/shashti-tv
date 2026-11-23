@@ -410,8 +410,9 @@ public class MainActivity extends Activity {
         root.addView(zoomBar, lp);
         // drag the A−/A+ bar anywhere with a finger; the place is remembered
         android.content.SharedPreferences zp = getSharedPreferences("adblock", MODE_PRIVATE);
-        zoomBar.setTranslationX(zp.getFloat("zbx", 0));
-        zoomBar.setTranslationY(zp.getFloat("zby", 0));
+        // ⋮ and A−/A+ move together, as one group
+        final View[] group = phoneMenu != null ? new View[]{zoomBar, phoneMenu} : new View[]{zoomBar};
+        for (View g : group) { g.setTranslationX(zp.getFloat("zbx", 0)); g.setTranslationY(zp.getFloat("zby", 0)); }
         View.OnTouchListener drag = new View.OnTouchListener() {
             float sx, sy, tx, ty; boolean moved;
             @Override public boolean onTouch(View v, MotionEvent e) {
@@ -423,11 +424,14 @@ public class MainActivity extends Activity {
                         float dx = e.getRawX() - sx, dy = e.getRawY() - sy;
                         if (!moved && Math.hypot(dx, dy) > 10 * d) moved = true;
                         if (moved) {
-                            // keep it on the screen
-                            float minX = -zoomBar.getLeft(), maxX = root.getWidth() - zoomBar.getRight();
-                            float minY = -zoomBar.getTop(), maxY = root.getHeight() - zoomBar.getBottom();
-                            zoomBar.setTranslationX(Math.max(minX, Math.min(maxX, tx + dx)));
-                            zoomBar.setTranslationY(Math.max(minY, Math.min(maxY, ty + dy)));
+                            // keep the whole group on the screen
+                            float minX = -1e9f, maxX = 1e9f, minY = -1e9f, maxY = 1e9f;
+                            for (View g : group) {
+                                minX = Math.max(minX, -g.getLeft()); maxX = Math.min(maxX, root.getWidth() - g.getRight());
+                                minY = Math.max(minY, -g.getTop()); maxY = Math.min(maxY, root.getHeight() - g.getBottom());
+                            }
+                            float nx = Math.max(minX, Math.min(maxX, tx + dx)), ny = Math.max(minY, Math.min(maxY, ty + dy));
+                            for (View g : group) { g.setTranslationX(nx); g.setTranslationY(ny); }
                         }
                         return true;
                     }
@@ -443,6 +447,7 @@ public class MainActivity extends Activity {
         };
         zoomMinus.setOnTouchListener(drag);
         zoomPlus.setOnTouchListener(drag);
+        if (phoneMenu != null) phoneMenu.setOnTouchListener(drag);
     }
 
     private String zoomKey() { return "tz_" + (pageHost == null ? "" : FilterEngine.base(pageHost)); }
