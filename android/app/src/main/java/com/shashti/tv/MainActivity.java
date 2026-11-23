@@ -852,7 +852,17 @@ public class MainActivity extends Activity {
         "try{var f=p.requestFullscreen||p.webkitRequestFullscreen;var r=f?f.call(p):null;if(r&&r.catch)r.catch(css);else if(!f)css()}catch(z){css()}return 'ok'})";
 
     /** Double OK on the player: full screen (real full screen, or the player stretched over the whole page). */
+    private volatile boolean fsPressed = false;
+
+    /** Double OK on the player: press the player's own ⛶ button (in whatever frame it is); our stretch only if it has none. */
     private void fullscreenAtCursor() {
+        fsPressed = false;
+        ensureStealth(() -> web.evaluateJavascript("window.__sajoFsBtn&&__sajoFsBtn()", v -> web.postDelayed(() -> {
+            if (!fsPressed && customView == null) fullscreenAtCursorOwn();
+        }, 700)));
+    }
+
+    private void fullscreenAtCursorOwn() {
         float d = getResources().getDisplayMetrics().density;
         web.evaluateJavascript(FS_JS + "(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", v -> {
             if (v != null && v.contains("ok")) { web.postDelayed(() -> { if (customView == null) { setStretched(true); autoCloseAds(); } }, 600); }
@@ -1032,6 +1042,8 @@ public class MainActivity extends Activity {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
+        @JavascriptInterface
+        public void fsPressed() { fsPressed = true; }
         @JavascriptInterface
         public void boxes(String json) {
             try {
