@@ -10,6 +10,16 @@
   // and if an ad still starts it is skipped at once.
   if (!window.__sajoYT && /(^|\.)youtube(-nocookie)?\.com$/.test(location.hostname)) (function () {
     window.__sajoYT = true;   // runs at the very start, without waiting for the app's bridge (YouTube sets its data at once)
+    // with the phone locked YouTube pauses the video ("the page is hidden"): it is always told the page is visible
+    try {
+      Object.defineProperty(Document.prototype, 'hidden', { configurable: true, get: function () { return false; } });
+      Object.defineProperty(Document.prototype, 'visibilityState', { configurable: true, get: function () { return 'visible'; } });
+      Object.defineProperty(Document.prototype, 'webkitHidden', { configurable: true, get: function () { return false; } });
+      Object.defineProperty(Document.prototype, 'webkitVisibilityState', { configurable: true, get: function () { return 'visible'; } });
+      var ae = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = function (t) { if (t === 'visibilitychange' || t === 'webkitvisibilitychange') return; return ae.apply(this, arguments); };
+      ['visibilitychange', 'webkitvisibilitychange'].forEach(function (t) { ae.call(window, t, function (e) { e.stopImmediatePropagation(); }, true); ae.call(document, t, function (e) { e.stopImmediatePropagation(); }, true); });
+    } catch (e) { }
     var AD_KEYS = ['adPlacements', 'playerAds', 'adSlots', 'adBreakHeartbeatParams'];
     function strip(o, depth) {
       if (!o || typeof o !== 'object' || depth > 6) return o;

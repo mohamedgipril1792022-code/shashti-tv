@@ -1324,8 +1324,27 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onSaveInstanceState(Bundle o) { super.onSaveInstanceState(o); web.saveState(o); }
-    @Override protected void onPause() { super.onPause(); web.onPause(); }
-    @Override protected void onResume() { super.onResume(); web.onResume(); Updater.resume(this); Updater.check(this, false); }
+    // phone + YouTube: the video keeps playing with the phone locked or the app in the background
+    private boolean ytBackground() { return !isTv && pageHost != null && (pageHost.endsWith("youtube.com") || pageHost.equals("youtu.be")); }
+
+    @Override protected void onPause() {
+        super.onPause();
+        if (ytBackground()) PlayService.start(this);   // keep playing: the page is not paused
+        else web.onPause();
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        PlayService.stop(this);
+        web.onResume();
+        Updater.resume(this); Updater.check(this, false);
+        if (!isTv && Build.VERSION.SDK_INT >= 33 && !askedNotif) {
+            askedNotif = true;
+            if (checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 9);
+        }
+    }
+    private boolean askedNotif = false;
+    @Override protected void onDestroy() { PlayService.stop(this); super.onDestroy(); }
 
     private class Bridge {
         /** Hiding rules for a frame of the current page (empty on the launcher). */
