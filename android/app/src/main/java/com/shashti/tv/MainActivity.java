@@ -88,8 +88,7 @@ public class MainActivity extends Activity {
         cursor = new CursorView(this);
         cursor.setVisibility(View.GONE);
         root.addView(cursor, new FrameLayout.LayoutParams(-1, -1));
-        if (!isTv) buildPhoneMenuButton();
-        buildZoomBar();
+        if (!isTv) { buildPhoneMenuButton(); buildZoomBar(); }   // phone only: the box stays exactly as it was
         setContentView(root);
 
         assets = new WebViewAssetLoader.Builder()
@@ -418,6 +417,7 @@ public class MainActivity extends Activity {
     }
 
     private void applyZoom() {
+        if (isTv) return;
         web.getSettings().setTextZoom(pageHost == null ? 100 : getSharedPreferences("adblock", MODE_PRIVATE).getInt(zoomKey(), 100));
     }
 
