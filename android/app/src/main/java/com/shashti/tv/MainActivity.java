@@ -397,29 +397,7 @@ public class MainActivity extends Activity {
             }
             return true;
         }
-        // full-screen video: ◀ ▶ seek (faster when held), OK play/pause
-        if (customView != null || stretched) {
-            if (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN) {
-                if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() == 0) media("info", 0);
-                return true;
-            }
-            if (code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT || code == KeyEvent.KEYCODE_MEDIA_REWIND || code == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD) {
-                if (e.getAction() == KeyEvent.ACTION_DOWN) {
-                    int r = e.getRepeatCount();
-                    if (r == 0 || r % 3 == 0) {
-                        int step = r == 0 ? 10 : r < 30 ? 30 : 60;
-                        boolean back = code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_MEDIA_REWIND;
-                        media("seek", back ? -step : step);
-                    }
-                }
-                return true;
-            }
-            if (code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER || code == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || code == KeyEvent.KEYCODE_SPACE) {
-                if (e.getAction() == KeyEvent.ACTION_UP) media("toggle", 0);
-                return true;
-            }
-        }
-        boolean pointer = customView == null && !stretched && !atHome();
+        boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
         navBar.setVisibility(pointer ? View.VISIBLE : View.GONE);
         if (!pointer) return super.dispatchKeyEvent(e);
@@ -470,7 +448,7 @@ public class MainActivity extends Activity {
 
     private void setStretched(boolean on) {
         stretched = on;
-        boolean pointer = !on && customView == null && !atHome();
+        boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
         navBar.setVisibility(pointer ? View.VISIBLE : View.GONE);
         if (!on) hideBar.run();
@@ -803,7 +781,7 @@ public class MainActivity extends Activity {
     private void fullscreenAtCursor() {
         float d = getResources().getDisplayMetrics().density;
         web.evaluateJavascript(FS_JS + "(" + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", v -> {
-            if (v != null && v.contains("ok")) { setStretched(true); autoCloseAds(); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }
+            if (v != null && v.contains("ok")) { setStretched(true); autoCloseAds(); showMediaBar("⛶ ملء الشاشة — Back للخروج"); }
         });
     }
 
@@ -901,8 +879,7 @@ public class MainActivity extends Activity {
             "🔍 المشغّل مش شغال؟ شوف اللي اتمنع في الصفحة دي",
             "🧾 سجل أخطاء الصفحة",
             "🧹 شيل الإعلان اللي تحت الماوس",
-            "🔬 افحص اللي تحت الماوس (صوّرهولي)",
-            "🎬 تحكم في الفيديو بالريموت (◀ ▶ تقديم · OK تشغيل)"
+            "🔬 افحص اللي تحت الماوس (صوّرهولي)"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -958,7 +935,6 @@ public class MainActivity extends Activity {
                     case 12: showLog(); break;
                     case 13: zapAtCursor(); break;
                     case 14: probeAtCursor(); break;
-                    case 15: setStretched(true); showMediaBar("🎬 التحكم في الفيديو — ◀ ترجيع · OK تشغيل/إيقاف · تقديم ▶ · Back خروج"); media("info", 0); break;
                 }
             })
             .show();
@@ -985,7 +961,7 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void probe(String line) { synchronized (probeLines) { if (probeLines.size() < 12) probeLines.add(line); } }
         @JavascriptInterface
-        public void fsOn() { runOnUiThread(() -> { setStretched(true); autoCloseAds(); showMediaBar("⛶ ملء الشاشة — ◀ ▶ تقديم/ترجيع · OK تشغيل/إيقاف · Back خروج"); }); }
+        public void fsOn() { runOnUiThread(() -> { setStretched(true); autoCloseAds(); showMediaBar("⛶ ملء الشاشة — Back للخروج"); }); }
         @JavascriptInterface
         public void fsOff() { runOnUiThread(() -> setStretched(false)); }
         @JavascriptInterface
