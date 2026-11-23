@@ -556,10 +556,11 @@ public class MainActivity extends Activity {
                     lastKeyAt = SystemClock.uptimeMillis();
                     if (e.getRepeatCount() == 0) { pressStart = lastKeyAt; freeMove(code, 0); }
                     else if (glideKey != code) startGlide(code);
-                } else { stopGlide(); hoverAtCursorNow(); }
+                    ytEdgeScroll(code);
+                } else { stopGlide(); mouseHover(); }
                 return true;
             }
-            if (ok) { if (e.getAction() == KeyEvent.ACTION_UP) tapAt(cursor.x, cursor.y); return true; }
+            if (ok) { if (e.getAction() == KeyEvent.ACTION_UP) mouseClick(); return true; }
             if (code == KeyEvent.KEYCODE_BACK) {
                 if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() >= 6 && !backLong) {
                     backLong = true; web.loadUrl(HOME); Toast.makeText(this, "🏠 الرئيسية", Toast.LENGTH_SHORT).show();
@@ -916,11 +917,12 @@ public class MainActivity extends Activity {
                 default: cursor.x = Math.min(w - 4 * d, cursor.x + v);
             }
             cursor.invalidate();
-            hoverAtCursor();
+            if (glideYt) { mouseHover(); ytEdgeScroll(glideKey); } else hoverAtCursor();
             root.postOnAnimation(this);
         }
     };
-    private void startGlide(int code) { glideKey = code; root.removeCallbacks(glide); root.postOnAnimation(glide); }
+    private boolean glideYt = false;
+    private void startGlide(int code) { glideYt = ytTvPage(); glideKey = code; root.removeCallbacks(glide); root.postOnAnimation(glide); }
     private void stopGlide() { glideKey = 0; root.removeCallbacks(glide); }
 
     private boolean autoFs() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autofs", true); }
@@ -1393,6 +1395,59 @@ public class MainActivity extends Activity {
     }
 
     private long ytMouseAt = 0;
+
+    // a real mouse for YouTube TV (it answers a mouse, not finger taps): hover, click, and wheel at the screen's edges
+    private MotionEvent mouseEv(int action, int buttons, float x, float y) {
+        long t = SystemClock.uptimeMillis();
+        MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
+        pp.id = 0; pp.toolType = MotionEvent.TOOL_TYPE_MOUSE;
+        MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
+        pc.x = x; pc.y = y; pc.pressure = buttons != 0 ? 1 : 0; pc.size = 1;
+        return MotionEvent.obtain(t, t, action, 1, new MotionEvent.PointerProperties[]{pp}, new MotionEvent.PointerCoords[]{pc},
+                0, buttons, 1, 1, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
+    }
+    private void mouseHover() {
+        MotionEvent m = mouseEv(MotionEvent.ACTION_HOVER_MOVE, 0, cursor.x, cursor.y);
+        web.dispatchGenericMotionEvent(m); m.recycle();
+    }
+    private void mouseClick() {
+        float x = cursor.x, y = cursor.y;
+        MotionEvent d = mouseEv(MotionEvent.ACTION_DOWN, MotionEvent.BUTTON_PRIMARY, x, y);
+        web.dispatchTouchEvent(d); d.recycle();
+        if (Build.VERSION.SDK_INT >= 23) {
+            MotionEvent bp = mouseEv(MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.BUTTON_PRIMARY, x, y);
+            if (Build.VERSION.SDK_INT >= 23) bp.setActionButton(MotionEvent.BUTTON_PRIMARY);
+            web.dispatchGenericMotionEvent(bp); bp.recycle();
+            MotionEvent br = mouseEv(MotionEvent.ACTION_BUTTON_RELEASE, 0, x, y);
+            br.setActionButton(MotionEvent.BUTTON_PRIMARY);
+            web.dispatchGenericMotionEvent(br); br.recycle();
+        }
+        MotionEvent u = mouseEv(MotionEvent.ACTION_UP, 0, x, y);
+        web.dispatchTouchEvent(u); u.recycle();
+    }
+    private long lastWheel = 0;
+    /** pushing the mouse against a screen edge rolls the wheel: the rows and the page move */
+    private void ytEdgeScroll(int code) {
+        long t = SystemClock.uptimeMillis();
+        if (t - lastWheel < 180) return;
+        float d = getResources().getDisplayMetrics().density, w = root.getWidth(), h = root.getHeight(), edge = 6 * d;
+        float hs = 0, vs = 0;
+        if (code == KeyEvent.KEYCODE_DPAD_RIGHT && cursor.x >= w - edge - 4 * d) hs = 1;
+        else if (code == KeyEvent.KEYCODE_DPAD_LEFT && cursor.x <= edge) hs = -1;
+        else if (code == KeyEvent.KEYCODE_DPAD_DOWN && cursor.y >= h - edge - 30 * d) vs = -1;
+        else if (code == KeyEvent.KEYCODE_DPAD_UP && cursor.y <= edge + 30 * d) vs = 1;
+        if (hs == 0 && vs == 0) return;
+        lastWheel = t;
+        MotionEvent.PointerProperties pp = new MotionEvent.PointerProperties();
+        pp.id = 0; pp.toolType = MotionEvent.TOOL_TYPE_MOUSE;
+        MotionEvent.PointerCoords pc = new MotionEvent.PointerCoords();
+        pc.x = cursor.x; pc.y = cursor.y;
+        pc.setAxisValue(MotionEvent.AXIS_HSCROLL, hs);
+        pc.setAxisValue(MotionEvent.AXIS_VSCROLL, vs);
+        MotionEvent m = MotionEvent.obtain(t, t, MotionEvent.ACTION_SCROLL, 1, new MotionEvent.PointerProperties[]{pp}, new MotionEvent.PointerCoords[]{pc},
+                0, 0, 1, 1, 0, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
+        web.dispatchGenericMotionEvent(m); m.recycle();
+    }
 
     private void ytKey(int code) {
         long t = SystemClock.uptimeMillis();
