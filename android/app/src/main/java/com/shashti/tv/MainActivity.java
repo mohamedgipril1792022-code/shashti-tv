@@ -101,8 +101,12 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
-        s.setLoadWithOverviewMode(true);
+        s.setLoadWithOverviewMode(isTv);           // phone: pages at the phone's own width (readable text), not zoomed out
         s.setUseWideViewPort(true);
+        // pinch with two fingers to zoom in/out (no +/- buttons on screen)
+        s.setSupportZoom(true);
+        s.setBuiltInZoomControls(true);
+        s.setDisplayZoomControls(false);
         s.setSupportMultipleWindows(true);            // new windows go through onCreateWindow
         s.setJavaScriptCanOpenWindowsAutomatically(true);
         s.setAllowContentAccess(true);
@@ -121,6 +125,12 @@ public class MainActivity extends Activity {
             WebViewCompat.addDocumentStartJavaScript(web, CSS_JS, Collections.singleton("*"));
             String st = asset("stealth.js");
             if (st != null) WebViewCompat.addDocumentStartJavaScript(web, st, Collections.singleton("*"));
+            // phone: pages that forbid zooming are allowed to zoom (two-finger pinch)
+            if (!isTv) WebViewCompat.addDocumentStartJavaScript(web,
+                "(function(){function fix(){var m=document.querySelectorAll('meta[name=viewport]');for(var i=0;i<m.length;i++){var c=m[i].getAttribute('content')||'';" +
+                "var n=c.replace(/user-scalable\\s*=\\s*(no|0)/ig,'user-scalable=yes').replace(/maximum-scale\\s*=\\s*[0-9.]+/ig,'maximum-scale=5');if(n!==c)m[i].setAttribute('content',n)}}" +
+                "try{fix();var mo=new MutationObserver(fix);mo.observe(document.documentElement,{childList:true,subtree:true});document.addEventListener('DOMContentLoaded',function(){fix();setTimeout(function(){mo.disconnect()},3000)})}catch(e){}})()",
+                Collections.singleton("*"));
         }
 
         web.setWebViewClient(new WebViewClient() {
@@ -170,7 +180,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView v, String u) {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && pageHost != null) { v.evaluateJavascript(CSS_JS, null); ensureStealth(null); }
-                v.postDelayed(MainActivity.this::refreshBoxes, 600);
+                if (isTv) v.postDelayed(MainActivity.this::refreshBoxes, 600);   // the remote's box map: TV only
                 updatePhoneButton();
                 if (pendingAdd != null && atHome()) {
                     final String js = pendingAdd;

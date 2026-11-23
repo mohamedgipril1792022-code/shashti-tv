@@ -390,7 +390,23 @@ public class FilterEngine {
     /** CSS selectors to hide on this host (site rules + generic rules), minus exceptions. */
     public synchronized String hideSelectors(String host) { return hideSelectors(host, true); }
 
+    // the generic part is thousands of selectors: built once, and each host's answer is remembered
+    // (every frame of every page asks; rebuilding it each time made phones stutter)
+    private final java.util.LinkedHashMap<String, String> cssCache = new java.util.LinkedHashMap<String, String>(64, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, String> e) { return size() > 96; }
+    };
+
     public synchronized String hideSelectors(String host, boolean generic) {
+        if (host == null) return "";
+        String key = host + (generic ? "|g" : "|s");
+        String hit = cssCache.get(key);
+        if (hit != null) return hit;
+        String r = hideSelectors0(host, generic);
+        cssCache.put(key, r);
+        return r;
+    }
+
+    private String hideSelectors0(String host, boolean generic) {
         if (host == null) return "";
         host = host.toLowerCase(Locale.ROOT);
         for (String h = host; h != null; h = parent(h)) if (noElemhide.contains(h)) return "";
