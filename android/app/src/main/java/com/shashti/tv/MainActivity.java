@@ -399,7 +399,7 @@ public class MainActivity extends Activity {
         }
         boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
-        navBar.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        navBar.setVisibility(View.GONE);   // the side ⬅/🏠 buttons are off (Back and Menu do it)
         if (!pointer) return super.dispatchKeyEvent(e);
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
@@ -450,9 +450,10 @@ public class MainActivity extends Activity {
 
     private void setStretched(boolean on) {
         stretched = on;
+        if (!on) web.evaluateJavascript("window.__sajoFsClear&&__sajoFsClear()", null);
         boolean pointer = customView == null && !atHome();
         cursor.setVisibility(pointer ? View.VISIBLE : View.GONE);
-        navBar.setVisibility(pointer ? View.VISIBLE : View.GONE);
+        navBar.setVisibility(View.GONE);   // the side ⬅/🏠 buttons are off (Back and Menu do it)
         if (!on) hideBar.run();
     }
 
@@ -677,13 +678,7 @@ public class MainActivity extends Activity {
         if (cursor.x < 0) { cursor.x = root.getWidth() / 2f; cursor.y = root.getHeight() / 2f; }
         float[][] bx0 = boxes;
         if (bx0.length == 0 || System.currentTimeMillis() - boxesAt > 8000) { refreshBoxes(); freeMove(code, 0); return; }
-        float[][] bx = java.util.Arrays.copyOf(bx0, bx0.length + 2);
-        int k = bx0.length;
-        for (View nb : new View[]{backBtn, homeBtn}) {
-            int[] p = new int[2], q = new int[2];
-            nb.getLocationOnScreen(p); root.getLocationOnScreen(q);
-            bx[k++] = new float[]{scrX + (p[0] - q[0]) / d, scrY + (p[1] - q[1]) / d, nb.getWidth() / d, nb.getHeight() / d};
-        }
+        float[][] bx = bx0;
         int dx = code == KeyEvent.KEYCODE_DPAD_LEFT ? -1 : code == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : 0;
         int dy = code == KeyEvent.KEYCODE_DPAD_UP ? -1 : code == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : 0;
         float vw = root.getWidth() / d, vh = root.getHeight() / d;
