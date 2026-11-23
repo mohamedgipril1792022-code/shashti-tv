@@ -1060,7 +1060,7 @@ public class MainActivity extends Activity {
         String[] items = {
             "⬅ الصفحة اللي قبلها",
             "🏠 الرئيسية",
-            "➕ أضف الموقع ده لمواقعي",
+            "➕ أضف لمواقعي (الموقع كله أو الصفحة دي بس)",
             "▶ احفظ الصفحة دي في تكملة المشاهدة",
             "📋 انسخ الرابط",
             "📑 اعرض الصفحة اللي اتفتحت في الخلفية",
@@ -1081,7 +1081,18 @@ public class MainActivity extends Activity {
                 switch (which) {
                     case 0: goBackPage(); break;
                     case 1: web.loadUrl(HOME); break;
-                    case 2: case 3: {
+                    case 2: {
+                        // the whole site (its home page) or exactly this page / tab
+                        final String root = Uri.parse(url).getScheme() + "://" + Uri.parse(url).getHost() + "/";
+                        new android.app.AlertDialog.Builder(this).setTitle("➕ تضيف إيه لمواقعي؟")
+                            .setItems(new String[]{"🏠 الموقع كله (صفحته الرئيسية)", "📌 الصفحة دي بالظبط (القسم/التبويب ده)"}, (d2, w2) -> {
+                                String target = w2 == 0 ? root : url;
+                                pendingAdd = "quickAdd('site'," + org.json.JSONObject.quote(target) + "," + org.json.JSONObject.quote(title) + ")";
+                                web.loadUrl(HOME);
+                            }).show();
+                        break;
+                    }
+                    case 3: {
                         String kind = which == 2 ? "site" : "cont";
                         String target = which == 2 ? Uri.parse(url).getScheme() + "://" + Uri.parse(url).getHost() + "/" : url;
                         pendingAdd = "quickAdd(" + org.json.JSONObject.quote(kind) + "," + org.json.JSONObject.quote(target) + "," + org.json.JSONObject.quote(title) + ")";

@@ -112,7 +112,7 @@ footer{text-align:center;margin-top:30px}
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٠٠',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ٧:٠٠ ص'};
+const VERSION={n:'١٠١',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ٧:٢٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -550,7 +550,8 @@ if(AND&&Android.checkUpdate){$('#up').hidden=false;$('#up').onclick=()=>Android.
 if(window.Android){document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[target]');if(a)a.removeAttribute('target')},true)}
 window.quickAdd=function(kind,url,title){
   title=(title||'').split(/[|\-–—]/)[0].trim().slice(0,40);
-  if(kind==='site'){const ex=sites().find(x=>hostOf(x.url)===hostOf(url));if(ex){toast('«'+ex.name+'» موجود عندك بالفعل');return}
+  if(kind==='site'){const nu=u=>String(u||'').replace(/^https?:\/\//,'').replace(/\/+$/,'').toLowerCase();const ex=sites().find(x=>nu(x.url)===nu(url));   // same page twice (a site and one of its pages can both be tiles)
+   if(ex){toast('«'+ex.name+'» موجود عندك بالفعل');return}
     openSite();$('#fu').value=url;$('#fn').value=title;$('#fn').dispatchEvent(new Event('input'));}
   else{openCont();$('#cu').value=url;$('#ct').value=title;$('#ct').dispatchEvent(new Event('input'));
     const s=sites().find(x=>hostOf(x.url)===hostOf(url));if(s)$('#cs').value=s.id}
