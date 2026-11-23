@@ -869,22 +869,23 @@ public class MainActivity extends Activity {
     /** Double OK on the player: press the player's own ⛶ button (in whatever frame it is); our stretch only if it has none. */
     private void fullscreenAtCursor() {
         fsPressed = false;
-        ensureStealth(() -> web.evaluateJavascript("window.__sajoFsBtn&&__sajoFsBtn()", v -> web.postDelayed(() -> {
-            if (!fsPressed && customView == null) fullscreenAtCursorOwn();
-        }, 700)));
+        autoFullscreen();
     }
 
     /** First press on the player: 1) full screen from inside the player frame right now, 2) the player's ⛶ button,
      *  3) our own full screen of the frame — each only if the one before didn't take. */
     private void autoFullscreen() {
+        // only the player's OWN ⛶ button (our own full screen doesn't take): pressed as soon as it exists —
+        // tried every 0.2 s for 4.5 s (the press on the video gave the page the right to go full screen)
         fsPressed = false;
-        ensureStealth(() -> web.evaluateJavascript("window.__sajoFsNow&&__sajoFsNow()", v -> web.postDelayed(() -> {
-            if (customView != null) return;
-            fsPressed = false;
-            web.evaluateJavascript("window.__sajoFsBtn&&__sajoFsBtn()", v2 -> web.postDelayed(() -> {
-                if (customView == null && !fsPressed) fullscreenAtCursorOwn();
-            }, 500));
-        }, 350)));
+        final int[] n = {0};
+        ensureStealth(() -> web.post(new Runnable() {
+            @Override public void run() {
+                if (fsPressed || customView != null || n[0]++ > 22) return;
+                web.evaluateJavascript("window.__sajoFsBtn&&__sajoFsBtn()", null);
+                web.postDelayed(this, 200);
+            }
+        }));
     }
 
     private void fullscreenAtCursorOwn() {
