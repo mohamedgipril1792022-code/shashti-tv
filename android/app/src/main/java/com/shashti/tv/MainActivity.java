@@ -459,6 +459,7 @@ public class MainActivity extends Activity {
 
     private void setStretched(boolean on) {
         stretched = on;
+        cursor.ring = null;
         if (on) cursor.bringToFront();
         root.removeCallbacks(fsBoxRefresher);
         if (on) { synchronized (fsBoxes) { fsBoxes.clear(); } root.postDelayed(fsBoxRefresher, 400); }
@@ -609,7 +610,11 @@ public class MainActivity extends Activity {
                 float step = d * (repeatCount == 0 ? 14 : Math.min(6 + held / 6f, 140));
                 if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
                 float margin = 30 * d;
-                if (code == KeyEvent.KEYCODE_DPAD_UP) {
+                cursor.ring = null;
+                if (stretched && (code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN)) {
+                    // full screen: no page to scroll — the pointer goes all the way down and out of sight
+                    cursor.y = Math.max(0, Math.min(h + 40 * d, cursor.y + (code == KeyEvent.KEYCODE_DPAD_UP ? -step : step)));
+                } else if (code == KeyEvent.KEYCODE_DPAD_UP) {
                     if (cursor.y - step < margin) scrollPage(-Math.min(step * 3f, 300 * d)); else cursor.y -= step;
                 } else if (code == KeyEvent.KEYCODE_DPAD_DOWN) {
                     if (cursor.y + step > h - margin) scrollPage(Math.min(step * 3f, 300 * d)); else cursor.y += step;
@@ -657,6 +662,7 @@ public class MainActivity extends Activity {
         }
         cursor.x = (best[0] + best[2] / 2) * d;
         cursor.y = (best[1] + best[3] / 2) * d;
+        cursor.ring = new android.graphics.RectF((best[0] - 4) * d, (best[1] - 4) * d, (best[0] + best[2] + 4) * d, (best[1] + best[3] + 4) * d);
         cursor.invalidate();
         hoverAtCursorNow();
     }
@@ -672,9 +678,10 @@ public class MainActivity extends Activity {
             float v = d * Math.min(2.5f + held / 70f, 24f);          // per frame: slow and precise at first, then fast
             if (cursor.x < 0) { cursor.x = w / 2f; cursor.y = h / 2f; }
             float margin = 30 * d;
+            cursor.ring = null;
             switch (glideKey) {
-                case KeyEvent.KEYCODE_DPAD_UP: if (cursor.y - v < margin) scrollPage(-v * 2.5f); else cursor.y -= v; break;
-                case KeyEvent.KEYCODE_DPAD_DOWN: if (cursor.y + v > h - margin) scrollPage(v * 2.5f); else cursor.y += v; break;
+                case KeyEvent.KEYCODE_DPAD_UP: if (stretched) cursor.y = Math.max(0, cursor.y - v); else if (cursor.y - v < margin) scrollPage(-v * 2.5f); else cursor.y -= v; break;
+                case KeyEvent.KEYCODE_DPAD_DOWN: if (stretched) cursor.y = Math.min(h + 40 * d, cursor.y + v); else if (cursor.y + v > h - margin) scrollPage(v * 2.5f); else cursor.y += v; break;
                 case KeyEvent.KEYCODE_DPAD_LEFT: cursor.x = Math.max(0, cursor.x - v); break;
                 default: cursor.x = Math.min(w - 4 * d, cursor.x + v);
             }

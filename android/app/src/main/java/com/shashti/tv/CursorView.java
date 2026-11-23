@@ -9,6 +9,9 @@ import android.view.View;
 /** On-screen mouse pointer for sites that are not built for a TV remote. */
 public class CursorView extends View {
     public float x = -1, y = -1;
+    /** the button the remote jumped to (screen px), drawn as a ring; null = none */
+    public android.graphics.RectF ring = null;
+    private final Paint ringP = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint edge = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float s;
@@ -20,7 +23,10 @@ public class CursorView extends View {
         fill.setStyle(Paint.Style.FILL);
         edge.setColor(0xFFE50914);
         edge.setStyle(Paint.Style.STROKE);
-        edge.setStrokeWidth(2.5f * s);
+        edge.setStrokeWidth(1.8f * s);
+        ringP.setColor(0xFFFFD54A);
+        ringP.setStyle(Paint.Style.STROKE);
+        ringP.setStrokeWidth(3f * s);
         setClickable(false);
         setFocusable(false);
     }
@@ -28,7 +34,8 @@ public class CursorView extends View {
     @Override
     protected void onDraw(Canvas c) {
         if (x < 0) { x = getWidth() / 2f; y = getHeight() / 2f; }
-        float k = 1.6f * s;
+        if (ring != null) c.drawRoundRect(ring, 10 * s, 10 * s, ringP);
+        float k = 1.0f * s;                    // smaller pointer
         Path p = new Path();
         p.moveTo(x, y);
         p.lineTo(x, y + 18 * k);
