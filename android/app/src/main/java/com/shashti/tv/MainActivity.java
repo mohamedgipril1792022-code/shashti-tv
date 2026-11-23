@@ -547,20 +547,9 @@ public class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent e) {
         int code = e.getKeyCode();
         if (ytTvPage() && customView == null && code != KeyEvent.KEYCODE_MENU && code != KeyEvent.KEYCODE_GUIDE) {
-            // YouTube TV: the mouse only (no box-to-box moves) — a press nudges it, holding glides; OK clicks where it points
-            boolean arrow = code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT;
-            boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER;
-            if (cursor.getVisibility() != View.VISIBLE) { cursor.setVisibility(View.VISIBLE); cursor.bringToFront(); }
-            if (arrow) {
-                if (e.getAction() == KeyEvent.ACTION_DOWN) {
-                    lastKeyAt = SystemClock.uptimeMillis();
-                    if (e.getRepeatCount() == 0) { pressStart = lastKeyAt; freeMove(code, 0); }
-                    else if (glideKey != code) startGlide(code);
-                    ytEdgeScroll(code);
-                } else { stopGlide(); mouseHover(); }
-                return true;
-            }
-            if (ok) { if (e.getAction() == KeyEvent.ACTION_UP) mouseClick(); return true; }
+            // YouTube TV: the remote drives it exactly like the YouTube app on a TV box (no mouse)
+            if (cursor.getVisibility() == View.VISIBLE) cursor.setVisibility(View.GONE);
+            stopGlide();
             if (code == KeyEvent.KEYCODE_BACK) {
                 if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() >= 6 && !backLong) {
                     backLong = true; web.loadUrl(HOME); Toast.makeText(this, "🏠 الرئيسية", Toast.LENGTH_SHORT).show();
