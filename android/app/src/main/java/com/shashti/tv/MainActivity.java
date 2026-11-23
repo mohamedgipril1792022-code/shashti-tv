@@ -408,6 +408,41 @@ public class MainActivity extends Activity {
         lp.setMargins((int) (70 * d), 0, 0, (int) (26 * d));
         zoomBar.setVisibility(View.GONE);
         root.addView(zoomBar, lp);
+        // drag the A−/A+ bar anywhere with a finger; the place is remembered
+        android.content.SharedPreferences zp = getSharedPreferences("adblock", MODE_PRIVATE);
+        zoomBar.setTranslationX(zp.getFloat("zbx", 0));
+        zoomBar.setTranslationY(zp.getFloat("zby", 0));
+        View.OnTouchListener drag = new View.OnTouchListener() {
+            float sx, sy, tx, ty; boolean moved;
+            @Override public boolean onTouch(View v, MotionEvent e) {
+                switch (e.getActionMasked()) {
+                    case MotionEvent.ACTION_DOWN:
+                        sx = e.getRawX(); sy = e.getRawY(); tx = zoomBar.getTranslationX(); ty = zoomBar.getTranslationY(); moved = false;
+                        return true;
+                    case MotionEvent.ACTION_MOVE: {
+                        float dx = e.getRawX() - sx, dy = e.getRawY() - sy;
+                        if (!moved && Math.hypot(dx, dy) > 10 * d) moved = true;
+                        if (moved) {
+                            // keep it on the screen
+                            float minX = -zoomBar.getLeft(), maxX = root.getWidth() - zoomBar.getRight();
+                            float minY = -zoomBar.getTop(), maxY = root.getHeight() - zoomBar.getBottom();
+                            zoomBar.setTranslationX(Math.max(minX, Math.min(maxX, tx + dx)));
+                            zoomBar.setTranslationY(Math.max(minY, Math.min(maxY, ty + dy)));
+                        }
+                        return true;
+                    }
+                    case MotionEvent.ACTION_UP:
+                        if (moved) zp.edit().putFloat("zbx", zoomBar.getTranslationX()).putFloat("zby", zoomBar.getTranslationY()).apply();
+                        else v.performClick();
+                        return true;
+                    case MotionEvent.ACTION_CANCEL:
+                        return true;
+                }
+                return false;
+            }
+        };
+        zoomMinus.setOnTouchListener(drag);
+        zoomPlus.setOnTouchListener(drag);
     }
 
     private String zoomKey() { return "tz_" + (pageHost == null ? "" : FilterEngine.base(pageHost)); }
