@@ -125,7 +125,7 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "Android");
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, CSS_JS, Collections.singleton("*"));
-            String st = asset("stealth.js");
+            String st = fullMode() ? asset("stealth.js") : null;   // box: only after the user says so (see fullMode)
             if (st != null) WebViewCompat.addDocumentStartJavaScript(web, st, Collections.singleton("*"));
             // phone: pages that forbid zooming are allowed to zoom (two-finger pinch)
             if (!isTv) WebViewCompat.addDocumentStartJavaScript(web,
@@ -146,8 +146,8 @@ public class MainActivity extends Activity {
                 if (m == null) return null;
                 // a neutered stand-in (empty ad script, empty VAST...) keeps players that expect the ad code working,
                 // and an answer that looks successful keeps anti-adblock checks from noticing
-                WebResourceResponse rep = adblock.resource(m);
-                if (rep == null) rep = adblock.resource(stubFor(typeOf(r), r.getUrl().toString()));
+                WebResourceResponse rep = fullMode() ? adblock.resource(m) : null;
+                if (rep == null && fullMode()) rep = adblock.resource(stubFor(typeOf(r), r.getUrl().toString()));
                 if (rep == null) rep = new WebResourceResponse("text/plain", "utf-8", new ByteArrayInputStream(new byte[0]));
                 java.util.Map<String, String> hd = new java.util.HashMap<>();
                 String origin = r.getRequestHeaders() == null ? null : r.getRequestHeaders().get("Origin");
@@ -701,7 +701,13 @@ public class MainActivity extends Activity {
     private String stealthSrc;
     /** Our page helpers (Back closes ads, 🧹, video controls) — injected now if the page doesn't have them yet
      *  (old WebViews can't add them at page start). */
+    /** The page helpers (stealth.js: YouTube, continue watching, Back for ads in players, 🧹, the guard...) and the
+     *  replacement resources. They never reached the box before (the assets folder wasn't in the repo), so the box
+     *  gets them only when the user turns them on; the phone has them. */
+    private boolean fullMode() { return !isTv || getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("boxfull", false); }
+
     private void ensureStealth(Runnable then) {
+        if (!fullMode()) { if (then != null) then.run(); return; }
         web.evaluateJavascript("!!window.__sajoMedia", v -> {
             if (!"true".equals(v)) {
                 if (stealthSrc == null) stealthSrc = asset("stealth.js");
@@ -1215,7 +1221,8 @@ public class MainActivity extends Activity {
             "🧾 سجل أخطاء الصفحة",
             "🧹 شيل الإعلان اللي تحت الماوس",
             "🔬 افحص اللي تحت الماوس (صوّرهولي)",
-            autoFs() ? "⛶ ملء الشاشة أول ما أدوس على المشغّل: شغال (اقفله)" : "⛶ ملء الشاشة أول ما أدوس على المشغّل: مقفول (شغّله)"
+            autoFs() ? "⛶ ملء الشاشة أول ما أدوس على المشغّل: شغال (اقفله)" : "⛶ ملء الشاشة أول ما أدوس على المشغّل: مقفول (شغّله)",
+            !isTv ? "ℹ أدوات المواقع شغالة على الموبايل" : fullMode() ? "🧪 أدوات المواقع الجديدة على البوكس: شغالة (اقفلها)" : "🧪 أدوات المواقع الجديدة على البوكس: مقفولة (شغّلها)"
         };
         new android.app.AlertDialog.Builder(this)
             .setTitle(Uri.parse(url).getHost())
@@ -1287,6 +1294,14 @@ public class MainActivity extends Activity {
                     case 12: showLog(); break;
                     case 13: zapAtCursor(); break;
                     case 14: probeAtCursor(); break;
+                    case 16: {
+                        if (!isTv) break;
+                        boolean on = !fullMode();
+                        getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("boxfull", on).commit();
+                        Toast.makeText(this, on ? "🧪 اتشغّلت — التطبيق هيفتح من جديد" : "اتقفلت — التطبيق هيفتح من جديد", Toast.LENGTH_SHORT).show();
+                        web.postDelayed(this::recreate, 800);
+                        break;
+                    }
                     case 15: {
                         boolean on = !autoFs();
                         getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("autofs", on).apply();

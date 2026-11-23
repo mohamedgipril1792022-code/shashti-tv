@@ -1,3 +1,5 @@
 android/app/build/
 android/.gradle/
-android/app/src/main/assets/
+# copied from web/ at build time (the rest of assets/ is ours and is kept in git)
+android/app/src/main/assets/index.html
+android/app/src/main/assets/icon-192.png
