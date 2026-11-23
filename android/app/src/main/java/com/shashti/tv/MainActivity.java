@@ -1416,10 +1416,8 @@ public class MainActivity extends Activity {
         web.dispatchTouchEvent(d); d.recycle();
         if (Build.VERSION.SDK_INT >= 23) {
             MotionEvent bp = mouseEv(MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.BUTTON_PRIMARY, x, y);
-            if (Build.VERSION.SDK_INT >= 23) bp.setActionButton(MotionEvent.BUTTON_PRIMARY);
             web.dispatchGenericMotionEvent(bp); bp.recycle();
             MotionEvent br = mouseEv(MotionEvent.ACTION_BUTTON_RELEASE, 0, x, y);
-            br.setActionButton(MotionEvent.BUTTON_PRIMARY);
             web.dispatchGenericMotionEvent(br); br.recycle();
         }
         MotionEvent u = mouseEv(MotionEvent.ACTION_UP, 0, x, y);
