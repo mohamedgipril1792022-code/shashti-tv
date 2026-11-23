@@ -1387,7 +1387,13 @@ public class MainActivity extends Activity {
             if (r != null && (r.contains("ok") || r.contains("video"))) { zapReplied = true; zapResult(r); }
         }
         @JavascriptInterface
-        public String sl(String host) { return adblock.stealthConfig(pageHost, host); }
+        public String sl(String host) {
+            // the page's frame can ask before the app has noted the new page (opening a site from the home screen):
+            // then the asking page itself is the page
+            String ph = pageHost;
+            if (ph == null && host != null && !host.equals("appassets.androidplatform.net")) ph = host;
+            return adblock.stealthConfig(ph, host);
+        }
         @JavascriptInterface
         public String css(String host) { return pageHost == null ? "" : adblock.css(host, pageHost); }
 
