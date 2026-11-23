@@ -89,6 +89,7 @@ public class MainActivity extends Activity {
         cursor.setVisibility(View.GONE);
         root.addView(cursor, new FrameLayout.LayoutParams(-1, -1));
         if (!isTv) buildPhoneMenuButton();
+        buildZoomBar();
         setContentView(root);
 
         assets = new WebViewAssetLoader.Builder()
@@ -174,6 +175,7 @@ public class MainActivity extends Activity {
                 boxes = new float[0][];
                 adblock.clearLog();
                 if (stretched) setStretched(false);
+                applyZoom();
                 updatePhoneButton();
                 synchronized (pageLog) { pageLog.clear(); }
             }
@@ -361,7 +363,62 @@ public class MainActivity extends Activity {
     }
 
     private void updatePhoneButton() {
-        if (phoneMenu != null) phoneMenu.setVisibility(!atHome() && customView == null ? View.VISIBLE : View.GONE);
+        boolean onSite = !atHome() && customView == null;
+        if (phoneMenu != null) phoneMenu.setVisibility(onSite ? View.VISIBLE : View.GONE);
+        if (zoomBar != null) zoomBar.setVisibility(onSite && !stretched ? View.VISIBLE : View.GONE);
+        if (cursor != null && cursor.getVisibility() == View.VISIBLE) cursor.bringToFront();
+    }
+
+    // ---- A− / A+ at the top of every site: text size, remembered per site
+    private android.widget.LinearLayout zoomBar;
+    private android.widget.TextView zoomMinus, zoomPlus;
+
+    private android.widget.TextView zoomButton(String t) {
+        float d = getResources().getDisplayMetrics().density;
+        android.widget.TextView b = new android.widget.TextView(this);
+        b.setText(t);
+        b.setTextColor(0xFFFFFFFF);
+        b.setTextSize(isTv ? 18 : 16);
+        b.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        b.setGravity(android.view.Gravity.CENTER);
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setColor(0xB3000000); bg.setCornerRadius(12 * d); bg.setStroke((int) (1.5f * d), 0x66FFFFFF);
+        b.setBackground(bg);
+        b.setPadding((int) (12 * d), (int) (4 * d), (int) (12 * d), (int) (4 * d));
+        return b;
+    }
+
+    private void buildZoomBar() {
+        float d = getResources().getDisplayMetrics().density;
+        zoomBar = new android.widget.LinearLayout(this);
+        zoomMinus = zoomButton("A−");
+        zoomPlus = zoomButton("A+");
+        zoomBar.addView(zoomMinus);
+        android.widget.LinearLayout.LayoutParams g = new android.widget.LinearLayout.LayoutParams(-2, -2);
+        g.setMargins((int) (8 * d), 0, 0, 0);
+        zoomBar.addView(zoomPlus, g);
+        zoomMinus.setOnClickListener(v -> zoomText(-10));
+        zoomPlus.setOnClickListener(v -> zoomText(10));
+        zoomBar.setAlpha(0.85f);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.LEFT);
+        lp.setMargins((int) (10 * d), (int) (8 * d), 0, 0);
+        zoomBar.setVisibility(View.GONE);
+        root.addView(zoomBar, lp);
+    }
+
+    private String zoomKey() { return "tz_" + (pageHost == null ? "" : FilterEngine.base(pageHost)); }
+
+    private void zoomText(int delta) {
+        if (pageHost == null) return;
+        android.content.SharedPreferences p = getSharedPreferences("adblock", MODE_PRIVATE);
+        int z = Math.max(50, Math.min(250, p.getInt(zoomKey(), 100) + delta));
+        p.edit().putInt(zoomKey(), z).apply();
+        web.getSettings().setTextZoom(z);
+        Toast.makeText(this, "حجم الكلام " + z + "٪", Toast.LENGTH_SHORT).show();
+    }
+
+    private void applyZoom() {
+        web.getSettings().setTextZoom(pageHost == null ? 100 : getSharedPreferences("adblock", MODE_PRIVATE).getInt(zoomKey(), 100));
     }
 
     private void buildNavButtons() {
@@ -397,10 +454,11 @@ public class MainActivity extends Activity {
         return b;
     }
 
-    private boolean onButton(View b) {
+    private boolean onButton(View b) { return onButton(b, 14); }
+    private boolean onButton(View b, int padDp) {
         int[] p = new int[2], q = new int[2];
         b.getLocationOnScreen(p); root.getLocationOnScreen(q);
-        float x = p[0] - q[0], y = p[1] - q[1], pad = 14 * getResources().getDisplayMetrics().density;
+        float x = p[0] - q[0], y = p[1] - q[1], pad = padDp * getResources().getDisplayMetrics().density;
         return cursor.x >= x - pad && cursor.x <= x + b.getWidth() + pad && cursor.y >= y - pad && cursor.y <= y + b.getHeight() + pad;
     }
     private int repeat = 0;
@@ -514,6 +572,7 @@ public class MainActivity extends Activity {
     private void setStretched(boolean on) {
         stretched = on;
         cursor.ring = null;
+        updatePhoneButton();
         if (on) cursor.bringToFront();
         root.removeCallbacks(fsBoxRefresher);
         if (on) { synchronized (fsBoxes) { fsBoxes.clear(); } root.postDelayed(fsBoxRefresher, 400); }
@@ -883,6 +942,10 @@ public class MainActivity extends Activity {
     private volatile long playerTapAt = 0;
 
     private void tapAtCursor() {
+        if (zoomBar != null && zoomBar.getVisibility() == View.VISIBLE) {
+            if (onButton(zoomMinus, 3)) { zoomText(-10); return; }
+            if (onButton(zoomPlus, 3)) { zoomText(10); return; }
+        }
         if (navBar.getVisibility() == View.VISIBLE) {
             if (onButton(backBtn)) { goBackPage(); return; }
             if (onButton(homeBtn)) { web.loadUrl(HOME); return; }
