@@ -68,7 +68,7 @@ public class MainActivity extends Activity {
 
     // the hiding rules of the lists, applied in every frame (players included) as soon as a document starts
     private static final String CSS_JS =
-        "(function(){try{if(!window.Android||!Android.css)return;var c=Android.css(location.hostname);if(!c)return;" +
+        "(function go(n){try{if(!window.Android||!Android.css){if((n|0)<200)setTimeout(function(){go((n|0)+1)},25);return}var c=Android.css(location.hostname);if(!c)return;" +
         "var s=document.createElement('style');s.textContent=c;function put(){(document.head||document.documentElement).appendChild(s)}" +
         "if(document.documentElement)put();document.addEventListener('DOMContentLoaded',put)}catch(e){}})()";
 
