@@ -842,7 +842,7 @@ public class MainActivity extends Activity {
                 lastPlayerTap = now;
                 // the first press on the player goes full screen right away: the ad that shows in the seconds
                 // before the player appears only shows outside full screen
-                if (customView == null && !stretched && autoFs()) web.postDelayed(this::fullscreenAtCursor, 120);
+                if (customView == null && !stretched && autoFs()) autoFullscreen();
             }
             long t = SystemClock.uptimeMillis();
             MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
@@ -872,6 +872,19 @@ public class MainActivity extends Activity {
         ensureStealth(() -> web.evaluateJavascript("window.__sajoFsBtn&&__sajoFsBtn()", v -> web.postDelayed(() -> {
             if (!fsPressed && customView == null) fullscreenAtCursorOwn();
         }, 700)));
+    }
+
+    /** First press on the player: 1) full screen from inside the player frame right now, 2) the player's ⛶ button,
+     *  3) our own full screen of the frame — each only if the one before didn't take. */
+    private void autoFullscreen() {
+        fsPressed = false;
+        ensureStealth(() -> web.evaluateJavascript("window.__sajoFsNow&&__sajoFsNow()", v -> web.postDelayed(() -> {
+            if (customView != null) return;
+            fsPressed = false;
+            web.evaluateJavascript("window.__sajoFsBtn&&__sajoFsBtn()", v2 -> web.postDelayed(() -> {
+                if (customView == null && !fsPressed) fullscreenAtCursorOwn();
+            }, 500));
+        }, 350)));
     }
 
     private void fullscreenAtCursorOwn() {
