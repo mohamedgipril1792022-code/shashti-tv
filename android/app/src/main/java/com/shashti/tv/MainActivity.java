@@ -879,8 +879,20 @@ public class MainActivity extends Activity {
         // tried every 0.2 s for 4.5 s (the press on the video gave the page the right to go full screen)
         fsPressed = false;
         final int[] n = {0};
-        // 1) a second tap right away = a double tap on the player, which players answer with their own full screen
-        web.postDelayed(this::tapOnly, 110);
+        // 1) a double tap on the player — away from its middle (the play/pause button is there) — which players
+        //    answer with their own full screen; two taps leave play/pause as it was
+        float d = getResources().getDisplayMetrics().density;
+        web.evaluateJavascript("(function(x,y){var e=document.elementFromPoint(x,y);for(;e;e=e.parentElement){if(e.tagName==='IFRAME'||e.tagName==='VIDEO'){var r=e.getBoundingClientRect();return [r.left,r.top,r.width,r.height].join(',')}}return ''})("
+                + Math.round(cursor.x / d) + "," + Math.round(cursor.y / d) + ")", v -> {
+            if (v == null || v.length() < 5) return;
+            String[] p = v.replace("\"", "").split(",");
+            try {
+                float l = Float.parseFloat(p[0]), t = Float.parseFloat(p[1]), w = Float.parseFloat(p[2]), h = Float.parseFloat(p[3]);
+                final float px = (l + w * 0.18f) * d, py = (t + h * 0.3f) * d;      // upper-left part of the picture
+                web.postDelayed(() -> tapAt(px, py), 60);
+                web.postDelayed(() -> tapAt(px, py), 200);
+            } catch (Exception ignored) { }
+        });
         // 2) if that didn't take, the player's ⛶ button as soon as it exists
         ensureStealth(() -> web.postDelayed(new Runnable() {
             @Override public void run() {
@@ -891,11 +903,11 @@ public class MainActivity extends Activity {
         }, 700));
     }
 
-    /** One plain tap at the pointer (no extra logic). */
-    private void tapOnly() {
+    /** One plain tap at a screen point (no extra logic). */
+    private void tapAt(float x, float y) {
         long t = SystemClock.uptimeMillis();
-        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
-        MotionEvent up = MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_UP, cursor.x, cursor.y, 0);
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, x, y, 0);
+        MotionEvent up = MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_UP, x, y, 0);
         down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
         up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
         View target = customView != null ? customView : web;
