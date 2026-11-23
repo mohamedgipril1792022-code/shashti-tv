@@ -879,13 +879,30 @@ public class MainActivity extends Activity {
         // tried every 0.2 s for 4.5 s (the press on the video gave the page the right to go full screen)
         fsPressed = false;
         final int[] n = {0};
-        ensureStealth(() -> web.post(new Runnable() {
+        // 1) a second tap right away = a double tap on the player, which players answer with their own full screen
+        web.postDelayed(this::tapOnly, 110);
+        // 2) if that didn't take, the player's ⛶ button as soon as it exists
+        ensureStealth(() -> web.postDelayed(new Runnable() {
             @Override public void run() {
                 if (fsPressed || customView != null || n[0]++ > 22) return;
                 web.evaluateJavascript("window.__sajoFsBtn&&__sajoFsBtn()", null);
                 web.postDelayed(this, 200);
             }
-        }));
+        }, 700));
+    }
+
+    /** One plain tap at the pointer (no extra logic). */
+    private void tapOnly() {
+        long t = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, cursor.x, cursor.y, 0);
+        MotionEvent up = MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_UP, cursor.x, cursor.y, 0);
+        down.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        up.setSource(android.view.InputDevice.SOURCE_TOUCHSCREEN);
+        View target = customView != null ? customView : web;
+        target.dispatchTouchEvent(down);
+        target.dispatchTouchEvent(up);
+        down.recycle();
+        up.recycle();
     }
 
     private void fullscreenAtCursorOwn() {
