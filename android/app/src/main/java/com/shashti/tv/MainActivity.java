@@ -547,7 +547,21 @@ public class MainActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent e) {
         int code = e.getKeyCode();
         if (ytTvPage() && customView == null && code != KeyEvent.KEYCODE_MENU && code != KeyEvent.KEYCODE_GUIDE) {
-            cursor.setVisibility(View.GONE);
+            // YouTube TV: one press of an arrow = YouTube's own move; HOLD an arrow = the mouse appears and glides;
+            // OK while the mouse is showing = click where it points (else YouTube's own OK)
+            boolean arrow = code == KeyEvent.KEYCODE_DPAD_UP || code == KeyEvent.KEYCODE_DPAD_DOWN || code == KeyEvent.KEYCODE_DPAD_LEFT || code == KeyEvent.KEYCODE_DPAD_RIGHT;
+            boolean ok = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER;
+            boolean mouseOn = cursor.getVisibility() == View.VISIBLE && SystemClock.uptimeMillis() - ytMouseAt < 4000;
+            if (arrow && e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() >= 2) {
+                if (cursor.getVisibility() != View.VISIBLE) { cursor.setVisibility(View.VISIBLE); cursor.bringToFront(); }
+                ytMouseAt = SystemClock.uptimeMillis(); lastKeyAt = ytMouseAt;
+                if (glideKey != code) startGlide(code);
+                return true;
+            }
+            if (arrow && e.getAction() == KeyEvent.ACTION_UP && glideKey != 0) { stopGlide(); hoverAtCursorNow(); ytMouseAt = SystemClock.uptimeMillis(); return true; }
+            if (arrow && e.getRepeatCount() >= 2) return true;
+            if (ok && mouseOn) { if (e.getAction() == KeyEvent.ACTION_UP) { ytMouseAt = SystemClock.uptimeMillis(); tapAt(cursor.x, cursor.y); } return true; }
+            if (!mouseOn) cursor.setVisibility(View.GONE);
             if (code == KeyEvent.KEYCODE_BACK) {
                 if (e.getAction() == KeyEvent.ACTION_DOWN && e.getRepeatCount() >= 6 && !backLong) {
                     backLong = true; web.loadUrl(HOME); Toast.makeText(this, "🏠 الرئيسية", Toast.LENGTH_SHORT).show();
@@ -1379,6 +1393,8 @@ public class MainActivity extends Activity {
         if (baseUA != null && !baseUA.equals(st.getUserAgentString())) st.setUserAgentString(baseUA);
         return false;
     }
+
+    private long ytMouseAt = 0;
 
     private void ytKey(int code) {
         long t = SystemClock.uptimeMillis();
