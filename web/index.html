@@ -42,7 +42,7 @@ h2 small{font-size:.55em;color:var(--mut);font-weight:400}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(145px,15vw,280px),1fr));gap:clamp(12px,1.6vw,26px);padding:6px 4px}
 .tile{position:relative;display:block;aspect-ratio:1;border-radius:20px;overflow:hidden;text-decoration:none;color:#fff;background:#222;outline:none;transition:transform .15s,box-shadow .15s;cursor:pointer}
 .tile.moving{outline:5px dashed #ffd54a;outline-offset:-5px;transform:scale(1.07);box-shadow:0 0 0 6px rgba(255,213,74,.35),0 12px 30px rgba(0,0,0,.6);z-index:3}
-#moveBar{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#ffd54a;color:#111;font-weight:900;padding:12px 22px;border-radius:14px;z-index:50;font-size:clamp(16px,1.5vw,24px);box-shadow:0 8px 24px rgba(0,0,0,.5)}
+#moveBar{position:fixed;left:50%;bottom:24px;text-align:center;max-width:94vw;transform:translateX(-50%);background:#ffd54a;color:#111;font-weight:900;padding:12px 22px;border-radius:14px;z-index:50;font-size:clamp(16px,1.5vw,24px);box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .tile .bg{position:absolute;inset:0;background-size:cover;background-position:center}
 .tile .shade{position:absolute;inset:0;background:linear-gradient(transparent 30%,rgba(0,0,0,.55))}
 .tile .name{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-weight:900;font-size:clamp(22px,2.6vw,44px);line-height:1.15;text-shadow:0 3px 10px rgba(0,0,0,.85),0 0 2px #000;word-break:break-word}
@@ -77,11 +77,11 @@ footer{text-align:center;margin-top:30px}
 .hint{color:var(--mut);font-size:13px;margin-top:4px}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;color:#000;border-radius:14px;padding:8px 16px;font-weight:700;display:none;z-index:30}
 /* phone (the app on a phone): three tiles a row, finger-sized */
-.phone .grid{grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:10px}
-.phone .row .tile{flex-basis:118px}
+.phone .grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px}
+.phone .row .tile{flex-basis:140px}
 .phone .row.wide .tile{flex-basis:170px}
 .phone .tile{border-radius:14px}
-.phone .tile .name{font-size:17px;padding:6px}
+.phone .tile .name{font-size:20px;padding:8px}
 .phone .tile .sub{font-size:11px}
 .phone .fav{width:30px;height:30px;font-size:16px;top:5px;right:5px}
 @media (max-width:520px){.hbtn .t{display:none}.hbtn{padding:8px 11px}}
@@ -112,7 +112,7 @@ footer{text-align:center;margin-top:30px}
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'٩٨',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ٦:١٠ ص'};
+const VERSION={n:'٩٩',date:'٢٣-١١-٢٠٢٦',created:'الإثنين ٢٣ نوفمبر ٢٠٢٦ – ٦:٢٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -200,9 +200,9 @@ function render(){
   const ss=sites().filter(s=>qMatch(s.name,s.url));
   if(!ss.length&&qv)grid.innerHTML=noRes;else if(!ss.length)grid.innerHTML='<div class="empty">لسه مفيش مواقع — دوس «＋ موقع» وحط رابط الموقع واختار صورة ليه.</div>';
   ss.forEach(s=>{
-    const t=tileEl({name:s.name,url:s.url,icon:s.icon,menu:()=>tileMenu('site',s),onUpd:()=>openUpdate(s),fav:!!s.fav,onFav:()=>{put(Object.assign({},s,{fav:!s.fav}));toast(s.fav?'اتشال من المفضلة':'⭐ اتضاف للمفضلة')}});
+    const t=tileEl({name:s.name,url:s.url,icon:s.icon,menu:()=>tileMenu('site',s),fav:!!s.fav,onFav:()=>{put(Object.assign({},s,{fav:!s.fav}));toast(s.fav?'اتشال من المفضلة':'⭐ اتضاف للمفضلة')}});
     if(s.ext){const b=document.createElement('span');b.className='sub';b.textContent='🌐 بيفتح في متصفح تاني';t.appendChild(b)}
-    t.onclick=e=>{if(editMode){e.preventDefault();openSite(s)}else if(s.ext&&window.Android&&Android.openExternal){e.preventDefault();visit(s.id);Android.openExternal(s.url)}else visit(s.id)};
+    t.onclick=e=>{if(moveId){e.preventDefault();return}if(editMode){e.preventDefault();openSite(s)}else if(s.ext&&window.Android&&Android.openExternal){e.preventDefault();visit(s.id);Android.openExternal(s.url)}else visit(s.id)};
     if(s.id===moveId){t.classList.add('moving');t.dataset.moving='1'}
     grid.appendChild(t);
   });
@@ -406,7 +406,14 @@ $('#ver').onclick=()=>{openModal(`<h3>نسخة ${VERSION.n}</h3><p>تاريخ إ
 let moveId=null;
 function startMove(s){if(($('#q').value||'').trim()){$('#q').value=''}moveId=s.id;render();
   let b=$('#moveBar');if(!b){b=document.createElement('div');b.id='moveBar';document.body.appendChild(b)}
-  b.textContent='↔ حرّك «'+(s.name||'')+'» بالأسهم — OK أو رجوع لما تخلص';b.hidden=false}
+  const ph=document.documentElement.classList.contains('phone');
+  if(ph){b.innerHTML='<div style="margin-bottom:8px">↔ رتّب «'+esc(s.name||'')+'»</div>'+
+    '<button class="fbtn" data-mv="-1">→ قبل</button> <button class="fbtn" data-mv="1">بعد ←</button> '+
+    '<button class="fbtn" data-mv="-c">↑ صف</button> <button class="fbtn" data-mv="c">↓ صف</button> <button class="fbtn red" data-mv="ok">✓ تم</button>';
+    b.querySelectorAll('[data-mv]').forEach(x=>x.onclick=e=>{e.preventDefault();e.stopPropagation();const m=x.dataset.mv;
+      if(m==='ok')endMove();else moveBy(m==='c'?gridCols():m==='-c'?-gridCols():+m)});}
+  else b.textContent='↔ حرّك «'+(s.name||'')+'» بالأسهم — OK أو رجوع لما تخلص';
+  b.hidden=false}
 function endMove(){if(!moveId)return 0;moveId=null;const b=$('#moveBar');if(b)b.hidden=true;render();toast('✓ اتحفظ الترتيب');return 1}
 window.endMove=endMove;
 function moveBy(step){
