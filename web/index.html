@@ -113,7 +113,7 @@ footer{text-align:center;margin-top:30px}
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٢٢',date:'٢٤-١١-٢٠٢٦',created:'الثلاثاء ٢٤ نوفمبر ٢٠٢٦ – ١:٣٥ م'};
+const VERSION={n:'١٢٣',date:'٢٤-١١-٢٠٢٦',created:'الثلاثاء ٢٤ نوفمبر ٢٠٢٦ – ٨:١٥ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -220,7 +220,7 @@ function render(){
   });
 
   const cr=$('#contRow');cr.innerHTML='';
-  syncWatch();
+  syncWatch();ytFix();
   const W=watchMap();
   const cs=[...items.values()].filter(o=>o.kind==='cont'&&qMatch(o.title,o.note,o.url)).sort((a,b)=>b.lastAt-a.lastAt);
   if(!cs.length&&qv)cr.innerHTML=noRes;else if(!cs.length)cr.innerHTML='<div class="empty">وانت بتتفرج، دوس «▶ تكملة» واحفظ رابط الحلقة والدقيقة اللي وقفت عندها.</div>';
@@ -268,6 +268,21 @@ function syncWatch(){
   if(!ups.length&&!dels.length)return;
   syncing=true;dels.forEach(id=>{items.delete(id);if(col){const c=col;cloudWrite(id,()=>c.doc(id).delete())}});
   ups.forEach(o=>items.set(o.id,o));saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}syncing=false;
+}
+/* YouTube: the real video name + picture (the TV interface's page is always called "YouTube on TV") */
+const ytAsked={};
+function ytFix(){
+  let cache={};try{cache=JSON.parse(localStorage.getItem('sajo-yt')||'{}')}catch(e){}
+  const ups=[];
+  [...items.values()].filter(o=>o.kind==='cont').forEach(c=>{const k=vkey(c.url);if(k.indexOf('yt:')!==0)return;const id=k.slice(3),m=cache[id];
+    if(m){const want={title:m.title,icon:'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg'};
+      if(c.title!==want.title&&(c.auto||/youtube/i.test(c.title)))ups.push(Object.assign({},c,want));
+      else if(!c.icon)ups.push(Object.assign({},c,{icon:want.icon}));return}
+    if(ytAsked[id])return;ytAsked[id]=1;
+    fetch('https://www.youtube.com/oembed?format=json&url='+encodeURIComponent('https://www.youtube.com/watch?v='+id))
+      .then(r=>r.ok?r.json():null).then(j=>{if(!j||!j.title)return;cache[id]={title:String(j.title).slice(0,70)};
+        try{localStorage.setItem('sajo-yt',JSON.stringify(cache))}catch(e){}ytFix();render()}).catch(()=>{})});
+  if(!ups.length)return;ups.forEach(o=>items.set(o.id,o));saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}
 }
 function watchFor(W,u){const k=vkey(u);let best=null;Object.keys(W).forEach(x=>{if(vkey(x)===k&&(!best||(W[x].at||0)>(best.at||0)))best=W[x]});return best}
 function autoIcon(url){const h=hostOf(url);return h?'https://www.google.com/s2/favicons?domain='+h+'&sz=256':''}
