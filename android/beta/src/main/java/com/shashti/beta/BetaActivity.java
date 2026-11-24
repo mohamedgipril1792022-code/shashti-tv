@@ -14,6 +14,10 @@ import org.mozilla.geckoview.GeckoSession;
 import org.mozilla.geckoview.GeckoSessionSettings;
 import org.mozilla.geckoview.GeckoView;
 import org.mozilla.geckoview.MediaSession;
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
+import android.widget.EditText;
 
 /**
  * Sajo Beta — a test of Firefox's engine (GeckoView) with the real uBlock Origin inside.
@@ -72,6 +76,43 @@ public class BetaActivity extends Activity {
             @Override public void onStop(GeckoSession s, MediaSession m) { playing = false; }
         });
 
+        // the page's dialogs: choosing a file (restore a backup), alerts, yes/no questions, text questions
+        session.setPromptDelegate(new GeckoSession.PromptDelegate() {
+            @Override public GeckoResult<PromptResponse> onFilePrompt(GeckoSession s, FilePrompt prompt) {
+                GeckoResult<PromptResponse> res = new GeckoResult<>();
+                pendingFile = prompt; pendingFileResult = res;
+                Intent i = new Intent(Intent.ACTION_GET_CONTENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+                try { startActivityForResult(Intent.createChooser(i, "اختار الملف"), 41); }
+                catch (Exception e) { res.complete(prompt.dismiss()); pendingFile = null; }
+                return res;
+            }
+            @Override public GeckoResult<PromptResponse> onAlertPrompt(GeckoSession s, AlertPrompt prompt) {
+                GeckoResult<PromptResponse> res = new GeckoResult<>();
+                new AlertDialog.Builder(BetaActivity.this).setMessage(prompt.message)
+                    .setPositiveButton("تمام", (d, w) -> res.complete(prompt.dismiss()))
+                    .setOnCancelListener(d -> res.complete(prompt.dismiss())).show();
+                return res;
+            }
+            @Override public GeckoResult<PromptResponse> onButtonPrompt(GeckoSession s, ButtonPrompt prompt) {
+                GeckoResult<PromptResponse> res = new GeckoResult<>();
+                new AlertDialog.Builder(BetaActivity.this).setMessage(prompt.message)
+                    .setPositiveButton("أيوه", (d, w) -> res.complete(prompt.confirm(ButtonPrompt.Type.POSITIVE)))
+                    .setNegativeButton("لأ", (d, w) -> res.complete(prompt.confirm(ButtonPrompt.Type.NEGATIVE)))
+                    .setOnCancelListener(d -> res.complete(prompt.dismiss())).show();
+                return res;
+            }
+            @Override public GeckoResult<PromptResponse> onTextPrompt(GeckoSession s, TextPrompt prompt) {
+                GeckoResult<PromptResponse> res = new GeckoResult<>();
+                EditText et = new EditText(BetaActivity.this);
+                et.setText(prompt.defaultValue);
+                new AlertDialog.Builder(BetaActivity.this).setMessage(prompt.message).setView(et)
+                    .setPositiveButton("تمام", (d, w) -> res.complete(prompt.confirm(et.getText().toString())))
+                    .setNegativeButton("إلغاء", (d, w) -> res.complete(prompt.dismiss()))
+                    .setOnCancelListener(d -> res.complete(prompt.dismiss())).show();
+                return res;
+            }
+        });
+
         session.open(runtime);
         view = new GeckoView(this);
         view.setSession(session);
@@ -80,6 +121,18 @@ public class BetaActivity extends Activity {
 
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 9);
+    }
+
+    private GeckoSession.PromptDelegate.FilePrompt pendingFile;
+    private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> pendingFileResult;
+
+    @Override
+    protected void onActivityResult(int req, int code, Intent data) {
+        super.onActivityResult(req, code, data);
+        if (req != 41 || pendingFile == null) return;
+        Uri u = data == null ? null : data.getData();
+        pendingFileResult.complete(u != null ? pendingFile.confirm(this, u) : pendingFile.dismiss());
+        pendingFile = null; pendingFileResult = null;
     }
 
     @Override
