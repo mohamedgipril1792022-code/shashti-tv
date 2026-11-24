@@ -38,10 +38,29 @@ public class BetaActivity extends Activity {
         super.onCreate(b);
         if (runtime == null) {
             runtime = GeckoRuntime.create(this, new GeckoRuntimeSettings.Builder().consoleOutput(false).build());
-            // the real uBlock Origin, shipped inside the app (assets/ubo)
-            runtime.getWebExtensionController()
-                .ensureBuiltIn("resource://android/assets/ubo/", "uBlock0@raymondhill.net")
-                .accept(ext -> { }, err -> runOnUiThread(() -> Toast.makeText(this, "uBlock: " + err, Toast.LENGTH_LONG).show()));
+            // the real uBlock Origin from Firefox's add-on store (signed), installed once; a message says whether it runs
+            final org.mozilla.geckoview.WebExtensionController wc = runtime.getWebExtensionController();
+            wc.setPromptDelegate(new org.mozilla.geckoview.WebExtensionController.PromptDelegate() {
+                @Override public GeckoResult<org.mozilla.geckoview.AllowOrDeny> onInstallPrompt(org.mozilla.geckoview.WebExtension ext) {
+                    return GeckoResult.allow();
+                }
+            });
+            wc.list().accept(list -> {
+                org.mozilla.geckoview.WebExtension found = null;
+                if (list != null) for (org.mozilla.geckoview.WebExtension e : list)
+                    if ("uBlock0@raymondhill.net".equals(e.id) && !e.isBuiltIn) found = e;
+                if (found != null) {
+                    String v = found.metaData != null ? found.metaData.version : "";
+                    boolean on = found.metaData == null || found.metaData.enabled;
+                    say(on ? "✅ uBlock Origin شغال " + v : "⚠ uBlock Origin متركّب بس مقفول");
+                    if (!on) wc.enable(found, org.mozilla.geckoview.WebExtensionController.EnableSource.USER);
+                    return;
+                }
+                say("⏳ بيتركّب uBlock Origin…");
+                wc.install("https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi")
+                    .accept(ext -> say("✅ uBlock Origin اتركّب وشغال" + (ext != null && ext.metaData != null ? " " + ext.metaData.version : "")),
+                            err -> say("❌ uBlock Origin متركّبش: " + err));
+            }, err -> say("❌ " + err));
         }
         session = new GeckoSession(new GeckoSessionSettings.Builder()
             .userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_MOBILE)
@@ -122,6 +141,8 @@ public class BetaActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != android.content.pm.PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{"android.permission.POST_NOTIFICATIONS"}, 9);
     }
+
+    private void say(String m) { runOnUiThread(() -> Toast.makeText(this, m, Toast.LENGTH_LONG).show()); }
 
     private GeckoSession.PromptDelegate.FilePrompt pendingFile;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> pendingFileResult;
