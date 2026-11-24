@@ -3,3 +3,4 @@ android/.gradle/
 # copied from web/ at build time (the rest of assets/ is ours and is kept in git)
 android/app/src/main/assets/index.html
 android/app/src/main/assets/icon-192.png
+android/beta/src/main/assets/ubo/
