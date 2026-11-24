@@ -41,7 +41,8 @@ jobs:
           make_latest: true
 
   beta:
-    # Sajo Beta (GeckoView + uBlock Origin): its own job, so it never holds up Sajo TV
+    # Sajo Beta (GeckoView + uBlock Origin): paused — the experiment is closed (the code stays)
+    if: false
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
