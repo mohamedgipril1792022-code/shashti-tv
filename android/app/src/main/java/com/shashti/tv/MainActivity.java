@@ -192,6 +192,7 @@ public class MainActivity extends Activity {
                 adblock.clearLog();
                 if (stretched) setStretched(false);
                 applyZoom();
+                if (!isTv) { boolean home = pageHost == null; web.getSettings().setSupportZoom(!home); web.getSettings().setBuiltInZoomControls(!home); }
                 updatePhoneButton();
                 synchronized (pageLog) { pageLog.clear(); }
             }

@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Sajo TV</title>
 <meta name="theme-color" content="#160e10">
 <link rel="manifest" href="manifest.webmanifest">
@@ -113,7 +113,7 @@ footer{text-align:center;margin-top:30px}
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٢١',date:'٢٤-١١-٢٠٢٦',created:'الثلاثاء ٢٤ نوفمبر ٢٠٢٦ – ٢:١٥ ص'};
+const VERSION={n:'١٢٢',date:'٢٤-١١-٢٠٢٦',created:'الثلاثاء ٢٤ نوفمبر ٢٠٢٦ – ١:٣٥ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false;
@@ -227,7 +227,7 @@ function render(){
   cs.forEach(c=>{
     const s=siteById(c.siteId);
     const icon=c.icon||(s&&s.icon)||'';
-    const w=W[c.url];let sub=c.note||(s?s.name:hostOf(c.url)),pct=0;
+    const w=watchFor(W,c.url);let sub=c.note||(s?s.name:hostOf(c.url)),pct=0;
     if(w&&w.d>0){pct=Math.min(1,w.t/w.d);sub=pct>=0.97?'✓ خلصتها':'⏱ '+fmtT(w.t)+' من '+fmtT(w.d)}
     const t=tileEl({name:c.title,url:c.url,icon,sub,agoT:c.lastAt,menu:()=>tileMenu('cont',c)});
     if(pct>0&&pct<0.97){const b=document.createElement('div');b.className='pbar';b.innerHTML='<i style="width:'+Math.round(pct*100)+'%"></i>';t.appendChild(b)}
@@ -242,21 +242,34 @@ function dismissed(){try{return JSON.parse(localStorage.getItem('sajo-dismiss')|
 function dismiss(url){try{const d=dismissed();if(d.indexOf(url)<0){d.push(url);localStorage.setItem('sajo-dismiss',JSON.stringify(d.slice(-200)))}}catch(e){}}
 function nextTitle(t){const m=String(t||'').match(/^(.*?)(\d+)(\D*)$/);return m?m[1]+(+m[2]+1)+m[3]:(t||'')+' — الحلقة التالية'}
 let syncing=false;
+/* one video = one tile: the same video under different addresses (?t=, &pp=, the TV page…) counts once */
+function vkey(u){try{u=String(u||'');const x=new URL(u),h=x.hostname.replace(/^(www|m)\./,'');
+  if(/youtube\.com$|youtu\.be$/.test(h)){const v=x.searchParams.get('v')||(x.hash.match(/[?&]v=([\w-]+)/)||[])[1]||(h==='youtu.be'?x.pathname.slice(1):'')||(x.pathname.match(/\/shorts\/([\w-]+)/)||[])[1];if(v)return 'yt:'+v}
+  ['t','pp','si','feature','start','utm_source','utm_medium','utm_campaign','fbclid'].forEach(k=>x.searchParams.delete(k));
+  return h+x.pathname.replace(/\/+$/,'')+(x.search||'')}catch(e){return String(u||'')}}
+function cleanTitle(t,u){t=String(t||'').replace(/^\(\d+\)\s*/,'').replace(/\s*[-|–—]\s*(YouTube|يوتيوب)\s*$/i,'').trim();return t.slice(0,70)||hostOf(u)}
 function syncWatch(){
-  if(syncing)return;const W=watchMap(),keys=Object.keys(W);if(!keys.length)return;
-  const conts=[...items.values()].filter(o=>o.kind==='cont'),urls=new Set(conts.map(c=>c.url)),gone=dismissed(),ups=[];
-  // finished (97%) and its next episode is known: the tile moves on to it
-  conts.forEach(c=>{const w=W[c.url];if(w&&w.d>0&&w.t/w.d>=0.97&&w.next&&!urls.has(w.next)){urls.add(w.next);ups.push(Object.assign({},c,{url:w.next,title:nextTitle(c.title),note:'',lastAt:Date.now()}))}});
-  // watched more than 2 minutes: it joins continue watching by itself
-  keys.forEach(u=>{const w=W[u];if(!w||!(w.d>0)||w.t<120||urls.has(u)||gone.indexOf(u)>=0)return;
+  if(syncing)return;const W0=watchMap(),W={};
+  // progress by video (latest record wins)
+  Object.keys(W0).forEach(u=>{const k=vkey(u),w=W0[u];if(!W[k]||(w.at||0)>(W[k].at||0))W[k]=Object.assign({url:u},w)});
+  const keys=Object.keys(W),gone=dismissed().map(vkey),ups=[],dels=[];
+  // duplicates already in the list: keep the newest
+  const seen={};[...items.values()].filter(o=>o.kind==='cont').sort((a,b)=>b.lastAt-a.lastAt).forEach(c=>{const k=vkey(c.url);if(seen[k])dels.push(c.id);else seen[k]=c});
+  const conts=Object.values(seen),have=new Set(Object.keys(seen));
+  conts.forEach(c=>{const k=vkey(c.url),w=W[k];if(!w)return;let n=null;
+    if(w.d>0&&w.t/w.d>=0.97&&w.next&&!have.has(vkey(w.next))){have.add(vkey(w.next));n=Object.assign({},c,{url:w.next,title:nextTitle(c.title),note:'',lastAt:Date.now()})}
+    else if(c.auto&&w.title&&cleanTitle(w.title,c.url)!==c.title)n=Object.assign({},c,{title:cleanTitle(w.title,c.url)});   // a better name came later
+    if(n)ups.push(n)});
+  keys.forEach(k=>{const w=W[k];if(!(w.d>0)||w.t<120||have.has(k)||gone.indexOf(k)>=0)return;
     if(w.t/w.d>=0.97&&!w.next)return;
-    const nu=w.t/w.d>=0.97?w.next:u;if(urls.has(nu)||gone.indexOf(nu)>=0)return;urls.add(nu);
-    const title=String(w.title||'').split(/[|–—]/)[0].trim().slice(0,50)||hostOf(u);
-    const site=sites().find(x=>hostOf(x.url)===hostOf(u));
-    ups.push({id:'c-'+uid(),kind:'cont',title:nu===u?title:nextTitle(title),url:nu,note:'',siteId:site?site.id:'',icon:'',auto:true,lastAt:w.at||Date.now()})});
-  if(!ups.length)return;
-  syncing=true;ups.forEach(o=>items.set(o.id,o));saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}syncing=false;
+    const nu=w.t/w.d>=0.97?w.next:w.url,nk=vkey(nu);if(have.has(nk)||gone.indexOf(nk)>=0)return;have.add(nk);
+    const title=cleanTitle(w.title,w.url),site=sites().find(x=>hostOf(x.url)===hostOf(w.url));
+    ups.push({id:'c-'+uid(),kind:'cont',title:nu===w.url?title:nextTitle(title),url:nu,note:'',siteId:site?site.id:'',icon:'',auto:true,lastAt:w.at||Date.now()})});
+  if(!ups.length&&!dels.length)return;
+  syncing=true;dels.forEach(id=>{items.delete(id);if(col){const c=col;cloudWrite(id,()=>c.doc(id).delete())}});
+  ups.forEach(o=>items.set(o.id,o));saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}syncing=false;
 }
+function watchFor(W,u){const k=vkey(u);let best=null;Object.keys(W).forEach(x=>{if(vkey(x)===k&&(!best||(W[x].at||0)>(best.at||0)))best=W[x]});return best}
 function autoIcon(url){const h=hostOf(url);return h?'https://www.google.com/s2/favicons?domain='+h+'&sz=256':''}
 
 function visit(siteId,silent){
