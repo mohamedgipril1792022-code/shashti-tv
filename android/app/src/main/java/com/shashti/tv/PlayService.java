@@ -14,6 +14,8 @@ import android.os.IBinder;
 /** Keeps the app alive while a YouTube video plays with the phone locked (a media notification, like music apps). */
 public class PlayService extends Service {
     private static final String CH = "play";
+    private android.os.PowerManager.WakeLock wake;
+    private android.net.wifi.WifiManager.WifiLock wifi;
 
     static void start(Context c) {
         try {
@@ -42,7 +44,24 @@ public class PlayService extends Service {
             if (Build.VERSION.SDK_INT >= 29) startForeground(7, b.build(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
             else startForeground(7, b.build());
         } catch (Exception e) { stopSelf(); }
+        // the screen is off: keep the processor and the Wi-Fi awake while the video plays
+        try {
+            if (wake == null) {
+                wake = ((android.os.PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "sajo:play");
+                wake.acquire(4 * 60 * 60 * 1000L);
+            }
+            if (wifi == null) {
+                android.net.wifi.WifiManager wm = (android.net.wifi.WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
+                if (wm != null) { wifi = wm.createWifiLock(android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF, "sajo:play"); wifi.acquire(); }
+            }
+        } catch (Exception ignored) { }
         return START_NOT_STICKY;
+    }
+
+    @Override public void onDestroy() {
+        try { if (wake != null && wake.isHeld()) wake.release(); } catch (Exception ignored) { }
+        try { if (wifi != null && wifi.isHeld()) wifi.release(); } catch (Exception ignored) { }
+        super.onDestroy();
     }
 
     @Override public IBinder onBind(Intent intent) { return null; }

@@ -1459,14 +1459,31 @@ public class MainActivity extends Activity {
         super.onPause();
         if (ytBackground()) {
             PlayService.start(this);   // keep playing: the page is not paused
-            // if the page paused itself when the screen went off, play it again
-            for (int t : new int[]{400, 1200, 2500, 5000, 9000})
-                web.postDelayed(() -> web.evaluateJavascript("document.querySelectorAll('video').forEach(function(v){if(v.paused&&v.currentTime>0&&!v.ended){var p=v.play();if(p&&p.catch)p.catch(function(){})}})", null), t);
+            // the page's renderer keeps its priority while the app is out of sight (else Android slows/stops it)
+            if (Build.VERSION.SDK_INT >= 26) web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+            web.resumeTimers();
+            // only if a video was playing: whenever the page pauses it in the background, play it again
+            web.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended)})()", v -> {
+                if (!"true".equals(v)) return;
+                bgPlay = true;
+                web.post(bgKeeper);
+            });
         }
         else web.onPause();
     }
+    private volatile boolean bgPlay = false;
+    private final Runnable bgKeeper = new Runnable() {
+        @Override public void run() {
+            if (!bgPlay) return;
+            web.evaluateJavascript("document.querySelectorAll('video').forEach(function(v){if(v.paused&&v.currentTime>0&&!v.ended){var p=v.play();if(p&&p.catch)p.catch(function(){})}})", null);
+            web.postDelayed(this, 2000);
+        }
+    };
+
     @Override protected void onResume() {
         super.onResume();
+        bgPlay = false;
+        web.removeCallbacks(bgKeeper);
         PlayService.stop(this);
         web.onResume();
         Updater.resume(this); Updater.check(this, false);
