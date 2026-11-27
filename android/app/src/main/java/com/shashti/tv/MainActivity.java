@@ -116,6 +116,9 @@ public class MainActivity extends Activity {
         root.addView(cursor, new FrameLayout.LayoutParams(-1, -1));
         if (!isTv) { buildPhoneMenuButton(); buildZoomBar(); }   // phone only: the box stays exactly as it was
         setContentView(root);
+        // the page must already hold the view focus when a press lands: asking for it at ACTION_DOWN
+        // cancels that very gesture, so the first press only focuses the page and nothing opens
+        web.requestFocus();
 
         assets = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
@@ -1662,6 +1665,12 @@ public class MainActivity extends Activity {
             });
         }
     };
+
+    @Override public void onWindowFocusChanged(boolean f) {
+        super.onWindowFocusChanged(f);
+        // onResume runs before the window has focus, where requestFocus() is a silent no-op
+        if (f && customView == null && !web.hasFocus()) web.requestFocus();
+    }
 
     @Override protected void onResume() {
         super.onResume();
