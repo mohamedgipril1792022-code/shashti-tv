@@ -46,12 +46,18 @@ public class Updater {
                         if (manual) Toast.makeText(a, "✅ عندك آخر نسخة", Toast.LENGTH_SHORT).show();
                         return;
                     }
-                    new AlertDialog.Builder(a)
+                    final AlertDialog dlg = new AlertDialog.Builder(a)
                         .setTitle("🔄 فيه نسخة جديدة (" + name + ")")
                         .setMessage("تحب تحدّث دلوقتي؟ مواقعك وتكملاتك مش هتتمسح.")
                         .setPositiveButton("حدّث", (d, w) -> download(a))
                         .setNegativeButton("بعدين", null)
-                        .show();
+                        .create();
+                    // the box's OK dies until a button owns the focus: hand it to «حدّث» as the dialog opens
+                    dlg.setOnShowListener(d -> {
+                        android.widget.Button b = dlg.getButton(AlertDialog.BUTTON_POSITIVE);
+                        if (b != null) { b.setFocusable(true); b.requestFocus(); b.post(b::requestFocus); }
+                    });
+                    dlg.show();
                 });
             } catch (Exception e) {
                 if (manual) a.runOnUiThread(() -> Toast.makeText(a, "تعذّر التحقق من التحديث", Toast.LENGTH_SHORT).show());
