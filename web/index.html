@@ -47,7 +47,7 @@ h2 small{font-size:.55em;color:var(--mut);font-weight:400}
 .tile.capt:focus-visible .thumb,.tile.capt:hover .thumb{transform:scale(1.04);box-shadow:0 0 0 3px var(--red),0 8px 22px rgba(0,0,0,.55)}
 .tile.capt .ago{font-size:clamp(10px,.85vw,13px);padding:0 7px}
 .cap{padding:6px 3px 0;text-align:right;min-width:0;width:100%}
-.cap b{color:var(--txt);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;font-size:clamp(12px,1.05vw,16px);font-weight:700;line-height:1.3;white-space:normal;overflow:hidden;word-break:break-word}
+.cap b{color:var(--txt);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:clamp(12px,1.05vw,16px);font-weight:700;line-height:1.3;white-space:normal;overflow:hidden;word-break:break-word}
 .cap span{display:block;font-size:clamp(10px,.85vw,13px);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .editing .tile.capt::after{top:6px}
 .tile.sq .thumb{aspect-ratio:1;border-radius:20px}
@@ -362,9 +362,9 @@ function renderNow(){
     // progress kept on another device (it travels with the tile); the newer one wins
     const rem=(c.pd>0&&c.pt>0&&c.pdev&&c.pdev!==DEV)?{t:c.pt,d:c.pd,at:c.pat||0}:null;
     const pw=(w&&w.d>0&&(!rem||(w.at||0)>=rem.at))?w:rem,remote=!!rem&&pw===rem;
-    if(pw){pct=Math.min(1,pw.t/pw.d);sub=pct>=0.97?'✓ خلصتها':(remote?'📱 ':'⏱ ')+fmtT(pw.t)+' من '+fmtT(pw.d)}
+    if(pw){pct=Math.min(1,pw.t/pw.d);sub=pct>=0.97?'✓ خلصتها':(remote?'📱 ':'⏱ ')+'\u2066'+fmtT(pw.t)+'\u2069 من \u2066'+fmtT(pw.d)+'\u2069'}
     const gsz=(groups.get(seriesKey(c))||[c]).length;let nm=c.title;
-    if(gsz>1&&!UI.allEps){nm=seriesName(c.title);const en=epNum(c.title);if(en)sub='حلقة '+en+' · '+sub}
+    if(gsz>1&&!UI.allEps){nm=seriesName(c.title);const en=epNum(c.title);if(en)sub='حلقة \u2066'+en+'\u2069 · '+sub}
     if(c.rate>0)sub='★'+c.rate+' '+sub;
     const t=tileEl({name:nm,url:c.url,icon,sub,agoT:c.lastAt,cap:true,badge:!!c.isNew,onDone:()=>{finishSeries(UI.allEps?[c]:groupOf(c));toast('✓ اتشالت من التكملة')},menu:()=>tileMenu('cont',c)});
     if(pct>0&&pct<0.97){const b=document.createElement('div');b.className='pbar';b.innerHTML='<i style="width:'+Math.round(pct*100)+'%"></i>';t.querySelector('.thumb').appendChild(b)}
@@ -529,7 +529,10 @@ function vkey(u){try{u=String(u||'');const x=new URL(u),h=x.hostname.replace(/^(
   if(/youtube\.com$|youtu\.be$/.test(h)){const v=x.searchParams.get('v')||(x.hash.match(/[?&]v=([\w-]+)/)||[])[1]||(h==='youtu.be'?x.pathname.slice(1):'')||(x.pathname.match(/\/shorts\/([\w-]+)/)||[])[1];if(v)return 'yt:'+v}
   ['t','pp','si','feature','start','utm_source','utm_medium','utm_campaign','fbclid'].forEach(k=>x.searchParams.delete(k));
   return h+x.pathname.replace(/\/+$/,'')+(x.search||'')}catch(e){return String(u||'')}}
-function cleanTitle(t,u){t=String(t||'').replace(/^\(\d+\)\s*/,'').replace(/\s*[-|–—]\s*(YouTube|يوتيوب)\s*$/i,'').trim();return t.slice(0,70)||hostOf(u)}
+function cleanTitle(t,u){t=String(t||'').replace(/^\(\d+\)\s*/,'').replace(/\s+/g,' ').replace(/\s*[-|–—]\s*(YouTube on TV|YouTube|يوتيوب)\s*$/i,'').trim();
+  if(t.length>70){let cut=t.slice(0,70);const sep=Math.max(cut.lastIndexOf(' | '),cut.lastIndexOf(' - '),cut.lastIndexOf(' – '));if(sep>30)cut=cut.slice(0,sep);
+    t=cut.replace(/[\s\-|–—:&،,]+$/,'').trim()}
+  return t||hostOf(u)}
 function syncWatch(){
   if(syncing)return;
   syncWatchCloud();   // the progress itself travels too (throttled inside)
@@ -563,12 +566,12 @@ function ytFix(){
   const cache=ytCache;
   const ups=[];
   [...items.values()].filter(o=>o.kind==='cont').forEach(c=>{const k=vkey(c.url);if(k.indexOf('yt:')!==0)return;const id=k.slice(3),m=cache[id];
-    if(m){const want={title:m.title,icon:'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg'};
+    if(m){const want={title:cleanTitle(m.title,c.url),icon:'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg'};
       if(c.title!==want.title&&(c.auto||/youtube/i.test(c.title)))ups.push(Object.assign({},c,want));
       else if(!c.icon)ups.push(Object.assign({},c,{icon:want.icon}));return}
     if(ytAsked[id])return;ytAsked[id]=1;
     fetch('https://www.youtube.com/oembed?format=json&url='+encodeURIComponent('https://www.youtube.com/watch?v='+id))
-      .then(r=>r.ok?r.json():null).then(j=>{if(!j||!j.title)return;cache[id]={title:String(j.title).slice(0,70)};
+      .then(r=>r.ok?r.json():null).then(j=>{if(!j||!j.title)return;cache[id]={title:String(j.title)};
         try{localStorage.setItem('sajo-yt',JSON.stringify(cache))}catch(e){}ytFix();softRender()}).catch(()=>{})});
   if(!ups.length)return;ups.forEach(o=>items.set(o.id,o));saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}
 }
