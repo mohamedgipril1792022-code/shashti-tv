@@ -382,6 +382,8 @@ function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!
 const FOCUS_HOSTS='#chips,#contRow,#laterRow,#trAr,#trFx,#visitRow,#siteGrid,#matchRow';
 function tileKey(a){const n=a.querySelector&&a.querySelector('.cap b,.name');return (a.getAttribute('href')||'')+'|'+(n?n.textContent:(a.textContent||'').trim().slice(0,40))}
 function focusKey(){const a=document.activeElement;if(!a||a===document.body||!a.closest)return null;const h=a.closest(FOCUS_HOSTS);if(!h||h.closest('#modal'))return null;return {h:h.id,k:tileKey(a)}}
+function focusBoot(){const a=document.activeElement;if(a&&a!==document.body)return;if($('#modal').classList.contains('open'))return;
+  const f=document.querySelector('#contRow .tile[data-nav],#laterRow .tile[data-nav],#siteGrid .tile[data-nav],#trAr .tile[data-nav],header [data-nav]');if(f)f.focus({preventScroll:true})}
 function restoreFocus(f){if(!f)return;const h=document.getElementById(f.h);if(!h)return;const e=[...h.querySelectorAll('[data-nav]')].find(x=>tileKey(x)===f.k);if(e&&document.activeElement!==e)e.focus({preventScroll:true})}
 function render(){const f=focusKey();renderNow();restoreFocus(f)}
 let lastInput=0,ptrDown=false,softT=0;
@@ -431,7 +433,7 @@ function renderNow(){
   const cr=$('#contRow');cr.innerHTML='';
   syncWatch();ytFix();
   const W=watchNorm();
-  const allC=[...items.values()].filter(o=>o.kind==='cont'&&siteOk(o.siteId)&&qMatch(o.title,o.note,o.url)).sort((a,b)=>b.lastAt-a.lastAt);
+  const allC=[...items.values()].filter(o=>o.kind==='cont'&&siteOk(o.siteId)&&!isYtSong(o)&&qMatch(o.title,o.note,o.url)).sort((a,b)=>b.lastAt-a.lastAt);
   const groups=new Map();allC.forEach(o=>{const k=seriesKey(o);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(o)});
   const cs=UI.allEps?allC:[...groups.values()].map(a=>a[0]);   // one tile per series: the one you watched last
   if(!cs.length&&qv)cr.innerHTML=noRes;else if(!cs.length)cr.innerHTML='<div class="empty">وانت بتتفرج، دوس «▶ تكملة» واحفظ رابط الحلقة والدقيقة اللي وقفت عندها.</div>';
@@ -557,6 +559,8 @@ function seriesKey(c){
   if(!/[\d٠-٩]/.test(t)||vkey(c.url).indexOf('yt:')===0)return 'i:'+c.id;
   return 'a:'+hostOf(c.url)+'|'+t.replace(/[\d٠-٩]+/g,'#').replace(/\s+/g,' ').trim().toLowerCase();
 }
+// the continue row is for series and films: a YouTube video only belongs in it when its title says episode
+const isYtSong=c=>vkey(c.url).indexOf('yt:')===0&&!/حلق|\bep(?:isode)?\.?\s*\d/i.test(String(c.title||''));
 function groupOf(c){const k=seriesKey(c);return [...items.values()].filter(o=>o.kind==='cont'&&seriesKey(o)===k).sort((a,b)=>b.lastAt-a.lastAt)}
 function setMany(list){list.forEach(o=>{items.set(o.id,o);if(col){const c=col;cloudWrite(o.id,()=>c.doc(o.id).set(o))}});saveLocal();render()}
 function finishSeries(list){list.forEach(c=>{dismiss(c.url);items.delete(c.id);const h=histOf(c);items.set(h.id,h);if(col){const cc=col;cloudWrite(c.id,()=>cc.doc(c.id).delete());cloudWrite(h.id,()=>cc.doc(h.id).set(h))}});trimHist();saveLocal();render()}
@@ -719,7 +723,7 @@ function guardInputs(root){root.querySelectorAll('input:not([type=file]),textare
   i.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==i)i.readOnly=true},60));
 })}
 function openModal(html){lastFocus=document.activeElement;$('#box').innerHTML=html;guardInputs($('#box'));$('#modal').classList.add('open');setTimeout(()=>{const f=$('#box input,#box select,#box button');f&&f.focus()},30)}
-function closeModal(){$('#modal').classList.remove('open');$('#box').innerHTML='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
+function closeModal(){okSwallow=false;$('#modal').classList.remove('open');$('#box').innerHTML='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
 function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
@@ -1000,7 +1004,7 @@ document.addEventListener('keydown',e=>{const a=e.target;if(!isOk(e)||!a.classLi
   okTile=a;okLong=false;clearTimeout(okTimer);
   okTimer=setTimeout(()=>{if(okTile===a){okLong=true;okTile=null;okSwallow=true;a._menu&&a._menu()}},600)},true);
 document.addEventListener('keyup',e=>{const a=e.target;if(!isOk(e))return;
-  if(okTile){e.preventDefault();clearTimeout(okTimer);const t=okTile;okTile=null;if(!okLong&&t===a)t.click();okLong=false}},true);
+  if(okTile){e.preventDefault();clearTimeout(okTimer);const t=okTile;okTile=null;if(!okLong){const f=document.activeElement,c=t.isConnected?t:(f&&f.classList&&f.classList.contains('tile')?f:(a&&a.classList&&a.classList.contains('tile')?a:null));if(c)c.click()}okLong=false}},true);
 window.tileMenuFocused=function(){const a=document.activeElement;if(a&&a._menu){a._menu();return 1}return 0};
 document.addEventListener('keydown',e=>{if((e.key==='ContextMenu'||e.key==='F10')&&!$('#modal').classList.contains('open')){if(tileMenuFocused())e.preventDefault()}});
 document.addEventListener('contextmenu',e=>{const a=e.target.closest&&e.target.closest('.tile');if(a&&a._menu){e.preventDefault();a._menu()}});
@@ -1280,7 +1284,7 @@ $('#bk').onclick=exportData;$('#rs').onclick=importData;$('#st').onclick=openSet
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 guardInputs(document);
 applyUI();
-loadLocal();applyRedirects();render();setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
+loadLocal();applyRedirects();render();setTimeout(focusBoot,1200);setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
 setInterval(()=>{if(!$('#modal').classList.contains('open'))softRender()},60000);
 </script>
 </body>
