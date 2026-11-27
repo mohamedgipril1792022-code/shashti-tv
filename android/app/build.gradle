@@ -33,6 +33,9 @@ dependencies {
     implementation 'androidx.core:core:1.13.1'
     implementation 'androidx.mediarouter:mediarouter:1.8.1'
     implementation 'com.google.android.gms:play-services-cast-framework:22.1.0'
+    implementation platform('com.google.firebase:firebase-bom:33.7.0')
+    implementation 'com.google.firebase:firebase-firestore'
+    implementation 'com.google.firebase:firebase-auth'
 }
 
 // copy the web app into the APK assets before every build
