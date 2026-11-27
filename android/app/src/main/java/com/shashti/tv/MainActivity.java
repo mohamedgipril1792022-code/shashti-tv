@@ -1907,7 +1907,7 @@ public class MainActivity extends Activity {
             castStartAt = pos;
             if (castSession != null && castSession.isConnected()) { castGo(); return; }
             try {
-                MediaRouteChooserDialog d = new MediaRouteChooserDialog(this);
+                MediaRouteChooserDialog d = new MediaRouteChooserDialog(new androidx.appcompat.view.ContextThemeWrapper(this, androidx.appcompat.R.style.Theme_AppCompat_Dialog));
                 d.setRouteSelector(new MediaRouteSelector.Builder()
                         .addControlCategory(CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID))
                         .build());
