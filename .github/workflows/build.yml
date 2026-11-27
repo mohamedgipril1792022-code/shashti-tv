@@ -5,6 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# one run at a time: a slower older run must never overwrite a newer run's APK or version.json
+concurrency:
+  group: build-main
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pages: write
@@ -86,6 +91,9 @@ jobs:
           make_latest: false
 
   pages:
+    # version.json goes out only AFTER this run's APK is on the release, or the app keeps
+    # prompting for a number whose APK is not there yet and the update loops
+    needs: apk
     runs-on: ubuntu-latest
     continue-on-error: true
     environment:
