@@ -90,6 +90,11 @@ public class MainActivity extends Activity {
         root = new FrameLayout(this);
         web = new WebView(this);
         root.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        // the page must own the view focus: when it doesn't, the first touch/press hands the focus to it and the page
+        // jumps to its first button («＋») instead of acting on the tile that was pressed
+        web.setFocusable(true);
+        web.setFocusableInTouchMode(true);
+        web.setOnTouchListener((tv, ev) -> { if (ev.getActionMasked() == MotionEvent.ACTION_DOWN && !tv.hasFocus()) tv.requestFocus(); return false; });
         buildNavButtons();
         cursor = new CursorView(this);
         cursor.setVisibility(View.GONE);
@@ -205,6 +210,7 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView v, String u) {
                 if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && pageHost != null) { v.evaluateJavascript(CSS_JS, null); v.evaluateJavascript(SK_JS, null); ensureStealth(null); }
                 if (isTv) v.postDelayed(MainActivity.this::refreshBoxes, 600);
+                if (!v.hasFocus() && customView == null) v.requestFocus();
                 if (pageHost != null) noteRedirect(u);
                 if (pageHost != null) { pageUrl = u; pageTitle = v.getTitle() == null ? "" : v.getTitle(); }   // the remote's box map: TV only
                 updatePhoneButton();
@@ -1603,6 +1609,7 @@ public class MainActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         activityPaused = false;
+        if (customView == null && !web.hasFocus()) web.requestFocus();
         if (!remoteTried) { remoteTried = true; if (remoteOn()) startRemote(); }
         stopKeeping();
         web.evaluateJavascript(VIS_UNLOCK_JS, null);
@@ -1834,6 +1841,31 @@ public class MainActivity extends Activity {
         /** progress saved on another device: resume from there */
         @JavascriptInterface
         public void seedWatch(String url, double t, double d) { if (url != null && d > 60 && t >= 0) saveWatch(url, t, d, null, null); }
+        /** launcher only: downloads a page (no CORS here) and hands the HTML to window.__pageCb(id, html) */
+        @JavascriptInterface
+        public void fetchPage(final String url, final String id) {
+            if (pageUrl != null || url == null || id == null || !(url.startsWith("https://") || url.startsWith("http://"))) return;
+            new Thread(() -> {
+                String html = "";
+                try {
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(url).openConnection();
+                    c.setConnectTimeout(8000); c.setReadTimeout(10000); c.setInstanceFollowRedirects(true);
+                    c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36");
+                    c.setRequestProperty("Accept-Language", "ar,en;q=0.8");
+                    if (c.getResponseCode() == 200) {
+                        java.io.InputStream in = c.getInputStream();
+                        java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                        byte[] b = new byte[8192]; int n, tot = 0;
+                        while (tot < 1500000 && (n = in.read(b)) > 0) { bo.write(b, 0, n); tot += n; }
+                        in.close();
+                        html = bo.toString("UTF-8");
+                    }
+                    c.disconnect();
+                } catch (Exception ignored) { }
+                final String js = "window.__pageCb&&window.__pageCb(" + org.json.JSONObject.quote(id) + "," + org.json.JSONObject.quote(html) + ")";
+                runOnUiThread(() -> { if (pageUrl == null) web.evaluateJavascript(js, null); });
+            }).start();
+        }
         /** for the launcher: sites that moved ({"https://old":{"to":"https://new","n":2}}) */
         @JavascriptInterface
         public String redirects() { return MainActivity.this.getSharedPreferences("redirects", MODE_PRIVATE).getString("m", "{}"); }
