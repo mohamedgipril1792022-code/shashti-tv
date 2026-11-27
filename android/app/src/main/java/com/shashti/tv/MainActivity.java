@@ -67,6 +67,10 @@ public class MainActivity extends Activity {
     private String pendingAdd = null;
     private WebView bgTab;
     private String bgUrl = null;
+    // a site that moved to a new address: remembered so the launcher can update its tile by itself
+    private String launchUrl = null;
+    private long launchAt = 0;
+    private boolean launchNoted = false;
 
     // the hiding rules of the lists, applied in every frame (players included) as soon as a document starts
     private static final String CSS_JS =
@@ -126,6 +130,7 @@ public class MainActivity extends Activity {
         web.addJavascriptInterface(new Bridge(), "Android");
         if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             WebViewCompat.addDocumentStartJavaScript(web, CSS_JS, Collections.singleton("*"));
+            WebViewCompat.addDocumentStartJavaScript(web, SK_JS, Collections.singleton("*"));
             String st = fullMode() ? asset("stealth.js") : null;   // box: only after the user says so (see fullMode)
             // continue watching (progress + resume): every page, box and phone
             String wt = asset("watch.js");
@@ -198,8 +203,9 @@ public class MainActivity extends Activity {
             }
             @Override
             public void onPageFinished(WebView v, String u) {
-                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && pageHost != null) { v.evaluateJavascript(CSS_JS, null); ensureStealth(null); }
+                if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT) && pageHost != null) { v.evaluateJavascript(CSS_JS, null); v.evaluateJavascript(SK_JS, null); ensureStealth(null); }
                 if (isTv) v.postDelayed(MainActivity.this::refreshBoxes, 600);
+                if (pageHost != null) noteRedirect(u);
                 if (pageHost != null) { pageUrl = u; pageTitle = v.getTitle() == null ? "" : v.getTitle(); }   // the remote's box map: TV only
                 updatePhoneButton();
                 if (pendingAdd != null && atHome()) {
@@ -215,6 +221,7 @@ public class MainActivity extends Activity {
                 if (sc == null || sc.equals("about") || sc.equals("data") || sc.equals("blob") || sc.equals("javascript")) return false;
                 if (!"http".equals(sc) && !"https".equals(sc)) { logLine("⛔ رابط تطبيق: " + r.getUrl()); return r.isForMainFrame() || r.hasGesture(); }
                 // box: YouTube opens in its TV interface (made for the remote, full-screen video)
+                if (r.isForMainFrame()) trackLaunch(r);
                 if (r.isForMainFrame() && ytRoute(v, r.getUrl().toString())) return true;
                 // a page that jumps to a listed ad page (a popup-ad listed in the filter lists)
                 if (pageHost != null && r.isForMainFrame() && adblock.shouldBlock(r.getUrl().toString(), pageHost, FilterEngine.POPUP)) {
@@ -580,7 +587,7 @@ public class MainActivity extends Activity {
                     if (!atHome()) { web.loadUrl(HOME); Toast.makeText(this, "🏠 الرئيسية", Toast.LENGTH_SHORT).show(); }
                 }
             } else if (e.getAction() == KeyEvent.ACTION_UP) {
-                if (!backLong) onBack();
+                if (!backLong && !cancelAutoNext()) onBack();   // Back during the auto-next countdown cancels it
                 backLong = false;
             }
             return true;
@@ -1456,36 +1463,149 @@ public class MainActivity extends Activity {
     // phone + YouTube: the video keeps playing with the phone locked or the app in the background
     private boolean ytBackground() { return !isTv && pageHost != null && (pageHost.endsWith("youtube.com") || pageHost.equals("youtu.be")); }
 
+    // phone + YouTube only: a playing video keeps playing with the screen off or the app in the background
+    private volatile boolean activityPaused = false;
+    // in every frame: seek / play-pause from the phone remote, and the intro that is learned from the viewer and skipped by itself
+    private static final String SK_JS =
+        "(function(){if(window.__sajoSk)return;window.__sajoSk=1;" +
+        "function main(){var vs=document.querySelectorAll('video'),b=null,bd=0;for(var i=0;i<vs.length;i++){var d=vs[i].duration;if(d>60&&d>bd){bd=d;b=vs[i]}}return b}" +
+        "function relay(m){for(var i=0;i<frames.length;i++){try{frames[i].postMessage(m,'*')}catch(e){}}}" +
+        "function act(m){var v=main(),r='';" +
+        "if(v){try{if(m.op==='rel'){v.currentTime=Math.max(0,Math.min(v.duration-2,v.currentTime+m.n));r='ok'}" +
+        "else if(m.op==='abs'){v.currentTime=Math.max(0,Math.min(v.duration-2,m.n));r='ok'}" +
+        "else if(m.op==='toggle'){if(v.paused)v.play();else v.pause();r='ok'}}catch(e){}}" +
+        "relay(m);return r}" +
+        "window.addEventListener('message',function(e){var m=e.data;if(m&&m.sajoSk){window.__sajoOwn=Date.now();act(m)}});" +
+        "window.__sajoAct=function(op,n){window.__sajoOwn=Date.now();return act({sajoSk:1,op:op,n:n})};" +
+        "function watch(v){if(v.__sajoW)return;v.__sajoW=1;var meta=Date.now(),prev=0,done=0;" +
+        "v.addEventListener('loadedmetadata',function(){meta=Date.now();prev=0;done=0});" +
+        "v.addEventListener('timeupdate',function(){" +
+        "if(!v.seeking)prev=v.currentTime;" +
+        "if(done||!(v.duration>600)||v.currentTime<3||v.currentTime>20||!window.Android||!Android.introAuto||!Android.introAuto())return;" +
+        "done=1;var end=+Android.introEnd(location.hostname);" +
+        "if(end>20&&end<v.duration/3&&Date.now()-meta<30000&&v.currentTime<end-8){window.__sajoOwn=Date.now();v.currentTime=end;try{Android.introSkipped(Math.round(end))}catch(e){}}});" +
+        "v.addEventListener('seeked',function(){" +
+        "if(!(v.duration>600)||Date.now()-(window.__sajoOwn||0)<2500||Date.now()-meta<6000)return;" +
+        "var from=prev,to=v.currentTime;" +
+        "if(from<180&&to-from>=25&&to-from<=240&&to<=330&&window.Android&&Android.introLearn){try{Android.introLearn(location.hostname,Math.round(to))}catch(e){}}})}" +
+        "function scan(){var vs=document.querySelectorAll('video');for(var i=0;i<vs.length;i++)watch(vs[i])}" +
+        "try{scan();setInterval(scan,2000)}catch(e){}" +
+        "})()";
+
+    // auto-next: when an episode ends, the next one opens by itself after a short countdown (opt-in, from the launcher's settings)
+    private String autoNextFor = null;
+    private Runnable autoNextRun = null;
+    private boolean autoNextOn() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("autonext", false); }
+    private void scheduleAutoNext(String from, String next) {
+        if (autoNextRun != null || from == null || next == null || from.equals(autoNextFor)) return;
+        if (pageHost == null || isYt(pageHost)) return;          // not on the launcher, and YouTube plays its own next video
+        autoNextFor = from;
+        Toast.makeText(this, "▶ الحلقة التالية بعد ٨ ثواني — Back للإلغاء", Toast.LENGTH_LONG).show();
+        autoNextRun = () -> { autoNextRun = null; if (from.equals(pageUrl)) web.loadUrl(next); };
+        ui.postDelayed(autoNextRun, 8000);
+    }
+    private boolean cancelAutoNext() {
+        if (autoNextRun == null) return false;
+        ui.removeCallbacks(autoNextRun); autoNextRun = null;
+        Toast.makeText(this, "اتلغى تشغيل الحلقة التالية", Toast.LENGTH_SHORT).show();
+        return true;
+    }
+    // sleep timer: after N minutes the video is paused and the app goes back to the launcher
+    private long sleepAt = 0;
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable sleepRun = new Runnable() {
+        @Override public void run() {
+            sleepAt = 0;
+            web.evaluateJavascript("document.querySelectorAll('video,audio').forEach(function(v){try{v.pause()}catch(e){}})", null);
+            stopKeeping();
+            web.loadUrl(HOME);
+            Toast.makeText(MainActivity.this, "😴 مؤقّت النوم: اتقفل", Toast.LENGTH_LONG).show();
+        }
+    };
+    private int bgIdle = 0;
+    private android.os.PowerManager.WakeLock bgLock;
+    private static final String PLAYING_JS =
+        "(function(){var v=document.querySelectorAll('video');for(var i=0;i<v.length;i++){if(!v[i].paused&&!v[i].ended&&v[i].currentTime>0)return true}return false})()";
+    // YouTube pauses itself when the page turns "hidden": while we are in the background the page is told it is still visible
+    private static final String VIS_LOCK_JS =
+        "(function(){if(window.__sajoVis)return;window.__sajoVis=1;" +
+        "try{['hidden','webkitHidden'].forEach(function(k){Object.defineProperty(document,k,{configurable:true,get:function(){return false}})});" +
+        "['visibilityState','webkitVisibilityState'].forEach(function(k){Object.defineProperty(document,k,{configurable:true,get:function(){return 'visible'}})})}catch(e){}" +
+        "window.__sajoVisH=function(e){e.stopImmediatePropagation()};" +
+        "document.addEventListener('visibilitychange',window.__sajoVisH,true);document.addEventListener('webkitvisibilitychange',window.__sajoVisH,true);" +
+        "window.addEventListener('blur',window.__sajoVisH,true);window.addEventListener('pagehide',window.__sajoVisH,true)})()";
+    private static final String VIS_UNLOCK_JS =
+        "(function(){if(!window.__sajoVis)return;window.__sajoVis=0;" +
+        "try{['hidden','webkitHidden','visibilityState','webkitVisibilityState'].forEach(function(k){delete document[k]})}catch(e){}" +
+        "var h=window.__sajoVisH;if(h){document.removeEventListener('visibilitychange',h,true);document.removeEventListener('webkitvisibilitychange',h,true);window.removeEventListener('blur',h,true);window.removeEventListener('pagehide',h,true)}})()";
+    // replays a video the page paused; answers p = a video is going, e = it ended, n = none on the page
+    private static final String KEEP_JS =
+        "(function(){var vs=document.querySelectorAll('video');if(!vs.length)return 'n';var r='e';" +
+        "for(var i=0;i<vs.length;i++){var v=vs[i];if(v.ended)continue;r='p';if(v.paused&&v.currentTime>0){var p=v.play();if(p&&p.catch)p.catch(function(){})}}return r})()";
+
+    /** keeps the CPU awake while the screen is off (needs <uses-permission android:name="android.permission.WAKE_LOCK"/>; skipped if it is not declared) */
+    private void holdCpu(boolean on) {
+        try {
+            if (on) {
+                if (bgLock == null) {
+                    bgLock = ((android.os.PowerManager) getSystemService(POWER_SERVICE)).newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "sajo:bgplay");
+                    bgLock.setReferenceCounted(false);
+                }
+                if (!bgLock.isHeld()) bgLock.acquire(6 * 60 * 60 * 1000L);
+            } else if (bgLock != null && bgLock.isHeld()) bgLock.release();
+        } catch (Exception ignored) { }
+    }
+
+    private void keepPlaying() {
+        PlayService.start(this);   // keep playing: the page is not paused
+        holdCpu(true);
+        // the page's renderer keeps its priority while the app is out of sight (else Android slows/stops it)
+        if (Build.VERSION.SDK_INT >= 26) web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
+        web.resumeTimers();
+        web.evaluateJavascript(VIS_LOCK_JS, null);
+        // only if a video was playing: whenever the page pauses it in the background, play it again
+        web.evaluateJavascript(PLAYING_JS, v -> {
+            if (!"true".equals(v) || !activityPaused) return;
+            bgIdle = 0;
+            bgPlay = true;
+            web.removeCallbacks(bgKeeper);
+            web.post(bgKeeper);
+        });
+    }
+
+    /** the video is over (or gone) for good: let go of the service and the wake lock */
+    private void stopKeeping() {
+        bgPlay = false;
+        web.removeCallbacks(bgKeeper);
+        PlayService.stop(this);
+        holdCpu(false);
+    }
+
     @Override protected void onPause() {
         super.onPause();
-        if (ytBackground()) {
-            PlayService.start(this);   // keep playing: the page is not paused
-            // the page's renderer keeps its priority while the app is out of sight (else Android slows/stops it)
-            if (Build.VERSION.SDK_INT >= 26) web.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, false);
-            web.resumeTimers();
-            // only if a video was playing: whenever the page pauses it in the background, play it again
-            web.evaluateJavascript("(function(){var v=document.querySelector('video');return !!(v&&!v.paused&&!v.ended)})()", v -> {
-                if (!"true".equals(v)) return;
-                bgPlay = true;
-                web.post(bgKeeper);
-            });
-        }
+        activityPaused = true;
+        if (ytBackground()) keepPlaying();
         else web.onPause();
     }
     private volatile boolean bgPlay = false;
     private final Runnable bgKeeper = new Runnable() {
         @Override public void run() {
             if (!bgPlay) return;
-            web.evaluateJavascript("document.querySelectorAll('video').forEach(function(v){if(v.paused&&v.currentTime>0&&!v.ended){var p=v.play();if(p&&p.catch)p.catch(function(){})}})", null);
-            web.postDelayed(this, 2000);
+            web.evaluateJavascript(KEEP_JS, r -> {
+                if (!bgPlay) return;
+                if (r != null && r.contains("p")) bgIdle = 0;
+                else if (++bgIdle >= 40) { stopKeeping(); return; }   // ~40 s without a video: stop holding the phone awake
+                web.postDelayed(bgKeeper, 1000);
+            });
         }
     };
 
     @Override protected void onResume() {
         super.onResume();
-        bgPlay = false;
-        web.removeCallbacks(bgKeeper);
-        PlayService.stop(this);
+        activityPaused = false;
+        if (!remoteTried) { remoteTried = true; if (remoteOn()) startRemote(); }
+        stopKeeping();
+        web.evaluateJavascript(VIS_UNLOCK_JS, null);
         web.onResume();
         Updater.resume(this); Updater.check(this, false);
         if (!isTv && Build.VERSION.SDK_INT >= 33 && !askedNotif) {
@@ -1495,7 +1615,8 @@ public class MainActivity extends Activity {
         }
     }
     private boolean askedNotif = false;
-    @Override protected void onDestroy() { PlayService.stop(this); super.onDestroy(); }
+    private boolean remoteTried = false;
+    @Override protected void onDestroy() { PlayService.stop(this); holdCpu(false); stopRemote(); super.onDestroy(); }
 
     // phone + YouTube: turn the phone sideways = the video fills the screen (like the YouTube app); upright = back
     private static final String YT_FILL_JS = "(function(){if(window.__shFs)return 'on';var p=document.querySelector('#player-container-id,.html5-video-player,#movie_player,#player');" +
@@ -1527,7 +1648,204 @@ public class MainActivity extends Activity {
         }
     }
 
+    /** Main-frame navigation: remember the address a tile opened; a move the user made by hand ends the tracking. */
+    private void trackLaunch(WebResourceRequest r) {
+        boolean redirect = (Build.VERSION.SDK_INT >= 24 && r.isRedirect())
+                || (!r.hasGesture() && System.currentTimeMillis() - launchAt < 8000);
+        if (pageHost == null) {                      // opened from the launcher
+            launchUrl = r.getUrl().toString();
+            launchAt = System.currentTimeMillis();
+            launchNoted = false;
+        } else if (!redirect) {
+            launchUrl = null;                        // the user went on by themselves: not a redirect
+        }
+    }
+
+    /** The page that finished loading is on another site than the tile opened: the site moved. Needs the same move twice to count. */
+    private void noteRedirect(String finalUrl) {
+        String from = launchUrl;
+        if (from == null || launchNoted || finalUrl == null || System.currentTimeMillis() - launchAt > 20000) return;
+        launchNoted = true;
+        try {
+            Uri a = Uri.parse(from), b = Uri.parse(finalUrl);
+            if (a.getHost() == null || b.getHost() == null) return;
+            if (FilterEngine.base(a.getHost()).equals(FilterEngine.base(b.getHost()))) return;   // www / subdomain: same site
+            String oldO = a.getScheme() + "://" + a.getHost(), newO = b.getScheme() + "://" + b.getHost();
+            android.content.SharedPreferences sp = getSharedPreferences("redirects", MODE_PRIVATE);
+            org.json.JSONObject all = new org.json.JSONObject(sp.getString("m", "{}"));
+            org.json.JSONObject e = all.optJSONObject(oldO);
+            int n = (e != null && newO.equals(e.optString("to"))) ? e.optInt("n") + 1 : 1;
+            all.put(oldO, new org.json.JSONObject().put("to", newO).put("n", n));
+            sp.edit().putString("m", all.toString()).apply();
+        } catch (Exception ignored) { }
+    }
+
+    // ---------------------------------------------------------------- phone remote (a small web server on the local network)
+    private RemoteServer remoteSrv = null;
+    private int remotePort = 0;
+    private boolean remoteOn() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("remote", false); }
+    private String remotePin() {
+        android.content.SharedPreferences sp = getSharedPreferences("adblock", MODE_PRIVATE);
+        String pin = sp.getString("rpin", "");
+        if (pin.length() != 6) { pin = String.valueOf(100000 + new java.util.Random().nextInt(900000)); sp.edit().putString("rpin", pin).apply(); }
+        return pin;
+    }
+    private String localIp() {
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> en = java.net.NetworkInterface.getNetworkInterfaces();
+            while (en != null && en.hasMoreElements()) {
+                java.net.NetworkInterface ni = en.nextElement();
+                if (!ni.isUp() || ni.isLoopback()) continue;
+                java.util.Enumeration<java.net.InetAddress> ad = ni.getInetAddresses();
+                while (ad.hasMoreElements()) {
+                    java.net.InetAddress a = ad.nextElement();
+                    if (a instanceof java.net.Inet4Address && a.isSiteLocalAddress()) return a.getHostAddress();
+                }
+            }
+        } catch (Exception ignored) { }
+        return "";
+    }
+    private void startRemote() {
+        if (remoteSrv != null) return;
+        try {
+            remoteSrv = new RemoteServer(remoteHost, remotePin());
+            remotePort = remoteSrv.start();
+        } catch (Exception e) {
+            remoteSrv = null; remotePort = 0;
+            Toast.makeText(this, "تعذّر تشغيل ريموت الموبايل: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+    private void stopRemote() { if (remoteSrv != null) { remoteSrv.stop(); remoteSrv = null; remotePort = 0; } }
+
+    private void sendKey(int code) {
+        long t = SystemClock.uptimeMillis();
+        dispatchKeyEvent(new KeyEvent(t, t, KeyEvent.ACTION_DOWN, code, 0));
+        dispatchKeyEvent(new KeyEvent(t, t + 40, KeyEvent.ACTION_UP, code, 0));
+    }
+    private void seekAct(String op, int n) { web.evaluateJavascript("window.__sajoAct&&__sajoAct('" + op + "'," + n + ")", null); }
+    private int introEndFor(String host) {
+        try { return host == null ? 0 : introMap().optInt(FilterEngine.base(host), 0); } catch (Exception e) { return 0; }
+    }
+    private org.json.JSONObject introMap() {
+        try { return new org.json.JSONObject(getSharedPreferences("adblock", MODE_PRIVATE).getString("intro", "{}")); }
+        catch (Exception e) { return new org.json.JSONObject(); }
+    }
+
+    private void remoteCmd(String c) {
+        android.media.AudioManager am = (android.media.AudioManager) getSystemService(AUDIO_SERVICE);
+        switch (c) {
+            case "up": sendKey(KeyEvent.KEYCODE_DPAD_UP); break;
+            case "down": sendKey(KeyEvent.KEYCODE_DPAD_DOWN); break;
+            case "left": sendKey(KeyEvent.KEYCODE_DPAD_LEFT); break;
+            case "right": sendKey(KeyEvent.KEYCODE_DPAD_RIGHT); break;
+            case "ok": sendKey(KeyEvent.KEYCODE_DPAD_CENTER); break;
+            case "back": sendKey(KeyEvent.KEYCODE_BACK); break;
+            case "menu": sendKey(KeyEvent.KEYCODE_MENU); break;
+            case "home": web.loadUrl(HOME); break;
+            case "play": seekAct("toggle", 0); break;
+            case "back10": seekAct("rel", -10); break;
+            case "fwd10": seekAct("rel", 10); break;
+            case "skip": {                                   // the learned intro end of this site, else 85 s forward
+                int end = introEndFor(pageHost);
+                if (end > 0) seekAct("abs", end); else seekAct("rel", 85);
+                Toast.makeText(this, "⏭ تخطّي المقدمة", Toast.LENGTH_SHORT).show();
+                break;
+            }
+            case "volup": if (am != null) am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_RAISE, android.media.AudioManager.FLAG_SHOW_UI); break;
+            case "voldown": if (am != null) am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_LOWER, android.media.AudioManager.FLAG_SHOW_UI); break;
+            case "mute": if (am != null && Build.VERSION.SDK_INT >= 23) am.adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_TOGGLE_MUTE, android.media.AudioManager.FLAG_SHOW_UI); break;
+            default: break;
+        }
+    }
+
+    private final RemoteServer.Host remoteHost = new RemoteServer.Host() {
+        @Override public void cmd(String c) { runOnUiThread(() -> remoteCmd(c)); }
+        @Override public void text(String s, RemoteServer.Reply r) {
+            runOnUiThread(() -> web.evaluateJavascript(
+                "(function(t){var e=document.activeElement;if(e&&(e.tagName==='INPUT'||e.tagName==='TEXTAREA')){e.readOnly=false;" +
+                "var d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e),'value');if(d&&d.set)d.set.call(e,t);else e.value=t;" +
+                "e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return 'ok'}return 'none'})(" +
+                org.json.JSONObject.quote(s) + ")", v -> r.done(v != null && v.contains("ok") ? "ok" : "none")));
+        }
+        @Override public void open(String u) {
+            runOnUiThread(() -> {
+                String url = u.trim();
+                if (!url.matches("(?i)^https?://.*")) url = "https://" + url;
+                if (url.length() > 2000) return;
+                web.loadUrl(url);
+            });
+        }
+    };
+
     private class Bridge {
+        /** phone remote: {"on":true,"ip":"192.168.1.5","port":8765,"pin":"123456"} */
+        @JavascriptInterface
+        public String remoteInfo() {
+            try {
+                return new org.json.JSONObject().put("on", remoteSrv != null).put("ip", localIp()).put("port", remotePort).put("pin", remotePin()).toString();
+            } catch (Exception e) { return "{}"; }
+        }
+        @JavascriptInterface
+        public void setRemote(boolean on) {
+            getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("remote", on).apply();
+            runOnUiThread(() -> { if (on) startRemote(); else stopRemote(); });
+        }
+        @JavascriptInterface
+        public void newRemotePin() {
+            getSharedPreferences("adblock", MODE_PRIVATE).edit().remove("rpin").apply();
+            runOnUiThread(() -> { if (remoteSrv != null) { stopRemote(); startRemote(); } });
+        }
+        /** intro skipping: learned from the viewer, applied by itself when the setting is on */
+        @JavascriptInterface
+        public boolean introAuto() { return getSharedPreferences("adblock", MODE_PRIVATE).getBoolean("introauto", false); }
+        @JavascriptInterface
+        public void setIntroAuto(boolean on) { getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("introauto", on).apply(); }
+        @JavascriptInterface
+        public double introEnd(String host) { return introEndFor(host); }
+        @JavascriptInterface
+        public void introLearn(String host, int sec) {
+            try {
+                if (host == null || sec < 20 || sec > 330) return;
+                org.json.JSONObject m = introMap();
+                String key = FilterEngine.base(host);
+                int old = m.optInt(key, 0);
+                m.put(key, sec);
+                getSharedPreferences("adblock", MODE_PRIVATE).edit().putString("intro", m.toString()).apply();
+                if (Math.abs(old - sec) > 3) runOnUiThread(() -> Toast.makeText(MainActivity.this, "🧠 اتعلّمت مدة المقدمة: " + sec + " ث", Toast.LENGTH_SHORT).show());
+            } catch (Exception ignored) { }
+        }
+        @JavascriptInterface
+        public void introSkipped(int sec) { runOnUiThread(() -> Toast.makeText(MainActivity.this, "⏭ تخطّينا المقدمة", Toast.LENGTH_SHORT).show()); }
+        @JavascriptInterface
+        public boolean autoNext() { return autoNextOn(); }
+        @JavascriptInterface
+        public void setAutoNext(boolean on) { getSharedPreferences("adblock", MODE_PRIVATE).edit().putBoolean("autonext", on).apply(); }
+        /** sleep timer from the launcher's settings (0 cancels) */
+        @JavascriptInterface
+        public void sleepTimer(int minutes) {
+            runOnUiThread(() -> {
+                ui.removeCallbacks(sleepRun);
+                if (minutes > 0) { sleepAt = SystemClock.elapsedRealtime() + minutes * 60000L; ui.postDelayed(sleepRun, minutes * 60000L); }
+                else sleepAt = 0;
+            });
+        }
+        @JavascriptInterface
+        public int sleepLeft() { return sleepAt == 0 ? 0 : (int) Math.max(0, (sleepAt - SystemClock.elapsedRealtime()) / 60000L); }
+        /** progress saved on another device: resume from there */
+        @JavascriptInterface
+        public void seedWatch(String url, double t, double d) { if (url != null && d > 60 && t >= 0) saveWatch(url, t, d, null, null); }
+        /** for the launcher: sites that moved ({"https://old":{"to":"https://new","n":2}}) */
+        @JavascriptInterface
+        public String redirects() { return MainActivity.this.getSharedPreferences("redirects", MODE_PRIVATE).getString("m", "{}"); }
+        @JavascriptInterface
+        public void clearRedirect(String from) {
+            try {
+                android.content.SharedPreferences sp = MainActivity.this.getSharedPreferences("redirects", MODE_PRIVATE);
+                org.json.JSONObject all = new org.json.JSONObject(sp.getString("m", "{}"));
+                all.remove(from);
+                sp.edit().putString("m", all.toString()).apply();
+            } catch (Exception ignored) { }
+        }
         /** Hiding rules for a frame of the current page (empty on the launcher). */
         @JavascriptInterface
         public void adClosed() { adClosedInFrame = true; }
@@ -1538,7 +1856,7 @@ public class MainActivity extends Activity {
             if (url == null || !(d > 60)) return;
             saveWatch(url, t, d, title, null);
             if (t / d >= 0.97) runOnUiThread(() -> web.evaluateJavascript(NEXT_JS, v -> {
-                try { String n = v == null || v.equals("null") ? "" : (String) new org.json.JSONTokener(v).nextValue(); if (!n.isEmpty()) saveWatch(url, t, d, title, n); } catch (Exception ignored) { }
+                try { String n = v == null || v.equals("null") ? "" : (String) new org.json.JSONTokener(v).nextValue(); if (!n.isEmpty()) { saveWatch(url, t, d, title, n); if (t / d >= 0.985 && autoNextOn()) scheduleAutoNext(url, n); } } catch (Exception ignored) { }
             }));
         }
         /** where to resume this page's video (0 = from the start) */
