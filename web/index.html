@@ -146,7 +146,6 @@ html.light .fbtn.del{background:transparent;color:#d33}
   <div class="logo" dir="ltr" style="text-align:right"><span style="color:#ff8a00">S</span><span style="color:#8b6cff">a</span><span style="color:#f0388c">j</span><span style="color:#8ccb1f">o</span> <b style="color:#1e90ff">T</b><b>V</b></div>
   <button class="hbtn red" data-nav id="addSite">＋<span class="t"> موقع</span></button>
   <button class="hbtn" data-nav id="addCont">▶<span class="t"> تكملة</span></button>
-  <button class="hbtn" data-nav id="addM3u">📋<span class="t"> قنوات</span></button>
   <button class="hbtn" data-nav id="addRm" hidden>🎮<span class="t"> ريموت</span></button>
   <button class="hbtn" data-nav id="editBtn">✎<span class="t"> تعديل</span></button>
 </header>
@@ -221,10 +220,20 @@ async function initCloud(){
       // نقل أي حاجة محفوظة على الجهاز ومش موجودة في السحابة
       for(const o of items.values()){if(!m.has(o.id)){m.set(o.id,o);cloudWrite(o.id,()=>c.doc(o.id).set(o))}}
     }
-    items=m;saveLocal();softRender();checkPush();pullDismiss();syncWatchCloud();
+    items=m;saveLocal();purgeChannels();softRender();checkPush();pullDismiss();syncWatchCloud();
   },err=>{clearTimeout(timer);col=null;setStatus('المزامنة غير متاحة — الحفظ على هذا الجهاز فقط')});
 }
 
+
+/* channels (M3U) are gone from the app: sweep whatever an older version imported, on this device and in the cloud */
+function purgeChannels(){
+  const dead=new Set(),gone=[];
+  items.forEach(o=>{if(o.kind==='site'&&(isStream(o.url)||/قنوات/.test(o.group||''))){dead.add(o.id);gone.push(o.id)}});
+  items.forEach(o=>{if((o.kind==='cont'||o.kind==='later'||o.kind==='visit')&&dead.has(o.siteId))gone.push(o.id)});
+  if(!gone.length)return;
+  syncing=true;gone.forEach(id=>{items.delete(id);if(col){const c=col;cloudWrite(id,()=>c.doc(id).delete())}});trimHist();saveLocal();syncing=false;
+  render();toast('🧹 اتشالت قائمة القنوات');
+}
 /* ---------- helpers ---------- */
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function normUrl(u){u=(u||'').trim();if(!u)return '';if(!/^https?:\/\//i.test(u))u='https://'+u;try{return new URL(u).href}catch(e){return ''}}
@@ -805,61 +814,6 @@ function closePlayer(){const v=$('#plyV');try{v.pause()}catch(e){}v.removeAttrib
 window.addEventListener('popstate',()=>{if(plOpen)closePlayer()});
 $('#plyX').onclick=()=>{if(plOpen)history.back();else closePlayer()};
 
-/* ---------- M3U: a whole channel list at once ---------- */
-function parseM3U(text){
-  const out=[],lines=String(text||'').split(/\r?\n/);let cur=null;
-  lines.forEach(l=>{l=l.trim();
-    if(/^#EXTINF/i.test(l)){
-      const logo=(l.match(/tvg-logo="([^"]*)"/i)||[])[1]||'';
-      const grp=(l.match(/group-title="([^"]*)"/i)||[])[1]||'';
-      const name=(l.split(',').pop()||'').trim();
-      cur={name:name||'قناة',icon:logo,grp};
-    }else if(l&&l[0]!=='#'&&cur){
-      const u=normUrl(l);if(u){cur.url=u;out.push(cur)}cur=null;
-    }});
-  return out;
-}
-/* verified Arabic lists (iptv-org) offered as one-tap fills */
-const M3U_READY=[
-  ['🇪🇬 قنوات مصر','https://iptv-org.github.io/iptv/countries/eg.m3u','قنوات مصر'],
-  ['🇸🇦 قنوات السعودية','https://iptv-org.github.io/iptv/countries/sa.m3u','قنوات السعودية'],
-  ['🌍 عربي كله','https://iptv-org.github.io/iptv/languages/ara.m3u','قنوات عربية']];
-function openM3u(){
-  openModal(`<h3>📋 استيراد قائمة قنوات (M3U)</h3>
-   <label>قائمة جاهزة (متجربة وشغالة)</label><div class="acts" style="margin-top:0">${M3U_READY.map((r,i)=>`<button class="fbtn" data-nav data-mr="${i}">${r[0]}</button>`).join('')}</div>
-   <label>أو الصق رابط قائمة</label><input id="mu" dir="ltr" inputmode="url" placeholder="https://…/list.m3u" data-nav>
-   <div class="acts" style="margin-top:0"><button class="fbtn g" id="mf" data-nav>📥 اجلب القائمة</button></div>
-   <label>أو ارفع ملف القائمة من الجهاز</label><input type="file" id="mb" accept=".m3u,.m3u8,.txt" data-nav>
-   <label>المجموعة اللي تتحط فيها القنوات</label><input id="mg" list="glist2" placeholder="مثلاً: قنوات عربية" value="قنوات" data-nav><datalist id="glist2">${[...new Set(sites().map(x=>x.group).filter(Boolean))].map(g=>'<option value="'+esc(g)+'">').join('')}</datalist>
-   <div id="msum" class="hint"></div>
-   <div class="hint">القنوات بتتضاف كبلاطات في المجموعة دي، ودوس على أي قناة تشتغل في المشغّل المدمج فوق الصفحة.</div>
-   <div class="acts"><button class="fbtn red" id="mv" data-nav hidden>استيراد</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
-  const ac=new AbortController();let fetching=false;
-  const stop=()=>{if(!ac.signal.aborted)ac.abort()};
-  $('#cc').onclick=()=>{const was=fetching;stop();closeModal();if(was)toast('اتلغى استيراد القنوات')};
-  // closing the dialog any other way (Escape, Back) abandons the import too
-  const mo=new MutationObserver(()=>{if(!$('#modal').classList.contains('open')){stop();mo.disconnect()}});
-  mo.observe($('#modal'),{attributes:true,attributeFilter:['class']});
-  let found=[];
-  const show=()=>{const ok=found.length;
-    $('#msum').textContent=ok?`اتلاقت ${ok} قناة — دوس استيراد`:'مفيش قنوات اتلاقت في الملف ده';
-    $('#mv').hidden=!ok};
-  const take=text=>{found=parseM3U(text).slice(0,500);show()};
-  $('#mb').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const t=await f.text();if(!ac.signal.aborted)take(t)}catch(_){if(!ac.signal.aborted)toast('تعذّر قراءة الملف')}};
-  $('#mf').onclick=async()=>{const u=normUrl($('#mu').value);if(!u){toast('الصق رابط القائمة الأول');$('#mu').focus();return}
-    $('#msum').textContent='بجيب القائمة…';fetching=true;const text=await trGet(u,ac.signal);fetching=false;
-    if(ac.signal.aborted||!$('#modal').classList.contains('open'))return;   // اتلغى وهو بيجيب
-    take(text);if(!found.length)$('#msum').textContent='مقدرتش أجيب القائمة من الرابط ده'};
-  $('#box').querySelectorAll('[data-mr]').forEach(b=>b.onclick=()=>{const r=M3U_READY[+b.dataset.mr];$('#mu').value=r[1];$('#mg').value=r[2];$('#mf').click()});
-  $('#mv').onclick=()=>{
-    const grp=$('#mg').value.trim(),have=new Set(sites().map(x=>x.url));let n=0;
-    const list=[];found.forEach(c=>{if(have.has(c.url))return;have.add(c.url);n++;
-      list.push({id:'s-'+uid(),kind:'site',name:c.name,url:c.url,icon:c.icon||autoIcon(c.url),group:grp,createdAt:Date.now()})});
-    if(!list.length){toast('القنوات دي موجودة عندك كلها');return}
-    closeModal();setMany(list);toast(`📋 اتضافت ${list.length} قناة`);
-  };
-}
-
 /* ---------- the phone is the TV's remote: commands travel on the same sync channel ---------- */
 function openRemote(){
   if(!col){toast('الريموت محتاج المزامنة شغالة على الجهازين بنفس الحساب');return}
@@ -883,7 +837,6 @@ function openRemote(){
 /* ---------- buttons ---------- */
 $('#addSite').onclick=()=>openSite();
 $('#addCont').onclick=()=>openCont();
-$('#addM3u').onclick=openM3u;
 $('#addRm').onclick=openRemote;
 if(document.documentElement.classList.contains('phone'))$('#addRm').hidden=false;
 let qT;$('#q').addEventListener('input',()=>{clearTimeout(qT);qT=setTimeout(render,120)});
@@ -1247,7 +1200,7 @@ $('#bk').onclick=exportData;$('#rs').onclick=importData;$('#st').onclick=openSet
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 guardInputs(document);
 applyUI();
-loadLocal();applyRedirects();render();setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);
+loadLocal();purgeChannels();applyRedirects();render();setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);
 setInterval(()=>{if(!$('#modal').classList.contains('open'))softRender()},60000);
 </script>
 </body>
