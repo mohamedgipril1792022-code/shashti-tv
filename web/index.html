@@ -232,21 +232,12 @@ async function initCloud(){
       // نقل أي حاجة محفوظة على الجهاز ومش موجودة في السحابة
       for(const o of items.values()){if(!m.has(o.id)){m.set(o.id,o);cloudWrite(o.id,()=>c.doc(o.id).set(o))}}
     }
-    items=m;saveLocal();purgeChannels();softRender();checkPush();pullDismiss();syncWatchCloud();
+    items=m;saveLocal();softRender();checkPush();pullDismiss();syncWatchCloud();
   },err=>{clearTimeout(timer);col=null;setStatus('المزامنة غير متاحة — الحفظ على هذا الجهاز فقط')});
 }
 
 
 /* channels (M3U) are gone from the app: sweep whatever an older version imported, on this device and in the cloud */
-function purgeChannels(){
-  const dead=new Set(),gone=[];
-  items.forEach(o=>{if(o.kind==='site'&&(isStream(o.url)||/قنوات/.test(o.group||''))){dead.add(o.id);gone.push(o.id)}});
-  items.forEach(o=>{if((o.kind==='cont'||o.kind==='later'||o.kind==='visit')&&dead.has(o.siteId))gone.push(o.id)});
-  if(!gone.length)return;
-  syncing=true;gone.forEach(id=>{items.delete(id);if(col){const c=col;cloudWrite(id,()=>c.doc(id).delete())}});trimHist();saveLocal();syncing=false;
-  render();toast('🧹 اتشالت قائمة القنوات');
-}
-
 /* ---------- football: the matches that matter, Egyptian clubs first ---------- */
 const MATCH_LEAGUES=[
   ['caf.champions','دوري أبطال أفريقيا'],
@@ -368,11 +359,11 @@ function bucket(){const h=new Date().getHours();return h>=5&&h<12?0:h>=12&&h<17?
 function ramadan(){try{const f=new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{month:'numeric',day:'numeric'}).formatToParts(new Date());
   const m=+f.find(x=>x.type==='month').value,d=+f.find(x=>x.type==='day').value;return m===9||(m===8&&d>=20)||(m===10&&d<=2)}catch(e){return false}}
 const isLocked=g=>!!(g&&UI.locks&&UI.locks[g]);
-const siteVisible=s=>!(isLocked(s.group)&&!unlocked.has(s.group));
+const siteVisible=s=>!(isLocked(s.group)&&!unlocked.has(s.group))&&!/\u0642\u0646\u0648\u0627\u062a/.test(s.group||'');   // the channels feature is gone: قنوات groups stay stored but never render
 const siteOk=id=>{const s=id&&siteById(id);return !s||siteVisible(s)};
 function matchF(s){if(gfilter==='')return true;if(gfilter==='__fav')return !!s.fav;if(gfilter==='__top')return s.opens>0;if(gfilter==='__now')return !!(s.hb&&s.hb[bucket()]>0);return s.group===gfilter}
 function renderChips(){
-  const el=$('#chips'),all=sites().filter(siteVisible),gs=[...new Set(sites().map(s=>s.group).filter(Boolean))];
+  const el=$('#chips'),all=sites().filter(siteVisible),gs=[...new Set(all.map(s=>s.group).filter(Boolean))];
   const list=[['','الكل']];if(all.some(s=>s.fav))list.push(['__fav','⭐ المفضلة']);
   if(all.some(s=>s.opens>0)){list.push(['__top','🔥 الأكثر فتحًا']);if(all.some(s=>s.hb&&s.hb[bucket()]>0))list.push(['__now','🕐 مناسب دلوقتي'])}
   if(ramadan())gs.sort((x,y)=>(/رمضان/.test(y)?1:0)-(/رمضان/.test(x)?1:0));
@@ -588,6 +579,7 @@ let lcBusy=false;
 async function checkLinks(){
   if(lcBusy||navigator.onLine===false)return;
   const due=sites().filter(s=>{
+    if(!siteVisible(s)||isStream(s.url))return false;   // hidden groups and direct streams are never pinged: that ping swarm is what froze the box
     if(location.protocol==='https:'&&/^http:/i.test(s.url))return false;     // an http address can't be tested from an https page
     const r=LC[s.id];return !r||r.url!==s.url||Date.now()-r.at>(r.f>0?30*60e3:6*3600e3)});
   if(!due.length)return;
@@ -1288,7 +1280,7 @@ $('#bk').onclick=exportData;$('#rs').onclick=importData;$('#st').onclick=openSet
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 guardInputs(document);
 applyUI();
-loadLocal();purgeChannels();applyRedirects();render();setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
+loadLocal();applyRedirects();render();setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
 setInterval(()=>{if(!$('#modal').classList.contains('open'))softRender()},60000);
 </script>
 </body>
