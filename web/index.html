@@ -39,6 +39,16 @@ h2{font-size:clamp(18px,2vw,32px);margin:22px 0 10px;display:flex;align-items:ce
 h2 small{font-size:.55em;color:var(--mut);font-weight:400}
 .row{display:flex;gap:clamp(10px,1.4vw,22px);overflow-x:auto;padding:6px 4px 12px;scroll-snap-type:x proximity}
 .row .tile{flex:0 0 clamp(100px,11vw,180px);scroll-snap-align:start}
+.mcard{position:relative;flex:0 0 clamp(170px,20vw,300px);scroll-snap-align:start;display:block;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;text-decoration:none;color:var(--txt)}
+.mcard:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.mcard .mlg{font-size:clamp(10px,.8vw,12px);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard .mteams{display:flex;align-items:center;justify-content:center;gap:12px;margin:8px 0 4px}
+.mcard .mteams img{width:clamp(26px,2.2vw,36px);height:clamp(26px,2.2vw,36px);object-fit:contain}
+.mcard .msc{font-weight:900;font-size:clamp(14px,1.3vw,21px);white-space:nowrap}
+.mcard .mvs{font-size:clamp(11px,.9vw,14px);font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard .mst{margin-top:6px;text-align:center;font-size:clamp(10px,.85vw,13px);color:var(--mut)}
+.mcard .mst b.live{color:#fff;background:var(--red);border-radius:8px;padding:1px 10px;font-weight:900}
+
 .row.wide .tile{flex-basis:clamp(140px,19vw,280px);width:clamp(140px,19vw,280px);aspect-ratio:auto}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(100px,10vw,185px),1fr));gap:clamp(10px,1.2vw,20px);padding:6px 4px}
 /* continue watching: picture on top, small text below it */
@@ -165,6 +175,8 @@ html.light .fbtn.del{background:transparent;color:#d33}
   <h2>⭐ مواقعي</h2>
   <div id="chips" hidden></div>
   <div class="grid" id="siteGrid"></div>
+  <h2 id="mH" hidden>⚽ ماتشات الكورة <small>أهم الماتشات المصرية والعالمية</small></h2>
+  <div class="row" id="matchRow" hidden></div>
 </main>
 <footer><button class="hbtn" id="ab" data-nav hidden></button> <button class="hbtn" id="up" data-nav hidden>🔄 تحديث</button> <button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button> <button class="hbtn" id="ar" data-nav>🗂 الأرشيف</button> <button class="hbtn" id="st" data-nav>⚙ إعدادات</button><br><button id="ver" data-nav></button></footer>
 
@@ -234,6 +246,68 @@ function purgeChannels(){
   syncing=true;gone.forEach(id=>{items.delete(id);if(col){const c=col;cloudWrite(id,()=>c.doc(id).delete())}});trimHist();saveLocal();syncing=false;
   render();toast('🧹 اتشالت قائمة القنوات');
 }
+
+/* ---------- football: the matches that matter, Egyptian clubs first ---------- */
+const MATCH_LEAGUES=[
+  ['caf.champions','دوري أبطال أفريقيا'],
+  ['caf.confed','الكونفدرالية الأفريقية'],
+  ['uefa.champions','دوري أبطال أوروبا'],
+  ['eng.1','الدوري الإنجليزي'],
+  ['esp.1','الدوري الإسباني']];
+const MATCH_K='sajo-matches';
+let MATCH={at:0,list:[]};try{MATCH=JSON.parse(localStorage.getItem(MATCH_K)||'{"at":0,"list":[]}')}catch(e){}
+const EG_CLUBS=/ahly|zamalek|pyramids|ismaily|masry|ceramica|smouha|national bank|enppi|petrojet|haras|mahalla|wadi degla|ghazl|modern sport|future fc|zamalek|islamia/i;
+async function fetchJson(u){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),9000);
+  try{const r=await fetch(u,{signal:ac.signal});return r.ok?await r.json():null}catch(e){return null}finally{clearTimeout(t)}}
+async function matchRefresh(force){
+  if(!force&&Date.now()-MATCH.at<20*60e3&&MATCH.list.length){renderMatches();return}
+  const res=await Promise.allSettled(MATCH_LEAGUES.map(([slug])=>fetchJson('https://site.api.espn.com/apis/site/v2/sports/soccer/'+slug+'/scoreboard')));
+  const out=[],now=Date.now();
+  res.forEach((r,i)=>{if(r.status!=='fulfilled'||!r.value)return;
+    (r.value.events||[]).forEach(e=>{try{
+      const c=e.competitions[0],H=c.competitors.find(x=>x.homeAway==='home'),A=c.competitors.find(x=>x.homeAway==='away');
+      if(!H||!A)return;
+      const st=e.status.type,when=+new Date(e.date);
+      if(st.state==='post'&&now-when>20*36e5)return;         // نتايج أقدم من النهاردة بكير مش مهمة
+      if(st.state==='pre'&&when-now>5*864e5)return;           // ولا اللي بعد أكتر من ٥ أيام
+      out.push({id:e.id,lg:MATCH_LEAGUES[i][1],hn:H.team.shortDisplayName||H.team.displayName,an:A.team.shortDisplayName||A.team.displayName,
+        hi:H.team.logo||'',ai:A.team.logo||'',hs:String(H.score==null?'':H.score),as:String(A.score==null?'':A.score),
+        state:st.state,clock:e.status.displayClock||'',when,
+        eg:EG_CLUBS.test(H.team.displayName+' '+A.team.displayName)?1:0,
+        link:(e.links&&e.links[0]&&e.links[0].href)||''});
+    }catch(_){}})});
+  if(!out.length){renderMatches();return}                      // every fetch failed: keep the old list
+  const rank=m=>m.state==='in'?0:m.state==='pre'?1:2;
+  out.sort((a,b)=>rank(a)-rank(b)||(b.eg-a.eg)||(a.state==='post'?b.when-a.when:a.when-b.when));
+  MATCH={at:now,list:out.slice(0,14)};
+  try{localStorage.setItem(MATCH_K,JSON.stringify(MATCH))}catch(e){}
+  renderMatches();
+}
+function fmtWhen(t){const d=new Date(t),now=new Date(),day=x=>x.toDateString();
+  if(day(d)===day(now))return 'اليوم';
+  if(day(d)===day(new Date(now.getTime()+864e5)))return 'بكرة';
+  return d.toLocaleDateString('ar-EG',{weekday:'long'})}
+function fmtTm(t){return new Date(t).toLocaleTimeString('ar-EG',{hour:'numeric',minute:'2-digit'})}
+function renderMatches(){
+  const row=$('#matchRow'),h=$('#mH');if(!row)return;row.innerHTML='';
+  const list=MATCH.list||[];
+  h.hidden=row.hidden=!list.length;
+  if(!list.length)return;
+  const f=document.createDocumentFragment();
+  list.forEach(m=>{
+    const a=document.createElement('a');a.className='mcard';a.href=m.link||'#';a.target='_blank';a.rel='noopener';a.setAttribute('data-nav','');
+    const center=m.state==='pre'?'\u2066'+fmtTm(m.when)+'\u2069':'\u2066'+m.hs+' - '+m.as+'\u2069';
+    const st=m.state==='in'?'<b class="live">مباشر'+(m.clock?' \u2066'+m.clock+'\u2069':'')+'</b>':m.state==='post'?'انتهت':fmtWhen(m.when);
+    a.innerHTML='<div class="mlg">'+esc(m.lg)+'</div>'+
+      '<div class="mteams">'+(m.hi?'<img src="'+esc(m.hi)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+
+      '<span class="msc">'+esc(center)+'</span>'+
+      (m.ai?'<img src="'+esc(m.ai)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</div>'+
+      '<div class="mvs">'+esc(m.hn)+' × '+esc(m.an)+'</div>'+
+      '<div class="mst">'+st+'</div>';
+    f.appendChild(a)});
+  row.appendChild(f);
+}
+
 /* ---------- helpers ---------- */
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function normUrl(u){u=(u||'').trim();if(!u)return '';if(!/^https?:\/\//i.test(u))u='https://'+u;try{return new URL(u).href}catch(e){return ''}}
@@ -307,7 +381,7 @@ function renderChips(){
 function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!q)return true;return fields.some(f=>String(f||'').toLowerCase().includes(q))}
 /* a refresh rebuilds every tile; the focused tile would be lost (the next press went to the first button, «＋») or a tap that was in progress would be swallowed.
    So: the focus is put back on the same tile, and refreshes that come from the background wait until you stop touching the screen. */
-const FOCUS_HOSTS='#chips,#contRow,#laterRow,#trAr,#trFx,#visitRow,#siteGrid';
+const FOCUS_HOSTS='#chips,#contRow,#laterRow,#trAr,#trFx,#visitRow,#siteGrid,#matchRow';
 function tileKey(a){const n=a.querySelector&&a.querySelector('.cap b,.name');return (a.getAttribute('href')||'')+'|'+(n?n.textContent:(a.textContent||'').trim().slice(0,40))}
 function focusKey(){const a=document.activeElement;if(!a||a===document.body||!a.closest)return null;const h=a.closest(FOCUS_HOSTS);if(!h||h.closest('#modal'))return null;return {h:h.id,k:tileKey(a)}}
 function restoreFocus(f){if(!f)return;const h=document.getElementById(f.h);if(!h)return;const e=[...h.querySelectorAll('[data-nav]')].find(x=>tileKey(x)===f.k);if(e&&document.activeElement!==e)e.focus({preventScroll:true})}
@@ -447,8 +521,14 @@ function openLocks(){
     delete UI.locks[g];saveUI();closeModal();render();toast('🔓 اتفتحت «'+g+'»')};
 }
 /* cinematic background: the picture of the tile you are on, blurred behind the page */
-const cine=$('#cine');let cineT=0;
-function setCine(img){clearTimeout(cineT);if(img&&!UI.nocine){cine.style.backgroundImage='url("'+img+'")';cine.classList.add('on')}else cineT=setTimeout(()=>cine.classList.remove('on'),350)}
+const cine=$('#cine');let cineT=0,cineAt=0;
+function setCine(img){clearTimeout(cineT);
+  if(img&&!UI.nocine){
+    if(cine.dataset.cur===img&&cine.classList.contains('on'))return;
+    const dt=Date.now()-cineAt;
+    if(cineAt&&dt<450){cineT=setTimeout(()=>setCine(img),450-dt);return}   // holding a direction: the backdrop follows at a calm pace, not every hop
+    cineAt=Date.now();cine.dataset.cur=img;cine.style.backgroundImage='url("'+img+'")';cine.classList.add('on')}
+  else{cine.dataset.cur='';cineT=setTimeout(()=>cine.classList.remove('on'),350)}}
 const cineSel='#contRow .tile,#laterRow .tile,#siteGrid .tile';
 document.addEventListener('focusin',e=>{const t=e.target.closest&&e.target.closest(cineSel);setCine(t&&t.dataset.img)});
 document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest(cineSel);if(t)setCine(t.dataset.img)});
@@ -962,6 +1042,7 @@ document.addEventListener('keydown',e=>{
   add([...document.querySelectorAll('#chips .hbtn')]);
   const gridRows={};[...document.querySelectorAll('#siteGrid .tile')].forEach(t=>{const k=Math.round(t.offsetTop/10);(gridRows[k]=gridRows[k]||[]).push(t)});
   Object.keys(gridRows).map(Number).sort((a,b)=>a-b).forEach(k=>add(gridRows[k]));
+  add([...document.querySelectorAll('#matchRow .mcard')]);
   add([$('#ab'),$('#up'),$('#bk'),$('#rs'),$('#ar'),$('#st')]);
   add([$('#ver')]);
   let ri=rows.findIndex(row=>row.includes(cur));
@@ -1200,7 +1281,7 @@ $('#bk').onclick=exportData;$('#rs').onclick=importData;$('#st').onclick=openSet
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 guardInputs(document);
 applyUI();
-loadLocal();purgeChannels();applyRedirects();render();setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);
+loadLocal();purgeChannels();applyRedirects();render();setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
 setInterval(()=>{if(!$('#modal').classList.contains('open'))softRender()},60000);
 </script>
 </body>
