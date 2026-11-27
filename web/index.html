@@ -107,6 +107,11 @@ footer{text-align:center;margin-top:30px}
 .fbtn.del{background:transparent;color:#ff6b6b;border-color:#6b2a2a}
 .hint{color:var(--mut);font-size:13px;margin-top:4px}
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;color:#000;border-radius:14px;padding:8px 16px;font-weight:700;display:none;z-index:30}
+/* the built-in player: direct stream addresses (m3u8/mp4…) play over the launcher, Back closes it */
+#ply{position:fixed;inset:0;z-index:24;background:#000;display:flex;flex-direction:column}
+#ply .pbar{display:flex;align-items:center;gap:10px;padding:8px clamp(12px,3vw,40px);background:#160e10;border-bottom:1px solid var(--line)}
+#ply .pbar span{flex:1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ply video{flex:1;width:100%;min-height:0;background:#000}
 /* light theme */
 html.light{--bg:#f6f1f1;--panel:#fff;--line:#d9cccd;--txt:#1b1213;--mut:#6d5b5e}
 html.light header{background:linear-gradient(#fff,#f1e8e8)}
@@ -141,6 +146,8 @@ html.light .fbtn.del{background:transparent;color:#d33}
   <div class="logo" dir="ltr" style="text-align:right"><span style="color:#ff8a00">S</span><span style="color:#8b6cff">a</span><span style="color:#f0388c">j</span><span style="color:#8ccb1f">o</span> <b style="color:#1e90ff">T</b><b>V</b></div>
   <button class="hbtn red" data-nav id="addSite">＋<span class="t"> موقع</span></button>
   <button class="hbtn" data-nav id="addCont">▶<span class="t"> تكملة</span></button>
+  <button class="hbtn" data-nav id="addM3u">📋<span class="t"> قنوات</span></button>
+  <button class="hbtn" data-nav id="addRm" hidden>🎮<span class="t"> ريموت</span></button>
   <button class="hbtn" data-nav id="editBtn">✎<span class="t"> تعديل</span></button>
 </header>
 <div class="search"><input id="q" type="search" placeholder="🔍 دور في مواقعك وتكملاتك…" data-nav><a id="gq" class="hbtn" target="_blank" rel="noopener" data-nav hidden>🔎 جوجل</a><button class="hbtn" id="gall" data-nav hidden>🔎 كل مواقعي</button></div>
@@ -162,13 +169,14 @@ html.light .fbtn.del{background:transparent;color:#d33}
 </main>
 <footer><button class="hbtn" id="ab" data-nav hidden></button> <button class="hbtn" id="up" data-nav hidden>🔄 تحديث</button> <button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button> <button class="hbtn" id="ar" data-nav>🗂 الأرشيف</button> <button class="hbtn" id="st" data-nav>⚙ إعدادات</button><br><button id="ver" data-nav></button></footer>
 
+<div id="ply" hidden><div class="pbar"><span id="plyT"></span><button class="hbtn" id="plyX" data-nav>✕ إغلاق</button></div><video id="plyV" controls autoplay playsinline></video></div>
 <div id="modal"><div class="box" id="box"></div></div>
 <div id="push"><div class="box" id="pbox"></div></div>
 <div id="toast"></div>
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٢٩',date:'٢٦-١١-٢٠٢٦',created:'الخميس ٢٦ نوفمبر ٢٠٢٦ – ١١:٠٥ م'};
+const VERSION={n:'١٣٠',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ١٢:٣٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -179,7 +187,8 @@ const $=s=>document.querySelector(s);
 
 /* ---------- storage ---------- */
 function loadLocal(){try{JSON.parse(localStorage.getItem(LS)||'[]').forEach(o=>o&&o.id&&items.set(o.id,o))}catch(e){}}
-function saveLocal(){try{localStorage.setItem(LS,JSON.stringify([...items.values()]))}catch(e){}}
+let itemsVer=0,sitesVer=-1,sitesCache=[];   // sites() is asked for the same list many times in one render: build it once until items change
+function saveLocal(){itemsVer++;try{localStorage.setItem(LS,JSON.stringify([...items.values()]))}catch(e){}}
 const chains={};
 function cloudWrite(id,fn){
   chains[id]=(chains[id]||Promise.resolve()).then(fn).catch(e=>{
@@ -212,20 +221,21 @@ async function initCloud(){
       // نقل أي حاجة محفوظة على الجهاز ومش موجودة في السحابة
       for(const o of items.values()){if(!m.has(o.id)){m.set(o.id,o);cloudWrite(o.id,()=>c.doc(o.id).set(o))}}
     }
-    items=m;saveLocal();softRender();checkPush();
+    items=m;saveLocal();softRender();checkPush();pullDismiss();syncWatchCloud();
   },err=>{clearTimeout(timer);col=null;setStatus('المزامنة غير متاحة — الحفظ على هذا الجهاز فقط')});
 }
 
 /* ---------- helpers ---------- */
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function normUrl(u){u=(u||'').trim();if(!u)return '';if(!/^https?:\/\//i.test(u))u='https://'+u;try{return new URL(u).href}catch(e){return ''}}
+const isStream=u=>/\.(m3u8|mp4|webm|mpd|ts)(\?|#|$)/i.test(String(u||''));   // a direct stream address: the built-in player takes it
 function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){return ''}}
 function grad(s){let h=0;for(const ch of s||'x')h=(h*31+ch.charCodeAt(0))%360;return `linear-gradient(135deg,hsl(${h} 70% 38%),hsl(${(h+50)%360} 75% 18%))`}
 function ago(t){const m=Math.round((Date.now()-t)/60000);if(m<1)return 'الآن';if(m<60)return `من ${m} د`;const h=Math.round(m/60);if(h<24)return `من ${h} س`;const d=Math.round(h/24);return `من ${d} يوم`}
 function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',2600)}
 function setStatus(t){$('#status').textContent=t}
 const ord=o=>o.order!=null?o.order:(o.createdAt||0)/1e13;   // your own order; old sites keep the order they were added in
-const sites=()=>[...items.values()].filter(o=>o.kind==='site').sort((a,b)=>ord(a)-ord(b)||(a.createdAt||0)-(b.createdAt||0));
+const sites=()=>{if(sitesVer===itemsVer)return sitesCache;sitesVer=itemsVer;sitesCache=[...items.values()].filter(o=>o.kind==='site').sort((a,b)=>ord(a)-ord(b)||(a.createdAt||0)-(b.createdAt||0));return sitesCache};
 const siteById=id=>{const o=items.get(id);return o&&o.kind==='site'?o:null};
 
 function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav,menu,cap,onDone,badge,onWarn}){
@@ -261,7 +271,8 @@ function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav,menu,cap,onDone,badge,on
 /* ---------- render ---------- */
 // Google's favicon service answers with a tiny generic globe when a site has no real icon: only real (bigger) ones are used
 const favOK={};
-function probeFav(h){favOK[h]=false;const im=new Image();im.onload=()=>{if(im.naturalWidth>16){favOK[h]=true;softRender()}};im.src='https://www.google.com/s2/favicons?domain='+h+'&sz=256'}
+let favRT=0;   // many icons can answer at once: their re-renders merge into one
+function probeFav(h){favOK[h]=false;const im=new Image();im.onload=()=>{if(im.naturalWidth>16){favOK[h]=true;clearTimeout(favRT);favRT=setTimeout(softRender,350)}};im.src='https://www.google.com/s2/favicons?domain='+h+'&sz=256'}
 function siteIcon(s){if(s.icon)return s.icon;const h=hostOf(s.url);return h?'auto:'+h:''}
 function bucket(){const h=new Date().getHours();return h>=5&&h<12?0:h>=12&&h<17?1:h>=17&&h<23?2:3}
 function ramadan(){try{const f=new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{month:'numeric',day:'numeric'}).formatToParts(new Date());
@@ -278,9 +289,11 @@ function renderChips(){
   gs.forEach(g=>list.push([g,(isLocked(g)&&!unlocked.has(g)?'🔒 ':'📁 ')+g]));
   if(gfilter&&!list.some(x=>x[0]===gfilter))gfilter='';
   el.hidden=list.length<2;el.innerHTML='';
+  const cf=document.createDocumentFragment();
   list.forEach(([k,t])=>{const b=document.createElement('button');b.type='button';b.className='hbtn'+(gfilter===k?' on':'');b.setAttribute('data-nav','');b.textContent=t;
     const go=()=>{gfilter=k;render();setTimeout(()=>{const x=[...$('#chips').children].find(c=>c.textContent.slice(2)===t.slice(2));x&&x.focus()},0)};
-    b.onclick=()=>{if(k&&k.indexOf('__')!==0&&isLocked(k)&&!unlocked.has(k))askPin(k,()=>{unlocked.add(k);go()});else go()};el.appendChild(b)});
+    b.onclick=()=>{if(k&&k.indexOf('__')!==0&&isLocked(k)&&!unlocked.has(k))askPin(k,()=>{unlocked.add(k);go()});else go()};cf.appendChild(b)});
+  el.appendChild(cf);
 }
 function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!q)return true;return fields.some(f=>String(f||'').toLowerCase().includes(q))}
 /* a refresh rebuilds every tile; the focused tile would be lost (the next press went to the first button, «＋») or a tap that was in progress would be swallowed.
@@ -312,35 +325,40 @@ function renderNow(){
     ss=ss.map((x,i)=>[x,i]).sort((a,b)=>w(b[0])-w(a[0])||a[1]-b[1]).map(x=>x[0])}
   $('#gall').hidden=!(qv&&sites().some(x=>x.searchUrl&&siteVisible(x)));
   if(!ss.length&&(qv||gfilter))grid.innerHTML=noRes;else if(!ss.length)grid.innerHTML='<div class="empty">لسه مفيش مواقع — دوس «＋ موقع» وحط رابط الموقع واختار صورة ليه.</div>';
+  const gf=document.createDocumentFragment();
   ss.forEach(s=>{
     const t=tileEl({name:s.name,url:s.url,icon:siteIcon(s),cap:'sq',sub:lcBroken(s)?'⚠ الرابط مش شغال':(matchSub(s)||(s.ext?'🌐 بيفتح في متصفح تاني':'')),onWarn:lcBroken(s)?()=>openUpdate(s):null,menu:()=>tileMenu('site',s),fav:!!s.fav,onFav:()=>{put(Object.assign({},s,{fav:!s.fav}));toast(s.fav?'اتشال من المفضلة':'⭐ اتضاف للمفضلة')}});
-    t.onclick=e=>{if(moveId){e.preventDefault();return}if(editMode){e.preventDefault();openSite(s)}else if(s.ext&&window.Android&&Android.openExternal){e.preventDefault();visit(s.id);Android.openExternal(s.url)}else visit(s.id)};
+    t.onclick=e=>{if(moveId){e.preventDefault();return}if(editMode){e.preventDefault();openSite(s)}else if(isStream(s.url)){e.preventDefault();visit(s.id);playStream(s.url,s.name)}else if(s.ext&&window.Android&&Android.openExternal){e.preventDefault();visit(s.id);Android.openExternal(s.url)}else visit(s.id)};
     if(s.id===moveId){t.classList.add('moving');t.dataset.moving='1'}
-    grid.appendChild(t);
+    gf.appendChild(t);
   });
+  grid.appendChild(gf);
   const mv=grid.querySelector('[data-moving]');if(mv)setTimeout(()=>mv.focus({preventScroll:false}),0);
 
   const vr=$('#visitRow');vr.innerHTML='';
   const vs=[...items.values()].filter(o=>o.kind==='visit'&&siteById(o.siteId)&&siteOk(o.siteId)&&qMatch(siteById(o.siteId).name,siteById(o.siteId).url)).sort((a,b)=>b.lastAt-a.lastAt).slice(0,15);
   if(!vs.length&&qv)vr.innerHTML=noRes;else if(!vs.length)vr.innerHTML='<div class="empty">أول ما تفتح موقع من هنا هيظهر في القسم ده.</div>';
+  const vf=document.createDocumentFragment();
   vs.forEach(v=>{
     const s=siteById(v.siteId);
     const t=tileEl({name:s.name,url:s.url,icon:s.icon,agoT:v.lastAt,onUpd:()=>openUpdate(s),menu:()=>tileMenu('visit',s,v)});
     t.onclick=e=>{if(editMode){e.preventDefault();confirmBox('تشيل «'+s.name+'» من آخر ما شاهدت؟',()=>del(v.id))}else visit(s.id)};
-    vr.appendChild(t);
+    vf.appendChild(t);
   });
+  vr.appendChild(vf);
 
   const cr=$('#contRow');cr.innerHTML='';
   syncWatch();ytFix();
-  const W=watchMap();
+  const W=watchNorm();
   const allC=[...items.values()].filter(o=>o.kind==='cont'&&siteOk(o.siteId)&&qMatch(o.title,o.note,o.url)).sort((a,b)=>b.lastAt-a.lastAt);
   const groups=new Map();allC.forEach(o=>{const k=seriesKey(o);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(o)});
   const cs=UI.allEps?allC:[...groups.values()].map(a=>a[0]);   // one tile per series: the one you watched last
   if(!cs.length&&qv)cr.innerHTML=noRes;else if(!cs.length)cr.innerHTML='<div class="empty">وانت بتتفرج، دوس «▶ تكملة» واحفظ رابط الحلقة والدقيقة اللي وقفت عندها.</div>';
+  const xf=document.createDocumentFragment();
   cs.forEach(c=>{
     const s=siteById(c.siteId);
     const icon=c.icon||(s&&s.icon)||'';
-    const w=watchFor(W,c.url);let sub=c.note||(s?s.name:hostOf(c.url)),pct=0;
+    const w=W[vkey(c.url)];let sub=c.note||(s?s.name:hostOf(c.url)),pct=0;
     // progress kept on another device (it travels with the tile); the newer one wins
     const rem=(c.pd>0&&c.pt>0&&c.pdev&&c.pdev!==DEV)?{t:c.pt,d:c.pd,at:c.pat||0}:null;
     const pw=(w&&w.d>0&&(!rem||(w.at||0)>=rem.at))?w:rem,remote=!!rem&&pw===rem;
@@ -351,12 +369,14 @@ function renderNow(){
     const t=tileEl({name:nm,url:c.url,icon,sub,agoT:c.lastAt,cap:true,badge:!!c.isNew,onDone:()=>{finishSeries(UI.allEps?[c]:groupOf(c));toast('✓ اتشالت من التكملة')},menu:()=>tileMenu('cont',c)});
     if(pct>0&&pct<0.97){const b=document.createElement('div');b.className='pbar';b.innerHTML='<i style="width:'+Math.round(pct*100)+'%"></i>';t.querySelector('.thumb').appendChild(b)}
     t.onclick=e=>{if(editMode){e.preventDefault();openCont(c)}else{if(remote&&window.Android&&Android.seedWatch){try{Android.seedWatch(c.url,c.pt,c.pd)}catch(_){}}put(Object.assign({},c,{lastAt:Date.now(),isNew:false}));if(c.siteId&&siteById(c.siteId))visit(c.siteId,true)}};
-    cr.appendChild(t);
+    xf.appendChild(t);
   });
+  cr.appendChild(xf);
 
   const lr=$('#laterRow'),lh=$('#laterH');lr.innerHTML='';
   const ls=[...items.values()].filter(o=>o.kind==='later'&&siteOk(o.siteId)&&qMatch(o.title,o.url)).sort((a,b)=>b.at-a.at);
   lh.hidden=lr.hidden=!ls.length;
+  const lf=document.createDocumentFragment();
   ls.forEach(l=>{
     const s=siteById(l.siteId);
     const t=tileEl({name:l.title,url:l.url,icon:l.icon||(s&&s.icon)||'',sub:s?s.name:hostOf(l.url),cap:true,onDone:()=>{del(l.id);toast('اتشال من بعدين')},menu:()=>tileMenu('later',l)});
@@ -366,8 +386,9 @@ function renderNow(){
       items.delete(l.id);if(col){const c=col;cloudWrite(l.id,()=>c.doc(l.id).delete())}
       put({id:'c-'+uid(),kind:'cont',title:l.title,url:l.url,note:l.note||'',siteId:l.siteId||'',icon:l.icon||'',lastAt:Date.now()});
       if(l.siteId&&siteById(l.siteId))visit(l.siteId,true)};
-    lr.appendChild(t);
+    lf.appendChild(t);
   });
+  lr.appendChild(lf);
   trSync();
 }
 /* ---------- match times, archive, locks, extras ---------- */
@@ -486,10 +507,21 @@ async function checkLinks(){
   }finally{lcBusy=false}
 }
 /* ---------- continue watching, kept by the app: how far each episode got, and its next episode ---------- */
-function watchMap(){try{return window.Android&&Android.watchList?JSON.parse(Android.watchList()||'{}'):{}}catch(e){return {}}}
+/* the app's watch store, parsed once until it actually changes (it changes only while a video plays), normalized by video */
+let watchRaw='',WN={};
+function watchNorm(){
+  let raw='{}';try{raw=window.Android&&Android.watchList?Android.watchList()||'{}':'{}'}catch(e){}
+  if(raw===watchRaw)return WN;
+  watchRaw=raw;
+  let W0={};try{W0=JSON.parse(raw)}catch(e){W0={}}
+  const W={};Object.keys(W0).forEach(u=>{const k=vkey(u),w=W0[u];if(!w)return;if(!W[k]||(w.at||0)>(W[k].at||0))W[k]=Object.assign({url:u},w)});
+  WN=W;return WN;
+}
 function fmtT(t){t=Math.max(0,Math.floor(t));const h=Math.floor(t/3600),m=Math.floor(t/60)%60,x=t%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
-function dismissed(){try{return JSON.parse(localStorage.getItem('sajo-dismiss')||'[]')}catch(e){return []}}
-function dismiss(url){try{const d=dismissed();if(d.indexOf(url)<0){d.push(url);localStorage.setItem('sajo-dismiss',JSON.stringify(d.slice(-200)))}}catch(e){}}
+let disRaw=null,disCache=[];
+function dismissed(){let raw='[]';try{raw=localStorage.getItem('sajo-dismiss')||'[]'}catch(e){}
+  if(raw!==disRaw){disRaw=raw;try{disCache=JSON.parse(raw)||[]}catch(e){disCache=[]}}return disCache}
+function dismiss(url){try{const d=dismissed();if(d.indexOf(url)<0){d.push(url);const s=JSON.stringify(d.slice(-200));localStorage.setItem('sajo-dismiss',s);disRaw=s;disCache=JSON.parse(s);pushDismiss()}}catch(e){}}
 function nextTitle(t){const m=String(t||'').match(/^(.*?)(\d+)(\D*)$/);return m?m[1]+(+m[2]+1)+m[3]:(t||'')+' — الحلقة التالية'}
 let syncing=false;
 /* one video = one tile: the same video under different addresses (?t=, &pp=, the TV page…) counts once */
@@ -499,9 +531,9 @@ function vkey(u){try{u=String(u||'');const x=new URL(u),h=x.hostname.replace(/^(
   return h+x.pathname.replace(/\/+$/,'')+(x.search||'')}catch(e){return String(u||'')}}
 function cleanTitle(t,u){t=String(t||'').replace(/^\(\d+\)\s*/,'').replace(/\s*[-|–—]\s*(YouTube|يوتيوب)\s*$/i,'').trim();return t.slice(0,70)||hostOf(u)}
 function syncWatch(){
-  if(syncing)return;const W0=watchMap(),W={};
-  // progress by video (latest record wins)
-  Object.keys(W0).forEach(u=>{const k=vkey(u),w=W0[u];if(!W[k]||(w.at||0)>(W[k].at||0))W[k]=Object.assign({url:u},w)});
+  if(syncing)return;
+  syncWatchCloud();   // the progress itself travels too (throttled inside)
+  const W=watchNorm();
   const keys=Object.keys(W),gone=dismissed().map(vkey),ups=[],dels=[];
   // duplicates already in the list: keep the newest
   const seen={};[...items.values()].filter(o=>o.kind==='cont').sort((a,b)=>b.lastAt-a.lastAt).forEach(c=>{const k=vkey(c.url);if(seen[k])dels.push(c.id);else seen[k]=c});
@@ -525,8 +557,10 @@ function syncWatch(){
 }
 /* YouTube: the real video name + picture (the TV interface's page is always called "YouTube on TV") */
 const ytAsked={};
+let ytCache=null;
 function ytFix(){
-  let cache={};try{cache=JSON.parse(localStorage.getItem('sajo-yt')||'{}')}catch(e){}
+  if(!ytCache){try{ytCache=JSON.parse(localStorage.getItem('sajo-yt')||'{}')}catch(e){ytCache={}}}
+  const cache=ytCache;
   const ups=[];
   [...items.values()].filter(o=>o.kind==='cont').forEach(c=>{const k=vkey(c.url);if(k.indexOf('yt:')!==0)return;const id=k.slice(3),m=cache[id];
     if(m){const want={title:m.title,icon:'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg'};
@@ -538,7 +572,32 @@ function ytFix(){
         try{localStorage.setItem('sajo-yt',JSON.stringify(cache))}catch(e){}ytFix();softRender()}).catch(()=>{})});
   if(!ups.length)return;ups.forEach(o=>items.set(o.id,o));saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}
 }
-function watchFor(W,u){const k=vkey(u);let best=null;Object.keys(W).forEach(x=>{if(vkey(x)===k&&(!best||(W[x].at||0)>(best.at||0)))best=W[x]});return best}
+/* ---------- the progress itself travels between devices: one cloud doc per video, the newer record wins ---------- */
+function wid(u){return 'w-'+hid(u).slice(2)}
+let wCloudT=0,wBusy=false;
+function syncWatchCloud(){
+  if(!col||wBusy)return;
+  const now=Date.now();if(now-wCloudT<20000)return;wCloudT=now;
+  wBusy=true;
+  try{
+    const W=watchNorm(),byK={},up=[],adopt={};
+    [...items.values()].forEach(o=>{if(o.kind==='watch'&&o.k)byK[o.k]=o});
+    Object.keys(W).forEach(k=>{const w=W[k],c=byK[k];if(!(w.d>0))return;
+      if(!c||(w.at||0)>(c.at||0)+5000)up.push({id:wid(w.url),kind:'watch',k,url:w.url,t:w.t||0,d:w.d||0,at:w.at||now,title:w.title||'',next:w.next||'',pdev:DEV})});
+    Object.keys(byK).forEach(k=>{const c=byK[k],w=W[k];if(!w||(c.at||0)>(w.at||0)+5000)adopt[c.url]={t:c.t||0,d:c.d||0,at:c.at||0,title:c.title||'',next:c.next||''}});
+    // the cloud forgets what no device still holds, oldest first
+    const allW=[...items.values()].filter(o=>o.kind==='watch').sort((a,b)=>(a.at||0)-(b.at||0));
+    if(allW.length>120){const cands=allW.filter(o=>!W[o.k]).slice(0,allW.length-120);
+      if(cands.length){const cc=col;cands.forEach(o=>{items.delete(o.id);cloudWrite(o.id,()=>cc.doc(o.id).delete())})}}
+    if(up.length){const cc=col;up.forEach(o=>{items.set(o.id,o);cloudWrite(o.id,()=>cc.doc(o.id).set(o))});saveLocal()}
+    if(Object.keys(adopt).length&&window.Android&&Android.importWatch){try{Android.importWatch(JSON.stringify(adopt))}catch(e){}}
+  }finally{wBusy=false}
+}
+/* «خلصته» travels too, so a finished episode doesn't come back on the other device */
+function pushDismiss(){if(!col)return;const c=col,o={id:'dismiss',kind:'dismiss',list:dismissed().slice(-200),at:Date.now()};items.set(o.id,o);cloudWrite(o.id,()=>c.doc(o.id).set(o))}
+function pullDismiss(){const d=items.get('dismiss');if(!d||d.kind!=='dismiss'||!Array.isArray(d.list))return;
+  const l=dismissed();let ch=false;d.list.forEach(u=>{if(typeof u==='string'&&l.indexOf(u)<0){l.push(u);ch=true}});
+  if(ch){const s=JSON.stringify(l.slice(-200));try{localStorage.setItem('sajo-dismiss',s)}catch(e){}disRaw=s;disCache=JSON.parse(s)}}
 function autoIcon(url){const h=hostOf(url);return h?'https://www.google.com/s2/favicons?domain='+h+'&sz=256':''}
 
 function visit(siteId,silent){
@@ -731,9 +790,92 @@ function checkPush(){
   setTimeout(()=>$('#po').focus(),50);
 }
 
+/* ---------- the built-in player for direct stream addresses (M3U channels…) ---------- */
+let plOpen=false;
+function playStream(url,title){
+  const pl=$('#ply'),v=$('#plyV');$('#plyT').textContent=title||hostOf(url);
+  pl.hidden=false;plOpen=true;try{history.pushState({pl:1},'')}catch(e){}
+  v.onerror=()=>{if(plOpen)toast('تعذّر تشغيل القناة دي على الجهاز ده')};
+  v.src=url;const p=v.play();if(p&&p.catch)p.catch(()=>{});
+}
+function closePlayer(){const v=$('#plyV');try{v.pause()}catch(e){}v.removeAttribute('src');try{v.load()}catch(e){}$('#ply').hidden=true;plOpen=false}
+window.addEventListener('popstate',()=>{if(plOpen)closePlayer()});
+$('#plyX').onclick=()=>{if(plOpen)history.back();else closePlayer()};
+
+/* ---------- M3U: a whole channel list at once ---------- */
+function parseM3U(text){
+  const out=[],lines=String(text||'').split(/\r?\n/);let cur=null;
+  lines.forEach(l=>{l=l.trim();
+    if(/^#EXTINF/i.test(l)){
+      const logo=(l.match(/tvg-logo="([^"]*)"/i)||[])[1]||'';
+      const grp=(l.match(/group-title="([^"]*)"/i)||[])[1]||'';
+      const name=(l.split(',').pop()||'').trim();
+      cur={name:name||'قناة',icon:logo,grp};
+    }else if(l&&l[0]!=='#'&&cur){
+      const u=normUrl(l);if(u){cur.url=u;out.push(cur)}cur=null;
+    }});
+  return out;
+}
+/* verified Arabic lists (iptv-org) offered as one-tap fills */
+const M3U_READY=[
+  ['🇪🇬 قنوات مصر','https://iptv-org.github.io/iptv/countries/eg.m3u','قنوات مصر'],
+  ['🇸🇦 قنوات السعودية','https://iptv-org.github.io/iptv/countries/sa.m3u','قنوات السعودية'],
+  ['🌍 عربي كله','https://iptv-org.github.io/iptv/languages/ara.m3u','قنوات عربية']];
+function openM3u(){
+  openModal(`<h3>📋 استيراد قائمة قنوات (M3U)</h3>
+   <label>قائمة جاهزة (متجربة وشغالة)</label><div class="acts" style="margin-top:0">${M3U_READY.map((r,i)=>`<button class="fbtn" data-nav data-mr="${i}">${r[0]}</button>`).join('')}</div>
+   <label>أو الصق رابط قائمة</label><input id="mu" dir="ltr" inputmode="url" placeholder="https://…/list.m3u" data-nav>
+   <div class="acts" style="margin-top:0"><button class="fbtn g" id="mf" data-nav>📥 اجلب القائمة</button></div>
+   <label>أو ارفع ملف القائمة من الجهاز</label><input type="file" id="mb" accept=".m3u,.m3u8,.txt" data-nav>
+   <label>المجموعة اللي تتحط فيها القنوات</label><input id="mg" list="glist2" placeholder="مثلاً: قنوات عربية" value="قنوات" data-nav><datalist id="glist2">${[...new Set(sites().map(x=>x.group).filter(Boolean))].map(g=>'<option value="'+esc(g)+'">').join('')}</datalist>
+   <div id="msum" class="hint"></div>
+   <div class="hint">القنوات بتتضاف كبلاطات في المجموعة دي، ودوس على أي قناة تشتغل في المشغّل المدمج فوق الصفحة.</div>
+   <div class="acts"><button class="fbtn red" id="mv" data-nav hidden>استيراد</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  let found=[];
+  const show=()=>{const ok=found.length;
+    $('#msum').textContent=ok?`اتلاقت ${ok} قناة — دوس استيراد`:'مفيش قنوات اتلاقت في الملف ده';
+    $('#mv').hidden=!ok};
+  const take=text=>{found=parseM3U(text).slice(0,500);show()};
+  $('#mb').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{take(await f.text())}catch(_){toast('تعذّر قراءة الملف')}};
+  $('#mf').onclick=async()=>{const u=normUrl($('#mu').value);if(!u){toast('الصق رابط القائمة الأول');$('#mu').focus();return}
+    $('#msum').textContent='بجيب القائمة…';take(await trGet(u));if(!found.length)$('#msum').textContent='مقدرتش أجيب القائمة من الرابط ده'};
+  $('#box').querySelectorAll('[data-mr]').forEach(b=>b.onclick=()=>{const r=M3U_READY[+b.dataset.mr];$('#mu').value=r[1];$('#mg').value=r[2];$('#mf').click()});
+  $('#mv').onclick=()=>{
+    const grp=$('#mg').value.trim(),have=new Set(sites().map(x=>x.url));let n=0;
+    const list=[];found.forEach(c=>{if(have.has(c.url))return;have.add(c.url);n++;
+      list.push({id:'s-'+uid(),kind:'site',name:c.name,url:c.url,icon:c.icon||autoIcon(c.url),group:grp,createdAt:Date.now()})});
+    if(!list.length){toast('القنوات دي موجودة عندك كلها');return}
+    closeModal();setMany(list);toast(`📋 اتضافت ${list.length} قناة`);
+  };
+}
+
+/* ---------- the phone is the TV's remote: commands travel on the same sync channel ---------- */
+function openRemote(){
+  if(!col){toast('الريموت محتاج المزامنة شغالة على الجهازين بنفس الحساب');return}
+  const ss=sites();
+  openModal(`<h3>🎮 ريموت التلفزيون</h3>
+   <label>افتح موقع على التلفزيون</label><select id="rms" data-nav><option value="">— اختار —</option>${ss.map((s,i)=>`<option value="${i}">${esc(s.name)}</option>`).join('')}</select>
+   <div class="acts"><button class="fbtn" id="rmh" data-nav>🏠 الرئيسية</button><button class="fbtn" id="rmb" data-nav>⬅ رجوع</button><button class="fbtn" id="rmp" data-nav>⏯ تشغيل/إيقاف</button></div>
+   <div class="acts"><button class="fbtn" id="rmu" data-nav>⬆</button><button class="fbtn" id="rmd" data-nav>⬇</button><button class="fbtn" id="rml" data-nav>⬅</button><button class="fbtn" id="rmr" data-nav>➡</button><button class="fbtn red" id="rmo" data-nav>OK</button></div>
+   <label>اكتب للتلفزيون (للبحث مثلًا)</label><input id="rmt" placeholder="اكتب هنا وابعت" data-nav>
+   <div class="acts" style="margin-top:0"><button class="fbtn g" id="rmy" data-nav>⌨ ابعت النص</button></div>
+   <div class="hint">الأوامر بتوصل بالمزامنة السحابية: مفيش إعداد شبكة، وتشتغل حتى لو الموبايل والتلفزيون مش على نفس الواي فاي. بس الاتنين لازم يكونوا على نفس الحساب.</div>
+   <div class="acts"><button class="fbtn" id="cc" data-nav>إغلاق</button></div>`);
+  $('#cc').onclick=closeModal;
+  const send=(cmd,arg)=>{put({id:'remote',kind:'remote',cmd,arg:arg||'',from:DEV,sentAt:Date.now()});toast('🎮 اتبعت')};
+  $('#rms').onchange=()=>{const v=$('#rms').value;if(v==='')return;const s=ss[+v];if(s)send('open',s.url)};
+  $('#rmh').onclick=()=>send('home');$('#rmb').onclick=()=>send('back');$('#rmp').onclick=()=>send('play');
+  $('#rmu').onclick=()=>send('up');$('#rmd').onclick=()=>send('down');$('#rml').onclick=()=>send('left');$('#rmr').onclick=()=>send('right');$('#rmo').onclick=()=>send('ok');
+  $('#rmy').onclick=()=>{const t=$('#rmt').value.trim();if(t){send('type',t);$('#rmt').value=''}};
+}
+
 /* ---------- buttons ---------- */
 $('#addSite').onclick=()=>openSite();
 $('#addCont').onclick=()=>openCont();
+$('#addM3u').onclick=openM3u;
+$('#addRm').onclick=openRemote;
+if(document.documentElement.classList.contains('phone'))$('#addRm').hidden=false;
 let qT;$('#q').addEventListener('input',()=>{clearTimeout(qT);qT=setTimeout(render,120)});
 $('#editBtn').onclick=()=>{editMode=!editMode;render();toast(editMode?'دوس على أي أيقونة لتعديلها أو حذفها':'خلص التعديل')};
 $('#ver').onclick=()=>{openModal(`<h3>نسخة ${VERSION.n}</h3><p>تاريخ إنشاء النسخة دي: ${VERSION.created}</p><div class="acts"><button class="fbtn" id="cc" data-nav>تمام</button></div>`);$('#cc').onclick=closeModal};
@@ -753,7 +895,7 @@ function startMove(s){if(($('#q').value||'').trim()){$('#q').value=''}gfilter=''
 function endMove(){if(!moveId)return 0;moveId=null;const b=$('#moveBar');if(b)b.hidden=true;render();toast('✓ اتحفظ الترتيب');return 1}
 window.endMove=endMove;
 function moveBy(step){
-  const list=sites(),i=list.findIndex(o=>o.id===moveId),j=i+step;
+  const list=sites().slice(),i=list.findIndex(o=>o.id===moveId),j=i+step;
   if(i<0||j<0||j>=list.length)return;
   const [m]=list.splice(i,1);list.splice(j,0,m);
   list.forEach((o,k)=>{if(o.order!==k){const n=Object.assign({},o,{order:k});items.set(n.id,n);if(col){const c=col;cloudWrite(n.id,()=>c.doc(n.id).set(n))}}});
@@ -874,7 +1016,7 @@ document.addEventListener('keydown',e=>{
   if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}
 });
 
-function backupJson(){return JSON.stringify({app:'shashti',v:1,at:Date.now(),items:[...items.values()].filter(o=>o.kind!=='push')})}
+function backupJson(){return JSON.stringify({app:'shashti',v:1,at:Date.now(),items:[...items.values()].filter(o=>o.kind!=='push'&&o.kind!=='remote')})}
 // once a week: inside the app a backup file is saved by itself; in a browser a reminder shows up
 function autoBackup(){try{
   const last=+localStorage.getItem('shashti-lastbk')||0;
@@ -942,7 +1084,8 @@ function importData(){
   $('#cc').onclick=closeModal;
   $('#bf').onchange=async e=>{const f=e.target.files[0];if(!f)return;
     try{const j=JSON.parse(await f.text());if(!j||!Array.isArray(j.items))throw 0;
-      let n=0;j.items.forEach(o=>{if(o&&o.id&&['site','visit','cont','later','hist'].includes(o.kind)){items.set(o.id,o);n++}});
+      let n=0;j.items.forEach(o=>{if(o&&o.id&&['site','visit','cont','later','hist','watch'].includes(o.kind)){items.set(o.id,o);n++}
+        else if(o&&o.kind==='dismiss'&&Array.isArray(o.list)){const l=dismissed();o.list.forEach(u=>{if(typeof u==='string'&&l.indexOf(u)<0)l.push(u)});const s=JSON.stringify(l.slice(-200));try{localStorage.setItem('sajo-dismiss',s)}catch(e){}disRaw=s;disCache=JSON.parse(s)}});
       saveLocal();render();closeModal();toast(`اتسترجع ${n} عنصر`)}catch(_){toast('الملف ده مش نسخة احتياطية من شاشتي')}};
 }
 const AND=!!(window.Android&&Android.adblockOn);
@@ -970,7 +1113,7 @@ const trEligible=s=>!!s.url&&!TR_BAD.test(hostOf(s.url))&&!TR_BAD.test(s.name||'
 // no site ticked = every eligible site feeds the rows; once you tick some, only those do
 const trSources=()=>{const el=sites().filter(trEligible),pick=el.filter(s=>s.tr===true);return pick.length?pick:el};
 const TR_AR=/عربي|عربى|مصري|مصرى|خليجي|خليجى|سوري|لبناني|رمضان|مسرحية|arab|egypt/i,TR_FX=/مترجم|اجنبي|أجنبي|اجنبى|foreign|english|netflix|hollywood|كوري|تركي|هندي|انمي|أنمي|anime|مدبلج|korean|turkish|dubbed/i;
-const trKey=x=>x.t.toLowerCase().replace(/\s+/g,' ').slice(0,60);
+const trKey=x=>x.t.toLowerCase().replace(/[\u064B-\u0652\u0670]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim().slice(0,60);   // normalized: the same title written two ways counts once
 function trKind(text,s){
   if(TR_AR.test(text))return 'ar';if(TR_FX.test(text))return 'fx';
   const hint=(s.name||'')+' '+(s.group||'');if(TR_AR.test(hint))return 'ar';if(TR_FX.test(hint))return 'fx';
@@ -1018,8 +1161,10 @@ async function trRefresh(force){
     await Promise.all([work(),work(),work(),work()]);
     const per={ar:[],fx:[]};
     res.forEach(([s,l])=>['ar','fx'].forEach(k=>per[k].push(l.filter(x=>x.k===k).slice(0,12).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})))));
-    const list=[],seen=new Set();
-    ['ar','fx'].forEach(k=>{for(let n=0;n<12;n++)per[k].forEach(a=>{const x=a[n];if(!x)return;const kk=trKey(x);if(seen.has(kk))return;seen.add(kk);list.push(x)})});
+    const list=[],seen=new Set(),seenU=new Set();
+    ['ar','fx'].forEach(k=>{for(let n=0;n<12;n++)per[k].forEach(a=>{const x=a[n];if(!x)return;const kk=trKey(x);if(seen.has(kk))return;seen.add(kk);
+      const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // the same card from two sites, or two cards for one address: once
+      list.push(x)})});
     if(list.length){TR={at:Date.now(),list};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
     else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
     else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
@@ -1039,28 +1184,33 @@ function renderTrend(){
   const ok=new Set(trSources().map(s=>s.id));
   [['ar','#trAr','#trH'],['fx','#trFx','#trH2']].forEach(([k,rid,hid])=>{
     const row=$(rid),h=$(hid);row.innerHTML='';row._loop=false;
-    const l=hide?[]:TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid)&&(ov[trKey(x)]||x.k)===k);
+    const seen=new Set();
+    const l=hide?[]:TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid)&&(ov[trKey(x)]||x.k)===k).filter(x=>{const kk=trKey(x);if(seen.has(kk))return false;seen.add(kk);return true});
     row.hidden=h.hidden=!l.length;if(!l.length)return;
-    const mk=dup=>l.forEach(x=>{
+    row._half=null;   // content changed: the loop's width is measured again on the next tick
+    const mk=dup=>{const fr=document.createDocumentFragment();l.forEach(x=>{
       const t=tileEl({name:x.t,url:x.u,icon:x.i,sub:x.sn,cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:(ov[trKey(x)]||x.k),key:trKey(x)})});
       t.classList.add('pst');t.onclick=()=>{if(siteById(x.sid))visit(x.sid,true)};
       if(dup){t.classList.add('dup');t.removeAttribute('data-nav');t.tabIndex=-1;t.setAttribute('aria-hidden','true')}
-      row.appendChild(t)});
+      fr.appendChild(t)});row.appendChild(fr)};
     mk(false);
     if(row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
   });
 }
-let trLast=0;
+let trLast=0,trFrame=0;
 const trHalf=r=>{const f=r.querySelector('.tile:not(.dup)'),d=r.querySelector('.tile.dup');return f&&d?Math.abs(d.offsetLeft-f.offsetLeft):0};
 function trPaused(r){return !!(r._h||r._tt||Date.now()-(r._touch||0)<3500||r.contains(document.activeElement)||$('#modal').classList.contains('open')||document.hidden)}
 function trTick(ts){
-  const dt=Math.min(64,ts-(trLast||ts));trLast=ts;
+  const dt=Math.min(64,ts-(trLast||ts));trLast=ts;trFrame=(trFrame+1)%15;
   ['#trAr','#trFx'].forEach(id=>{const r=$(id);if(r.hidden||!r._loop)return;
-    const b=r.getBoundingClientRect();if(b.bottom<0||b.top>innerHeight||trPaused(r)){r._a=null;return}
-    const sg=getComputedStyle(r).direction==='rtl'?-1:1;
+    if(trFrame===0){const b=r.getBoundingClientRect();r._vis=!(b.bottom<0||b.top>innerHeight)}   // the position check runs ~4 times a second, not every frame
+    if(r._vis===false||trPaused(r)){r._a=null;return}
+    if(r._sg==null)r._sg=getComputedStyle(r).direction==='rtl'?-1:1;
     if(r._a==null)r._a=Math.abs(r.scrollLeft);
-    r._a+=TR_SPEED*dt/1000;const half=trHalf(r);if(half>50)r._a%=half;
-    r.scrollLeft=sg*r._a});
+    r._a+=TR_SPEED*dt/1000;
+    if(r._half==null)r._half=trHalf(r);   // offsetLeft forces a layout: measure once per content, not per frame
+    if(r._half>50)r._a%=r._half;
+    r.scrollLeft=r._sg*r._a});
   requestAnimationFrame(trTick)}
 ['#trAr','#trFx'].forEach(id=>{const r=$(id);
   r.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse')r._h=1});r.addEventListener('pointerleave',()=>{r._h=0});
