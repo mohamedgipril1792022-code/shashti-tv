@@ -831,15 +831,22 @@ function openM3u(){
    <div id="msum" class="hint"></div>
    <div class="hint">القنوات بتتضاف كبلاطات في المجموعة دي، ودوس على أي قناة تشتغل في المشغّل المدمج فوق الصفحة.</div>
    <div class="acts"><button class="fbtn red" id="mv" data-nav hidden>استيراد</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
-  $('#cc').onclick=closeModal;
+  const ac=new AbortController();let fetching=false;
+  const stop=()=>{if(!ac.signal.aborted)ac.abort()};
+  $('#cc').onclick=()=>{const was=fetching;stop();closeModal();if(was)toast('اتلغى استيراد القنوات')};
+  // closing the dialog any other way (Escape, Back) abandons the import too
+  const mo=new MutationObserver(()=>{if(!$('#modal').classList.contains('open')){stop();mo.disconnect()}});
+  mo.observe($('#modal'),{attributes:true,attributeFilter:['class']});
   let found=[];
   const show=()=>{const ok=found.length;
     $('#msum').textContent=ok?`اتلاقت ${ok} قناة — دوس استيراد`:'مفيش قنوات اتلاقت في الملف ده';
     $('#mv').hidden=!ok};
   const take=text=>{found=parseM3U(text).slice(0,500);show()};
-  $('#mb').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{take(await f.text())}catch(_){toast('تعذّر قراءة الملف')}};
+  $('#mb').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const t=await f.text();if(!ac.signal.aborted)take(t)}catch(_){if(!ac.signal.aborted)toast('تعذّر قراءة الملف')}};
   $('#mf').onclick=async()=>{const u=normUrl($('#mu').value);if(!u){toast('الصق رابط القائمة الأول');$('#mu').focus();return}
-    $('#msum').textContent='بجيب القائمة…';take(await trGet(u));if(!found.length)$('#msum').textContent='مقدرتش أجيب القائمة من الرابط ده'};
+    $('#msum').textContent='بجيب القائمة…';fetching=true;const text=await trGet(u,ac.signal);fetching=false;
+    if(ac.signal.aborted||!$('#modal').classList.contains('open'))return;   // اتلغى وهو بيجيب
+    take(text);if(!found.length)$('#msum').textContent='مقدرتش أجيب القائمة من الرابط ده'};
   $('#box').querySelectorAll('[data-mr]').forEach(b=>b.onclick=()=>{const r=M3U_READY[+b.dataset.mr];$('#mu').value=r[1];$('#mg').value=r[2];$('#mf').click()});
   $('#mv').onclick=()=>{
     const grp=$('#mg').value.trim(),have=new Set(sites().map(x=>x.url));let n=0;
@@ -1147,9 +1154,14 @@ function trParse(html,base,s){
   return out;
 }
 const trCbs={};window.__pageCb=(id,html)=>{const f=trCbs[id];delete trCbs[id];f&&f(html)};
-function trGet(url){return new Promise(res=>{
-  if(window.Android&&Android.fetchPage){const id='p'+Math.random().toString(36).slice(2);trCbs[id]=res;setTimeout(()=>{if(trCbs[id]){delete trCbs[id];res('')}},20000);try{Android.fetchPage(url,id)}catch(e){delete trCbs[id];res('')}}
-  else{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),10000);fetch(url,{signal:ac.signal}).then(r=>r.ok?r.text():'').catch(()=>'').then(x=>{clearTimeout(t);res(x)})}})}
+function trGet(url,sig){return new Promise(res=>{
+  if(sig&&sig.aborted)return res('');
+  if(window.Android&&Android.fetchPage){const id='p'+Math.random().toString(36).slice(2);trCbs[id]=res;setTimeout(()=>{if(trCbs[id]){delete trCbs[id];res('')}},20000);
+    if(sig)sig.addEventListener('abort',()=>{if(trCbs[id]){delete trCbs[id];res('')}},{once:true});   // the native fetch runs out its clock, its answer is just dropped
+    try{Android.fetchPage(url,id)}catch(e){delete trCbs[id];res('')}}
+  else{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),10000);
+    if(sig)sig.addEventListener('abort',()=>ac.abort(),{once:true});
+    fetch(url,{signal:ac.signal}).then(r=>r.ok?r.text():'').catch(()=>'').then(x=>{clearTimeout(t);res(x)})}})}
 let trBusy=false;
 async function trRefresh(force){
   if(trBusy||UI.notrend)return;
