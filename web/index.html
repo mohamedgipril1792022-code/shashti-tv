@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Sajo TV</title>
 <meta name="theme-color" content="#160e10">
+<meta name="referrer" content="no-referrer">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -126,6 +127,12 @@ html.light .fbtn.del{background:transparent;color:#d33}
 .phone .tile .sub{font-size:11px}
 .phone .fav{width:30px;height:30px;font-size:16px;top:5px;right:5px}
 @media (max-width:520px){.hbtn .t{display:none}.hbtn{padding:8px 11px}}
+/* trending rows: posters that drift by themselves */
+.row.tr{scroll-snap-type:none;scrollbar-width:none}
+.row.tr::-webkit-scrollbar{display:none}
+.row.tr .tile{flex:0 0 clamp(105px,10vw,165px);scroll-snap-align:none}
+.tile.capt.pst .thumb{aspect-ratio:2/3}
+.phone .row.tr .tile{flex-basis:105px}
 </style>
 </head>
 <body>
@@ -145,6 +152,10 @@ html.light .fbtn.del{background:transparent;color:#d33}
   <div class="row" id="visitRow" hidden></div>
   <h2 id="laterH" hidden>⏳ هتفرج عليه بعدين</h2>
   <div class="row wide" id="laterRow" hidden></div>
+  <h2 id="trH" hidden>🔥 الجديد والترند <small>عربي</small></h2>
+  <div class="row tr" id="trAr" hidden></div>
+  <h2 id="trH2" hidden>🔥 الجديد والترند <small>أجنبي</small></h2>
+  <div class="row tr" id="trFx" hidden></div>
   <h2>⭐ مواقعي</h2>
   <div id="chips" hidden></div>
   <div class="grid" id="siteGrid"></div>
@@ -274,7 +285,7 @@ function renderChips(){
 function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!q)return true;return fields.some(f=>String(f||'').toLowerCase().includes(q))}
 /* a refresh rebuilds every tile; the focused tile would be lost (the next press went to the first button, «＋») or a tap that was in progress would be swallowed.
    So: the focus is put back on the same tile, and refreshes that come from the background wait until you stop touching the screen. */
-const FOCUS_HOSTS='#chips,#contRow,#laterRow,#visitRow,#siteGrid';
+const FOCUS_HOSTS='#chips,#contRow,#laterRow,#trAr,#trFx,#visitRow,#siteGrid';
 function tileKey(a){const n=a.querySelector&&a.querySelector('.cap b,.name');return (a.getAttribute('href')||'')+'|'+(n?n.textContent:(a.textContent||'').trim().slice(0,40))}
 function focusKey(){const a=document.activeElement;if(!a||a===document.body||!a.closest)return null;const h=a.closest(FOCUS_HOSTS);if(!h||h.closest('#modal'))return null;return {h:h.id,k:tileKey(a)}}
 function restoreFocus(f){if(!f)return;const h=document.getElementById(f.h);if(!h)return;const e=[...h.querySelectorAll('[data-nav]')].find(x=>tileKey(x)===f.k);if(e&&document.activeElement!==e)e.focus({preventScroll:true})}
@@ -357,6 +368,7 @@ function renderNow(){
       if(l.siteId&&siteById(l.siteId))visit(l.siteId,true)};
     lr.appendChild(t);
   });
+  trSync();
 }
 /* ---------- match times, archive, locks, extras ---------- */
 function matchSub(s){if(!s.matchAt)return '';const d=s.matchAt-Date.now();if(d<-3*3600e3)return '';if(d<=0)return '⏰ دلوقتي';
@@ -410,6 +422,12 @@ function setCine(img){clearTimeout(cineT);if(img&&!UI.nocine){cine.style.backgro
 const cineSel='#contRow .tile,#laterRow .tile,#siteGrid .tile';
 document.addEventListener('focusin',e=>{const t=e.target.closest&&e.target.closest(cineSel);setCine(t&&t.dataset.img)});
 document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest(cineSel);if(t)setCine(t.dataset.img)});
+/* when the app window gets its focus back, the browser moves focus to the first button («＋»): put it back on the tile you were on */
+let lastTileKey=null;
+document.addEventListener('focusin',e=>{const t=e.target.closest&&e.target.closest(cineSel);if(t)lastTileKey={h:t.parentElement.id,k:tileKey(t),at:Date.now()}});
+window.addEventListener('focus',()=>setTimeout(()=>{
+  const a=document.activeElement;
+  if(lastTileKey&&Date.now()-lastTileKey.at<120000&&a&&a.id==='addSite'&&!$('#modal').classList.contains('open'))restoreFocus(lastTileKey)},0));
 /* ---------- a site that moved: the app saw its address redirect (twice), so its tile follows it ---------- */
 function applyRedirects(){try{
   if(!(window.Android&&Android.redirects))return;
@@ -770,6 +788,10 @@ function tileMenu(kind,s,v){
   }else if(kind==='later'){
     items.push(['▶ افتح',()=>{location.href=s.url}]);
     items.push(['🗑 شيله من بعدين',()=>del(s.id)]);
+  }else if(kind==='trend'){
+    items.push(['▶ افتح',()=>{location.href=s.url}]);
+    items.push(['⏳ هتفرج عليه بعدين',()=>{put({id:'l-'+uid(),kind:'later',title:s.title,url:s.url,note:'',siteId:s.siteId||'',icon:s.icon||'',at:Date.now()});toast('⏳ اتضاف لبعدين')}]);
+    items.push([s.k==='ar'?'🌍 انقله لـ أجنبي':'🇪🇬 انقله لـ عربي',()=>{UI.trk=UI.trk||{};UI.trk[s.key]=s.k==='ar'?'fx':'ar';saveUI();trSig='';render()}]);
   }else{
     items.push(['▶ افتح',()=>{location.href=s.url}]);
     items.push(['⏳ شيله لبعدين',()=>{del(s.id);put({id:'l-'+uid(),kind:'later',title:s.title,url:s.url,note:s.note||'',siteId:s.siteId||'',icon:s.icon||'',at:Date.now()});toast('⏳ اتنقل لبعدين')}]);
@@ -829,6 +851,8 @@ document.addEventListener('keydown',e=>{
   add([$('#q'),$('#gq'),$('#gall')]);
   add([...document.querySelectorAll('#contRow .tile')]);
   add([...document.querySelectorAll('#laterRow .tile')]);
+  add([...document.querySelectorAll('#trAr .tile:not(.dup)')]);
+  add([...document.querySelectorAll('#trFx .tile:not(.dup)')]);
   add([...document.querySelectorAll('#visitRow .tile')]);
   add([...document.querySelectorAll('#chips .hbtn')]);
   const gridRows={};[...document.querySelectorAll('#siteGrid .tile')].forEach(t=>{const k=Math.round(t.offsetTop/10);(gridRows[k]=gridRows[k]||[]).push(t)});
@@ -869,6 +893,7 @@ function openSettings(){
    <label>حجم الخط</label><div class="acts"><button class="fbtn" data-nav data-z="0.9">صغير</button><button class="fbtn" data-nav data-z="1">عادي</button><button class="fbtn" data-nav data-z="1.15">كبير</button></div>
    <label>تكملة المشاهدة</label><div class="acts"><button class="fbtn" data-nav data-eps="0">بلاطة لكل مسلسل</button><button class="fbtn" data-nav data-eps="1">كل الحلقات</button></div>
    <label>الخلفية السينمائية</label><div class="acts"><button class="fbtn" data-nav data-cn="0">شغالة</button><button class="fbtn" data-nav data-cn="1">مقفولة</button></div>
+   <label>🔥 الجديد والترند (من مواقعك)</label><div class="acts"><button class="fbtn" data-nav data-tn="0">شغّال</button><button class="fbtn" data-nav data-tn="1">مقفول</button><button class="fbtn" data-nav id="trnow">🔄 حدّث دلوقتي</button><button class="fbtn" data-nav id="trpick">☑ اختار المواقع</button></div>
    ${hasSleep?'<label>😴 مؤقّت النوم'+(left>0?' — فاضل '+left+' د':'')+'</label><div class="acts"><button class="fbtn" data-nav data-sl="30">٣٠ د</button><button class="fbtn" data-nav data-sl="60">ساعة</button><button class="fbtn" data-nav data-sl="90">ساعة ونص</button><button class="fbtn del" data-nav data-sl="0">إلغاء</button></div><div class="hint">بعد المدة التطبيق يوقّف الفيديو ويرجع للرئيسية. اضبطه قبل ما تفتح الموقع.</div>':''}
    ${window.Android&&Android.setAutoNext?'<label>▶ الحلقة التالية تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-an="1">شغّالة</button><button class="fbtn" data-nav data-an="0">مقفولة</button></div><div class="hint">لما الحلقة تخلص، اللي بعدها تفتح لوحدها بعد ٨ ثواني. Back بيلغيها.</div>':''}
    ${window.Android&&Android.remoteInfo?'<label>📱 ريموت الموبايل</label><div class="acts"><button class="fbtn" data-nav data-rm="1">شغّال</button><button class="fbtn" data-nav data-rm="0">مقفول</button></div><div class="hint" id="rmi"></div>':''}
@@ -886,6 +911,10 @@ function openSettings(){
   bx.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{UI.zoom=+b.dataset.z;saveUI();applyUI();mark()});
   bx.querySelectorAll('[data-eps]').forEach(b=>b.onclick=()=>{UI.allEps=b.dataset.eps==='1';saveUI();mark();render()});
   bx.querySelectorAll('[data-cn]').forEach(b=>b.onclick=()=>{UI.nocine=b.dataset.cn==='1';saveUI();mark();if(UI.nocine)setCine('')});
+  bx.querySelectorAll('[data-tn]').forEach(b=>b.classList.toggle('red',(b.dataset.tn==='1')===!!UI.notrend));
+  bx.querySelectorAll('[data-tn]').forEach(b=>b.onclick=()=>{UI.notrend=b.dataset.tn==='1';saveUI();bx.querySelectorAll('[data-tn]').forEach(x=>x.classList.toggle('red',(x.dataset.tn==='1')===!!UI.notrend));trSync();if(!UI.notrend)trRefresh(true)});
+  $('#trpick').onclick=openTrPick;
+  $('#trnow').onclick=()=>{if(UI.notrend){toast('الجديد والترند مقفول');return}toast('🔄 بيجيب الجديد…');trRefresh(true)};
   const rmi=()=>{const el=$('#rmi');if(!el)return;const r=rmState();
     if(!r.on){el.textContent='';return}
     el.innerHTML=r.ip?'افتح من الموبايل (على نفس الواي فاي):<br><b dir="ltr" style="word-break:break-all">http://'+esc(r.ip)+':'+r.port+'/?k='+esc(r.pin)+'</b><br>الرقم السري '+esc(r.pin)+' — بيمنع أي حد تاني على الشبكة. <button class="fbtn" id="np" data-nav style="min-width:0;padding:4px 10px;font-size:13px">غيّر الرقم</button>':'التلفزيون مش متصل بواي فاي.';
@@ -933,11 +962,127 @@ window.quickAdd=function(kind,url,title,icon){
     const s=sites().find(x=>hostOf(x.url)===hostOf(url));if(s)$('#cs').value=s.id}
   setTimeout(()=>{const f=kind==='site'?$('#fn'):$('#cn2');f&&f.focus()},80);
 };
+/* ---------- trending: the newest cards of your own sites (Arabic / foreign), drifting by themselves ---------- */
+const TRK='sajo-trend';let TR={at:0,list:[]};try{const x=JSON.parse(localStorage.getItem(TRK)||'null');if(x&&x.list)TR=x}catch(e){}
+const TR_BAD=/youtube|youtu\.be|yalla|kora|koora|kooora|goal|sport|bein|365scores|fotmob|كور|مباريات|رياض|دوري|يوتيوب/i;
+const TR_SPEED=36;   // px per second
+const trEligible=s=>!!s.url&&!TR_BAD.test(hostOf(s.url))&&!TR_BAD.test(s.name||'')&&!TR_BAD.test(s.group||'')&&!s.matchAt;
+// no site ticked = every eligible site feeds the rows; once you tick some, only those do
+const trSources=()=>{const el=sites().filter(trEligible),pick=el.filter(s=>s.tr===true);return pick.length?pick:el};
+const TR_AR=/عربي|عربى|مصري|مصرى|خليجي|خليجى|سوري|لبناني|رمضان|مسرحية|arab|egypt/i,TR_FX=/مترجم|اجنبي|أجنبي|اجنبى|foreign|english|netflix|hollywood|كوري|تركي|هندي|انمي|أنمي|anime|مدبلج|korean|turkish|dubbed/i;
+const trKey=x=>x.t.toLowerCase().replace(/\s+/g,' ').slice(0,60);
+function trKind(text,s){
+  if(TR_AR.test(text))return 'ar';if(TR_FX.test(text))return 'fx';
+  const hint=(s.name||'')+' '+(s.group||'');if(TR_AR.test(hint))return 'ar';if(TR_FX.test(hint))return 'fx';
+  const lat=(text.match(/[A-Za-z]/g)||[]).length,arb=(text.match(/[؀-ۿ]/g)||[]).length;
+  return lat>arb?'fx':'ar';
+}
+const TR_SKIP=/logo|icon|avatar|sprite|flag|placeholder|blank|loading|pixel|\/ads?[\/_.-]|gravatar|emoji/i;
+function trParse(html,base,s){
+  let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
+  const host=hostOf(base),out=[],seen=new Set();
+  doc.querySelectorAll('a[href]').forEach(a=>{
+    if(out.length>=40)return;
+    const im=a.querySelector('img');let src='';
+    if(im){src=im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||im.getAttribute('data-original')||im.getAttribute('data-lazy')||'';
+      if(!src){const ss=im.getAttribute('data-srcset')||im.getAttribute('srcset');if(ss)src=ss.split(',')[0].trim().split(/\s+/)[0]}
+      if(!src||/^data:/.test(src))src=im.getAttribute('src')||''}
+    if(!src||/^data:/.test(src)){const el=a.querySelector('[style*="url("],[data-bg],[data-background]')||a;const m=(el.getAttribute('style')||'').match(/url\(["']?([^"')]+)/);src=m?m[1]:(el.getAttribute('data-bg')||el.getAttribute('data-background')||'')}
+    if(!src||/^data:/.test(src)||TR_SKIP.test(src))return;
+    let title=(im&&im.getAttribute('alt'))||a.getAttribute('title')||'';
+    const hd=a.querySelector('h1,h2,h3,h4,h5,[class*=title],[class*=name]');if(hd&&hd.textContent.trim().length>1)title=hd.textContent;
+    if(!title||title.trim().length<2)title=a.textContent;
+    title=title.replace(/\s+/g,' ').replace(/^(مشاهدة|تحميل|فيلم|مسلسل)\s+/,'').trim();
+    if(title.length<2||title.length>90)return;
+    let href,img;try{href=new URL(a.getAttribute('href'),base);img=new URL(src,base).href}catch(e){return}
+    if(!/^https?:$/.test(href.protocol)||hostOf(href.href)!==host||href.pathname.length<4)return;
+    const key=href.origin+href.pathname;if(seen.has(key))return;seen.add(key);
+    const sec=a.closest('section,[class*=section],[class*=block],[class*=widget],[class*=slider],[class*=box]'),sh=sec&&sec.querySelector('h1,h2,h3,h4');
+    let path=href.pathname;try{path=decodeURIComponent(path)}catch(e){}
+    out.push({t:title,u:href.href,i:img,k:trKind(title+' '+path+' '+(sh?sh.textContent:''),s)});
+  });
+  return out;
+}
+const trCbs={};window.__pageCb=(id,html)=>{const f=trCbs[id];delete trCbs[id];f&&f(html)};
+function trGet(url){return new Promise(res=>{
+  if(window.Android&&Android.fetchPage){const id='p'+Math.random().toString(36).slice(2);trCbs[id]=res;setTimeout(()=>{if(trCbs[id]){delete trCbs[id];res('')}},20000);try{Android.fetchPage(url,id)}catch(e){delete trCbs[id];res('')}}
+  else{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),10000);fetch(url,{signal:ac.signal}).then(r=>r.ok?r.text():'').catch(()=>'').then(x=>{clearTimeout(t);res(x)})}})}
+let trBusy=false;
+async function trRefresh(force){
+  if(trBusy||UI.notrend)return;
+  if(!force&&Date.now()-TR.at<45*60e3&&TR.list.length)return;
+  trBusy=true;
+  try{
+    const src=trSources(),res=[];let i=0;
+    const work=async()=>{while(i<src.length){const s=src[i++];const h=await trGet(s.url);res.push([s,h?trParse(h,s.url,s):[]])}};
+    await Promise.all([work(),work(),work(),work()]);
+    const per={ar:[],fx:[]};
+    res.forEach(([s,l])=>['ar','fx'].forEach(k=>per[k].push(l.filter(x=>x.k===k).slice(0,12).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})))));
+    const list=[],seen=new Set();
+    ['ar','fx'].forEach(k=>{for(let n=0;n<12;n++)per[k].forEach(a=>{const x=a[n];if(!x)return;const kk=trKey(x);if(seen.has(kk))return;seen.add(kk);list.push(x)})});
+    if(list.length){TR={at:Date.now(),list};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
+    else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
+    else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
+  }catch(e){}
+  trBusy=false;
+  const f=focusKey();trSync();restoreFocus(f);
+  if(force)toast('🔥 اتحدّث');
+}
+let trSig='';
+function trSync(){
+  const qv=($('#q').value||'').trim();
+  const sig=[qv?'q':'',gfilter,UI.notrend?1:0,TR.at,sites().filter(siteVisible).map(s=>s.id+(s.tr?'+':'')).join(',')].join('|');
+  if(sig===trSig)return;trSig=sig;renderTrend();
+}
+function renderTrend(){
+  const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter,ov=UI.trk||{};
+  const ok=new Set(trSources().map(s=>s.id));
+  [['ar','#trAr','#trH'],['fx','#trFx','#trH2']].forEach(([k,rid,hid])=>{
+    const row=$(rid),h=$(hid);row.innerHTML='';row._loop=false;
+    const l=hide?[]:TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid)&&(ov[trKey(x)]||x.k)===k);
+    row.hidden=h.hidden=!l.length;if(!l.length)return;
+    const mk=dup=>l.forEach(x=>{
+      const t=tileEl({name:x.t,url:x.u,icon:x.i,sub:x.sn,cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:(ov[trKey(x)]||x.k),key:trKey(x)})});
+      t.classList.add('pst');t.onclick=()=>{if(siteById(x.sid))visit(x.sid,true)};
+      if(dup){t.classList.add('dup');t.removeAttribute('data-nav');t.tabIndex=-1;t.setAttribute('aria-hidden','true')}
+      row.appendChild(t)});
+    mk(false);
+    if(row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
+  });
+}
+let trLast=0;
+const trHalf=r=>{const f=r.querySelector('.tile:not(.dup)'),d=r.querySelector('.tile.dup');return f&&d?Math.abs(d.offsetLeft-f.offsetLeft):0};
+function trPaused(r){return !!(r._h||r._tt||Date.now()-(r._touch||0)<3500||r.contains(document.activeElement)||$('#modal').classList.contains('open')||document.hidden)}
+function trTick(ts){
+  const dt=Math.min(64,ts-(trLast||ts));trLast=ts;
+  ['#trAr','#trFx'].forEach(id=>{const r=$(id);if(r.hidden||!r._loop)return;
+    const b=r.getBoundingClientRect();if(b.bottom<0||b.top>innerHeight||trPaused(r)){r._a=null;return}
+    const sg=getComputedStyle(r).direction==='rtl'?-1:1;
+    if(r._a==null)r._a=Math.abs(r.scrollLeft);
+    r._a+=TR_SPEED*dt/1000;const half=trHalf(r);if(half>50)r._a%=half;
+    r.scrollLeft=sg*r._a});
+  requestAnimationFrame(trTick)}
+['#trAr','#trFx'].forEach(id=>{const r=$(id);
+  r.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse')r._h=1});r.addEventListener('pointerleave',()=>{r._h=0});
+  r.addEventListener('touchstart',()=>{r._tt=1},{passive:true});
+  ['touchend','touchcancel'].forEach(ev=>r.addEventListener(ev,()=>{r._tt=0;r._touch=Date.now()},{passive:true}));
+  r.addEventListener('wheel',()=>{r._touch=Date.now()},{passive:true})});
+function openTrPick(){
+  const el=sites().filter(s=>trEligible(s)&&siteVisible(s));
+  if(!el.length){toast('مفيش مواقع');return}
+  openModal('<h3>🔥 اختار المواقع</h3><div class="hint">علّم المواقع اللي تعرض الجديد والترند. لو ما علّمتش ولا واحد، كل المواقع بتتستخدم (من غير اليوتيوب والكورة).</div>'+
+    el.map(s=>'<button class="fbtn" style="display:block;width:100%;margin-top:8px;text-align:right" data-nav data-sid="'+esc(s.id)+'"></button>').join('')+
+    '<div class="acts"><button class="fbtn red" id="tpok" data-nav>تمام وحدّث</button></div>');
+  const bx=$('#box'),paint=()=>bx.querySelectorAll('[data-sid]').forEach(b=>{const s=siteById(b.dataset.sid);b.textContent=(s&&s.tr?'☑ ':'☐ ')+(s?s.name:'');b.classList.toggle('red',!!(s&&s.tr))});
+  paint();
+  bx.querySelectorAll('[data-sid]').forEach(b=>b.onclick=()=>{const s=siteById(b.dataset.sid);if(s){put(Object.assign({},s,{tr:!s.tr}));paint()}});
+  $('#tpok').onclick=()=>{closeModal();trSig='';trRefresh(true)};
+}
 $('#bk').onclick=exportData;$('#rs').onclick=importData;$('#st').onclick=openSettings;$('#ar').onclick=openArchive;$('#gall').onclick=openAllSearch;
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 guardInputs(document);
 applyUI();
-loadLocal();applyRedirects();render();setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);
+loadLocal();applyRedirects();render();setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);
 setInterval(()=>{if(!$('#modal').classList.contains('open'))softRender()},60000);
 </script>
 </body>
