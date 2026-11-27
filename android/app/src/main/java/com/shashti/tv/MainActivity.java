@@ -626,7 +626,12 @@ public class MainActivity extends Activity {
         boolean pointer = !atHome();
         cursor.setVisibility(pointer && isTv ? View.VISIBLE : View.GONE);
         navBar.setVisibility(View.GONE);   // the side ⬅/🏠 buttons are off (Back and Menu do it)
-        if (!pointer) return super.dispatchKeyEvent(e);
+        if (!pointer) {
+            // the launcher speaks D-pad directly: on some boxes the first press is spent giving the page
+            // the view focus and dies in the framework — hand the key straight to the page instead
+            if (!web.hasFocus()) web.requestFocus();
+            return web.dispatchKeyEvent(e) || super.dispatchKeyEvent(e);
+        }
         switch (code) {
             case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
             case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_DPAD_RIGHT:
