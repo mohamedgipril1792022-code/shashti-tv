@@ -237,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٤٣',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٤:٠٠ م'};
+const VERSION={n:'١٤٤',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٤:٥٠ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -351,7 +351,7 @@ function fmtWhen(t){const d=new Date(t),now=new Date(),day=x=>x.toDateString();
   return d.toLocaleDateString('ar-EG',{weekday:'long'})}
 function fmtTm(t){return new Date(t).toLocaleTimeString('ar-EG',{hour:'numeric',minute:'2-digit'})}
 function renderMatches(){
-  const row=$('#matchRow'),h=$('#mH');if(!row)return;row.innerHTML='';
+  const row=$('#matchRow'),h=$('#mH');if(!row)return;const _fk=focusKey();row.innerHTML='';
   const list=MATCH.list||[];
   h.hidden=row.hidden=!list.length;
   if(!list.length)return;
@@ -372,6 +372,7 @@ function renderMatches(){
   row.appendChild(f)};
   mk(false);
   if(row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
+  restoreFocus(_fk);
 }
 
 /* ---------- helpers ---------- */
@@ -449,12 +450,14 @@ function renderChips(){
 function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!q)return true;return fields.some(f=>String(f||'').toLowerCase().includes(q))}
 /* a refresh rebuilds every tile; the focused tile would be lost (the next press went to the first button, «＋») or a tap that was in progress would be swallowed.
    So: the focus is put back on the same tile, and refreshes that come from the background wait until you stop touching the screen. */
-const FOCUS_HOSTS='#chips,.row,#siteGrid';
+const FOCUS_HOSTS='#chips,.row,#siteGrid,#myH,#trH,#c1H,#c2H,#c3H,#c4H,#c5H,#mH';
 function tileKey(a){const n=a.querySelector&&a.querySelector('.cap b,.name');return (a.getAttribute('href')||'')+'|'+(n?n.textContent:(a.textContent||'').trim().slice(0,40))}
 function focusKey(){const a=document.activeElement;if(!a||a===document.body||!a.closest)return null;const h=a.closest(FOCUS_HOSTS);if(!h||h.closest('#modal'))return null;return {h:h.id,k:tileKey(a)}}
-function focusBoot(){const a=document.activeElement;if(a&&a!==document.body)return;if($('#modal').classList.contains('open'))return;
-  const f=document.querySelector('#contRow .tile[data-nav],#laterRow .tile[data-nav],#siteGrid .tile[data-nav],header [data-nav]');if(f)f.focus({preventScroll:true})}
-function restoreFocus(f){if(!f)return;const h=document.getElementById(f.h);if(!h)return;const e=[...h.querySelectorAll('[data-nav]')].find(x=>tileKey(x)===f.k);if(e&&document.activeElement!==e)e.focus({preventScroll:true})}
+function focusHome(){const f=[...document.querySelectorAll('#contRow .tile[data-nav],#laterRow .tile[data-nav],#siteGrid .tile[data-nav],#myRow .tile[data-nav],#trRow .tile[data-nav],#c1Row .tile[data-nav],#c2Row .tile[data-nav],#c3Row .tile[data-nav],#c4Row .tile[data-nav],#c5Row .tile[data-nav],#matchRow .mcard[data-nav],header [data-nav]')].find(el=>el.offsetParent!==null);if(f){f.focus({preventScroll:true});return f}return null}
+function focusBoot(){const a=document.activeElement;if(a&&a!==document.body)return;if($('#modal').classList.contains('open'))return;focusHome()}
+function restoreFocus(f){if(!f)return;const h=document.getElementById(f.h);if(!h)return;
+  if(h.matches('[data-nav]')&&tileKey(h)===f.k){if(document.activeElement!==h)h.focus({preventScroll:true});return}
+  const e=[...h.querySelectorAll('[data-nav]')].find(x=>tileKey(x)===f.k);if(e&&document.activeElement!==e)e.focus({preventScroll:true})}
 function render(){const f=focusKey();renderNow();restoreFocus(f)}
 let lastInput=0,ptrDown=false,softT=0;
 ['pointerdown','touchstart','mousedown','keydown'].forEach(ev=>document.addEventListener(ev,()=>{lastInput=Date.now()},true));
@@ -1130,19 +1133,25 @@ function tileMenu(kind,s,v){
   $('#box').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const f=items[+b.dataset.i][1];closeModal();f()});
 }
 // OK on a tile: opens on release (one press); held ~0.6 s opens the tile menu (works even when the box sends no key repeats)
-let okTile=null,okTimer=0,okLong=false;
+let okTile=null,okTimer=0,okLong=false,okHost=null,okKey='';
 const isOk=e=>e.key==='Enter'||e.keyCode===13||e.keyCode===23;
 // while OK is still held after the menu opened, its repeats must not press the menu's first button («افتح»)
 let okSwallow=false;
 window.addEventListener('keydown',e=>{if(okSwallow&&isOk(e)){e.preventDefault();e.stopImmediatePropagation()}},true);
 window.addEventListener('keyup',e=>{if(okSwallow&&isOk(e)){okSwallow=false;e.preventDefault();e.stopImmediatePropagation()}},true);
-document.addEventListener('keydown',e=>{const a=e.target;if(!isOk(e)||!a.classList||!a.classList.contains('tile')||$('#modal').classList.contains('open')||moveId)return;
+document.addEventListener('keydown',e=>{const a=e.target;if(!isOk(e)||$('#modal').classList.contains('open')||moveId)return;
+  if(!a.classList||!a.classList.contains('tile')){   // التركيز ضاع في إعادة بناء صف: أول OK يرجّعه لكارت واضح بدل ما الضغطة تضيع
+    if(!e.repeat&&(!document.activeElement||document.activeElement===document.body)){e.preventDefault();focusHome()}return}
   e.preventDefault();e.stopPropagation();
   if(okTile===a)return;                       // auto-repeat while held
-  okTile=a;okLong=false;clearTimeout(okTimer);
+  okTile=a;okHost=a.closest(FOCUS_HOSTS);okKey=tileKey(a);okLong=false;clearTimeout(okTimer);
   okTimer=setTimeout(()=>{if(okTile===a){okLong=true;okTile=null;okSwallow=true;a._menu&&a._menu()}},600)},true);
-document.addEventListener('keyup',e=>{const a=e.target;if(!isOk(e))return;
-  if(okTile){e.preventDefault();clearTimeout(okTimer);const t=okTile;okTile=null;if(!okLong){const f=document.activeElement,c=t.isConnected?t:(f&&f.classList&&f.classList.contains('tile')?f:(a&&a.classList&&a.classList.contains('tile')?a:null));if(c)c.click()}okLong=false}},true);
+document.addEventListener('keyup',e=>{if(!isOk(e))return;
+  if(okTile){e.preventDefault();clearTimeout(okTimer);const t=okTile,h=okHost,k=okKey;okTile=null;okHost=null;
+    if(!okLong){let c=t.isConnected?t:null;
+      if(!c&&h&&h.isConnected)c=[...h.querySelectorAll('.tile')].find(x=>tileKey(x)===k)||null;   // الصف اتبنى من جديد بين الضغطة والسيبة: دوس على نفس الكارت في النسخة الجديدة
+      if(!c){const f=document.activeElement;c=f&&f.classList&&f.classList.contains('tile')?f:null}
+      if(c)c.click()}okLong=false}},true);
 window.tileMenuFocused=function(){const a=document.activeElement;if(a&&a._menu){a._menu();return 1}return 0};
 document.addEventListener('keydown',e=>{if((e.key==='ContextMenu'||e.key==='F10')&&!$('#modal').classList.contains('open')){if(tileMenuFocused())e.preventDefault()}});
 document.addEventListener('contextmenu',e=>{const a=e.target.closest&&e.target.closest('.tile');if(a&&a._menu){e.preventDefault();a._menu()}});
@@ -1159,16 +1168,14 @@ document.addEventListener('keydown',e=>{
   const editing=tg.matches&&((tg.matches('input:not([type=file])')&&!tg.readOnly)||tg.matches('select'));
   if(editing&&d[1]===0)return;
   if(tg.matches&&tg.matches('select')&&d[0]===0&&!e.altKey){/* allow up/down to leave select */}
-  const scope=open?'#box [data-nav]':'body > header [data-nav], .search [data-nav], main [data-nav], footer [data-nav]';
-  const els=[...document.querySelectorAll(scope)].filter(el=>el.offsetParent!==null);
-  if(!els.length)return;
-  const cur=document.activeElement;
-  if(!els.includes(cur)){e.preventDefault();els[0].focus();return}
   if(open){ // dialogs: strictly top to bottom, in order
-    const i=els.indexOf(cur),next=(d[1]>0||d[0]<0)?i+1:i-1;
+    const els=[...document.querySelectorAll('#box [data-nav]')].filter(el=>el.offsetParent!==null);
+    if(!els.length)return;
+    const i=els.indexOf(document.activeElement),next=i<0?0:((d[1]>0||d[0]<0)?i+1:i-1);
     e.preventDefault();if(next>=0&&next<els.length){els[next].focus();els[next].scrollIntoView({block:'nearest'})}
     return;
   }
+  navUntil=Date.now()+2500;   // وقّف انجراف الصفوف لحظة التنقل — الحركة المستمرة كانت بتهنّج الأسهم وتخلّي التركيز يهرب
   // main page: fixed rows, top to bottom; right/left move inside a row
   const vis=el=>el&&!el.hidden&&el.offsetParent!==null;
   const rows=[];
@@ -1187,19 +1194,23 @@ document.addEventListener('keydown',e=>{
   });
   add([$('#ab'),$('#up'),$('#bk'),$('#rs'),$('#ar'),$('#st')]);
   add([$('#ver')]);
+  const cur=document.activeElement;
   let ri=rows.findIndex(row=>row.includes(cur));
   e.preventDefault();
-  if(ri<0){rows[0][0].focus();return}
+  if(ri<0){focusHome();return}   // التركيز ضاع: ارجع لأقرب كارت مفيد بدل أول زرار في الصفحة
+  if(e.repeat&&Date.now()-lastNav<90)return;   // البوكس الضعيف مش لاحق على تكرار السهم: اتخطى الزيادة بدل التكديس
+  lastNav=Date.now();
   const row=rows[ri],ci=row.indexOf(cur);let target=null;
   if(d[0]!==0){target=row[ci+(d[0]<0?1:-1)]||null} // RTL: left = next
   else{
     const nr=rows[ri+d[1]];
-    if(nr){const cx=cur.getBoundingClientRect().left+cur.offsetWidth/2;let bd=Infinity;
-      nr.forEach(el=>{const q=el.getBoundingClientRect(),dd=Math.abs(q.left+q.width/2-cx);if(dd<bd){bd=dd;target=el}});
+    if(nr){
       if(nr[0].closest('footer'))target=nr[0];
-      else if(nr[0].closest('.row'))target=nr.find(el=>{const q=el.getBoundingClientRect();return q.right>0&&q.left<innerWidth})||nr[0];}
+      else{const cx=cur.getBoundingClientRect().left+cur.offsetWidth/2;let bd=Infinity;
+        nr.forEach(el=>{const q=el.getBoundingClientRect(),dd=Math.abs(q.left+q.width/2-cx);if(dd<bd){bd=dd;target=el}})}
+    }
   }
-  if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}
+  if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest',behavior:window.Android?'auto':'smooth'})}
 });
 
 function backupJson(){return JSON.stringify({app:'shashti',v:1,at:Date.now(),items:[...items.values()].filter(o=>o.kind!=='push'&&o.kind!=='remote')})}
@@ -1606,7 +1617,8 @@ let trSig='';
 function trSync(){
   const qv=($('#q').value||'').trim();
   const sig=[qv?'q':'',gfilter,UI.notrend?1:0,TR.at,sites().filter(siteVisible).map(s=>s.id+(s.tr?'+':'')).join(',')].join('|');
-  if(sig===trSig)return;trSig=sig;renderTrend();
+  if(sig===trSig)return;trSig=sig;
+  const f=focusKey();renderTrend();restoreFocus(f);   // الصفوف بتتبنى من جديد مع كل موقع: رجّع التركيز مكانه بدل ما يضيع
 }
 function trEligibleList(){
   const ok=new Set(trSources().filter(s=>siteVisible(s)&&kidsOk(s)).map(s=>s.id));
@@ -1731,12 +1743,12 @@ function openCatPick(x){
   $('#cc').onclick=closeModal;
   $('#box').querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{UI.trk=UI.trk||{};UI.trk[x.key]=b.dataset.c;saveUI();closeModal();trSig='';render()});
 }
-let trLast=0,trFrame=0;
+let trLast=0,trFrame=0,navUntil=0,lastNav=0;
 const trHalf=r=>{const f=r.querySelector('.tile:not(.dup)'),d=r.querySelector('.tile.dup');return f&&d?Math.abs(d.offsetLeft-f.offsetLeft):0};
 function trPaused(r){return !!(r._h||r._tt||Date.now()-(r._touch||0)<3500||r.contains(document.activeElement)||$('#modal').classList.contains('open')||document.hidden)}
 function trTick(ts){
   const dt=Math.min(64,ts-(trLast||ts));trLast=ts;
-  if(UI.perf){requestAnimationFrame(trTick);return}   // performance mode: the rows hold still and you scroll them yourself
+  if(UI.perf||Date.now()<navUntil){requestAnimationFrame(trTick);return}   // performance mode, or while he is navigating with the D-pad: the rows hold still
   trFrame=(trFrame+1)%15;
   document.querySelectorAll('.row.tr').forEach(r=>{if(r.hidden||!r._loop)return;
     if(trFrame===0){const b=r.getBoundingClientRect();r._vis=!(b.bottom<0||b.top>innerHeight)}   // the position check runs ~4 times a second, not every frame
