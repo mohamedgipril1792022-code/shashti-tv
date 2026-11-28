@@ -237,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٤٢',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
+const VERSION={n:'١٤٣',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٤:٠٠ م'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1231,7 +1231,8 @@ function trDiagRender(){
   trSources().forEach(s=>{
     const hh=hostOf(s.url),logs=byHost[hh]||[],ok=logs.filter(x=>x.ok).length;
     const st=(TR.stats||{})[s.id]||{},cs=['sar','mar','sfr','mfr','str'].filter(k=>st[k]).map(k=>CATN[k]+' '+st[k]).join('، ');
-    h+='• '+esc(s.name||hh)+': '+(logs.length?((ok?'✅ ':'❌ ')+ok+'/'+logs.length+' صفحة ردّت'):'⏳ لسه ماتجربش')+(cs?' — '+cs:'')+'<br>';
+    const bad=logs.filter(x=>!x.ok).slice(0,3).map(x=>{try{return decodeURIComponent(new URL(x.u).pathname)}catch(e){return String(x.u).slice(0,60)}});
+    h+='• '+esc(s.name||hh)+': '+(logs.length?((ok?'✅ ':'❌ ')+ok+'/'+logs.length+' صفحة ردّت'):'⏳ لسه ماتجربش')+(cs?' — '+cs:'')+(bad.length?' — <span style="opacity:.75">فشلت: '+bad.map(esc).join(' · ')+'</span>':'')+'<br>';
   });
   const cats={};(TR.list||[]).forEach(x=>cats[x.cat]=(cats[x.cat]||0)+1);
   h+='الصفوف الحالية: '+['sar','mar','sfr','mfr','str'].map(k=>CATN[k]+' '+(cats[k]||0)).join(' · ');
@@ -1406,18 +1407,21 @@ const TR_SEC=[['s',/مسلسل|مسلسلات|series|tvshows?|shows?/i],['m',/ف
 /* Sections we read from the site itself, checked one by one: [path, series|movie, forced category]. A site in this
    table is read from its own catalogue pages first; anything not here falls back to the links found on its homepage. */
 const TR_CATALOG=[
- [/arabseed|arbsd/i,[
+ [/arabseed|arbsd|عرب\s*سيد|عربسيد/i,[
    ['/category/arabic-series/','s','sar'],['/category/arabic-movies/','m','mar'],
    ['/category/tv/foreign-series/','s','sfr'],['/category/films/foreign-movies/','m','mfr'],
    ['/category/tv/turkish-series/','s','str']]],
- [/topcinema/i,[
+ [/topcinema|توب\s*سينما|توبسينما/i,[
    ['/category/مسلسلات-اجنبي/','s','sfr'],['/category/افلام-اجنبي/','m','mfr'],
    ['/category/مسلسلات-عربي/','s','sar'],['/category/افلام-عربي/','m','mar'],
    ['/category/مسلسلات-تركية/','s','str']]],
- [/tuktuk|tukcima/i,[
+ [/tuktuk|tukcima|توك\s*توك/i,[
    ['/category/movies-2/','m'],['/main/','s'],['/sercat/مسلسلات-اجنبي/','s','sfr']]],
- [/weciima|wecima|mycima/i,[
-   ['/category/arabic-movies/','m','mar'],['/category/arabic-series/','s','sar']]]
+ [/weciima|wecima|mycima|وي\s*سينما|وي\s*سيما/i,[
+   ['/category/arabic-movies/','m','mar'],['/category/arabic-series/','s','sar']]],
+ // شوف لايف: هو مختاره للتركي — بنقرا منه صفوفه التركية بس
+ [/shooflive|shoof|شوف/i,[
+   ['/turkish-series/','s','str'],['/dubbed-series/','s','str']]]
 ];
 function trCatCfg(s){
   const h=(s.name||'')+' '+(hostOf(s.url)||'');
@@ -1529,11 +1533,11 @@ async function trRefresh(force){
       if(final){
         const empty=['sar','sfr','str','mar','mfr'].filter(k=>!per[k].some(a=>a.length));
         if(empty.length)res.forEach(([s,l])=>{
-          const saved=l.map(x=>x.cat);
+          const saved=l.map(x=>x.cat),keep=new Set();
           trAssignCats(l,s,1);
           empty.forEach(k=>{if(per[k].some(a=>a.length))return;
-            per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})))});
-          l.forEach((x,i)=>{x.cat=saved[i]});
+            per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>{keep.add(x);return Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})}))});
+          l.forEach((x,i)=>{if(!keep.has(x))x.cat=saved[i]});   // الكروت اللي اتختارت للصف الفاضي تحتفظ بفئتها — قبل كده كانت بترجع فاضية فالصف بيطلع 0
         });
       }
       const list=[],seenU=new Set();
@@ -1560,11 +1564,15 @@ async function trRefresh(force){
       // موقع رئيسيته مش بترد: متضيعش دقايق في صفحات أقسامه — غالبًا واقع أو اتنقل
       if(h){
         if(cfg)cfg.forEach(c=>todo.push({u:new URL(encodeURI(c[0]),s.url).href,ty:c[1],fc:c[2]}));
-        else trSections(h,s.url).forEach(sec=>todo.push({u:sec.u,ty:sec.ty}));
+        else{
+          // موقع مش في الجدول: جرّب مسارات الأقسام العربية الشائعة الأول — المواقع دي بتخبي أقسامها العربية من قوائمها
+          [['/category/arabic-series/','s','sar'],['/category/arabic-movies/','m','mar'],['/arabic-series/','s','sar'],['/arabic-movies/','m','mar']].forEach(p=>todo.push({u:new URL(encodeURI(p[0]),s.url).href,ty:p[1],fc:p[2]}));
+          trSections(h,s.url).forEach(sec=>todo.push({u:sec.u,ty:sec.ty}));
+        }
       }
       let extra=0,got=0,nexts=0;
       for(const sec of todo){
-        if(extra>=5)break;   // كل أقسام الكتالوج اللي عند الموقع، مش أول تلاتة بس
+        if(extra>=8)break;   // كل أقسام الكتالوج اللي عند الموقع + المسارات العربية المتوقعة للمواقع اللي مش في الجدول
         if(sec.u===s.url)continue;
         let html=await trGet(sec.u);extra++;
         if(!html)html=await trGet(sec.u);   // قسم ماردّش أول مرة بياخد محاولة تانية قبل ما نحسبه فاضي
@@ -1606,7 +1614,7 @@ function trEligibleList(){
 }
 // sites that lead a category by default (his call). The name or the host has to match, and his own
 // per-site pick still wins over this: ticking a category in a site's settings makes that site lead it.
-const TR_PREF=[[/توب\s*سينما|top\s*-?cinema|topcinema/i,['sfr','mfr']],[/عرب\s*سيد|arab\s*s?eed|arabs?eed/i,['sar','mar']],[/توك\s*توك|توك\s*تيك|toc?k\s*-?toc?k|toktok|tiktok/i,['sfr','mfr']],[/شوف\s*تي\s*في|شوف\s*تيفي|شوف\s*تى\s*فى|shoo?f\s*-?tv|shof\s*-?tv/i,['str']]];
+const TR_PREF=[[/توب\s*سينما|top\s*-?cinema|topcinema/i,['sfr','mfr']],[/عرب\s*سيد|arab\s*s?eed|arabs?eed/i,['sar','mar']],[/توك\s*توك|توك\s*تيك|toc?k\s*-?toc?k|toktok|tiktok/i,['sfr','mfr']],[/شوف\s*تي\s*في|شوف\s*تيفي|شوف\s*تى\s*فى|شوف\s*لايف|shoo?f\s*-?tv|shof\s*-?tv|shooflive/i,['str']]];
 function trPref(s,cat){
   if(!s)return false;
   const h=(s.name||'')+' '+(hostOf(s.url)||'');
