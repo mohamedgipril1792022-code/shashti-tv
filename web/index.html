@@ -237,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣٥',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٠ ص'};
+const VERSION={n:'١٣٦',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1349,7 +1349,7 @@ function trKind(text,s){
   return lat>arb?'fx':'ar';
 }
 const TR_SKIP=/logo|icon|avatar|sprite|flag|placeholder|blank|loading|pixel|\/ads?[\/_.-]|gravatar|emoji/i;
-function trParse(html,base,s,ty){
+function trParse(html,base,s,ty,fc){
   let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
   const host=hostOf(base),out=[],seen=new Set();
   doc.querySelectorAll('a[href]').forEach(a=>{
@@ -1371,12 +1371,33 @@ function trParse(html,base,s,ty){
     const sec=a.closest('section,[class*=section],[class*=block],[class*=widget],[class*=slider],[class*=box]'),sh=sec&&sec.querySelector('h1,h2,h3,h4');
     let path=href.pathname;try{path=decodeURIComponent(path)}catch(e){}
     const secT=sh?sh.textContent:'',ctx=title+' '+path+' '+secT,kk=trKind(ctx,s);
-    out.push({t:title,u:href.href,i:img,k:kk,ty:ty||trCatBase(path,secT,title),g:trGen(ctx)});
+    out.push({t:title,u:href.href,i:img,k:kk,ty:ty||trCatBase(path,secT,title),fc:fc||'',g:trGen(ctx)});
   });
   return out;
 }
 /* the site's own listing pages: مسلسلات / افلام, or whatever it calls them */
 const TR_SEC=[['s',/مسلسل|مسلسلات|series|tvshows?|shows?/i],['m',/فيلم|افلام|أفلام|movies?|films?/i]];
+/* Sections we read from the site itself, checked one by one: [path, series|movie, forced category]. A site in this
+   table is read from its own catalogue pages first; anything not here falls back to the links found on its homepage. */
+const TR_CATALOG=[
+ [/arabseed|arbsd/i,[
+   ['/category/arabic-series/','s','sar'],['/category/arabic-movies/','m','mar'],
+   ['/category/tv/foreign-series/','s','sfr'],['/category/films/foreign-movies/','m','mfr'],
+   ['/category/tv/turkish-series/','s','str']]],
+ [/topcinema/i,[
+   ['/category/مسلسلات-اجنبي/','s','sfr'],['/category/افلام-اجنبي/','m','mfr'],
+   ['/category/مسلسلات-عربي/','s','sar'],['/category/افلام-عربي/','m','mar'],
+   ['/category/مسلسلات-تركية/','s','str']]],
+ [/tuktuk|tukcima/i,[
+   ['/category/movies-2/','m'],['/main/','s'],['/sercat/مسلسلات-اجنبي/','s','sfr']]],
+ [/weciima|wecima|mycima/i,[
+   ['/category/arabic-movies/','m','mar'],['/category/arabic-series/','s','sar']]]
+];
+function trCatCfg(s){
+  const h=(s.name||'')+' '+(hostOf(s.url)||'');
+  for(const c of TR_CATALOG)if(c[0].test(h))return c[1];
+  return null;
+}
 function trSections(html,base){
   let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
   const host=hostOf(base),cand={};
@@ -1430,7 +1451,7 @@ function trAssignCats(l,s){
     const turk=turkSite||/تركي|تركى|turkish|torki|\bturk\b/i.test(x.t+' '+(x.u||''));
     if(turk&&x.ty!=='m')ty='s';   // a Turkish site's unlabeled cards are its series, not its films
     // Turkish series get their own row; a Turkish film stays under the foreign films
-    x.cat=turk?(ty==='m'?'mfr':'str'):ty+(x.k==='fx'?'fr':'ar');c[x.cat]=(c[x.cat]||0)+1});
+    x.cat=x.fc||(turk?(ty==='m'?'mfr':'str'):ty+(x.k==='fx'?'fr':'ar'));c[x.cat]=(c[x.cat]||0)+1});
   return c;
 }
 let trBusy=false;
@@ -1444,16 +1465,25 @@ async function trRefresh(force){
       const out=[];
       const h=await trGet(s.url);
       if(h)trParse(h,s.url,s).forEach(x=>{x.src='h';out.push(x)});
-      // then the site's own listing pages, so the category rows get its real catalog and not only the homepage highlights
-      const secs=h?trSections(h,s.url):[];
-      let extra=0;
-      for(const sec of secs){
-        if(extra>=2)break;
+      // then the site's own catalogue pages, so the rows get its real catalog and not only the homepage highlights
+      const cfg=trCatCfg(s),todo=[];
+      if(cfg)cfg.forEach(c=>todo.push({u:new URL(encodeURI(c[0]),s.url).href,ty:c[1],fc:c[2]}));
+      else (h?trSections(h,s.url):[]).forEach(sec=>todo.push({u:sec.u,ty:sec.ty}));
+      let extra=0,got=0;
+      for(const sec of todo){
+        if(extra>=3)break;
+        if(sec.u===s.url)continue;
         const html=await trGet(sec.u);extra++;
         if(!html)continue;
+        const cards=trParse(html,sec.u,s,sec.ty,sec.fc);got+=cards.length;
+        cards.forEach(x=>{x.src='c';out.push(x)});
+        if(extra===1){const nx=trNextPage(html,sec.u);if(nx&&nx!==sec.u){const h2=await trGet(nx);extra++;if(h2)trParse(h2,nx,s,sec.ty,sec.fc).forEach(x=>{x.src='c';out.push(x)})}}
+      }
+      // a mapped site that answered nothing (moved, blocked): fall back to the links on its homepage
+      if(cfg&&!got&&h)for(const sec of trSections(h,s.url)){
+        if(sec.u===s.url)continue;
+        const html=await trGet(sec.u);if(!html)continue;
         trParse(html,sec.u,s,sec.ty).forEach(x=>{x.src='c';out.push(x)});
-        const nx=extra<3?trNextPage(html,sec.u):'';
-        if(nx&&nx!==sec.u){const h2=await trGet(nx);extra++;if(h2)trParse(h2,nx,s,sec.ty).forEach(x=>{x.src='c';out.push(x)})}
       }
       return out;
     };
@@ -1468,7 +1498,7 @@ async function trRefresh(force){
     for(let n=0;n<14;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
       const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
       list.push(x)}));
-    if(list.length){TR={at:Date.now(),list,stats,v:3};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
+    if(list.length){TR={at:Date.now(),list,stats,v:3,ver:VERSION.n};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
     else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
     else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
   }catch(e){}
@@ -1644,7 +1674,7 @@ if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform
 guardInputs(document);
 applyUI();
 applyRowOrder();
-loadLocal();applyRedirects();render();setTimeout(focusBoot,1200);setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
+loadLocal();applyRedirects();render();setTimeout(focusBoot,1200);setTimeout(()=>trRefresh(!TR.list.length||TR.ver!==VERSION.n||Date.now()-TR.at>10*60e3),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
 setInterval(()=>{if(!$('#modal').classList.contains('open'))softRender()},60000);
 </script>
 </body>
