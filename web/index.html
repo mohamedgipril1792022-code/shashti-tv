@@ -528,7 +528,7 @@ function openArchive(){
   const c=$('#clr');if(c)c.onclick=()=>confirmBox('تمسح الأرشيف كله؟',()=>{all.forEach(o=>{items.delete(o.id);if(col){const cc=col;cloudWrite(o.id,()=>cc.doc(o.id).delete())}});saveLocal();render();toast('اتمسح الأرشيف')});
 }
 function openAllSearch(){
-  const q=($('#q').value||'').trim(),ss=sites().filter(x=>x.searchUrl&&siteVisible(x));if(!q||!ss.length)return;
+  const q=($('#q').value||'').trim(),ss=sites().filter(x=>x.searchUrl&&siteVisible(x)&&kidsOk(x));if(!q||!ss.length)return;
   openModal('<h3>🔎 «'+esc(q)+'» في كل مواقعي</h3>'+ss.map(x=>'<a class="fbtn g" data-nav rel="noopener" data-sid="'+esc(x.id)+'" href="'+esc(x.searchUrl.replace('{q}',encodeURIComponent(q)))+'" style="margin-top:6px">'+esc(x.name)+'</a>').join('')+'<div class="acts"><button class="fbtn" id="cc" data-nav>إغلاق</button></div>');
   $('#cc').onclick=closeModal;
   $('#box').querySelectorAll('[data-sid]').forEach(a=>a.addEventListener('click',()=>visit(a.dataset.sid,true)));
@@ -830,7 +830,7 @@ function openSite(s,pre){
    <div class="acts" style="margin-top:0"><select id="fmd" data-nav style="flex:1"><option value="">— بدون —</option><option value="0"${md===0?' selected':''}>النهارده</option><option value="1"${md===1?' selected':''}>بكره</option><option value="2"${md===2?' selected':''}>بعد بكره</option></select>
    <input id="fmt" dir="ltr" inputmode="numeric" placeholder="20:00" value="${mt?String(mt.getHours()).padStart(2,'0')+':'+String(mt.getMinutes()).padStart(2,'0'):''}" data-nav style="flex:1"></div>
    <label>🔎 رابط البحث في الموقع (اختياري)</label><input id="fsr" dir="ltr" inputmode="url" placeholder="https://site.com/?s={q}" value="${esc(s.searchUrl)}" data-nav>
-   <div class="hint">حط {q} مكان كلمة البحث — يخليك تدوّر في كل مواقعك مرة واحدة.</div>
+   <div class="hint">حط {q} مكان كلمة البحث — يخليك تدوّر في كل مواقعك مرة واحدة. لو سيبته فاضي بيتحط النمط الشائع تلقائي؛ لو البحث في موقع طلع غلط، صحّح الرابط من هنا.</div>
    ${iconPicker()}
    <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn" id="mvb" data-nav>↔ رتّب</button><button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
   if(!isNew)$('#mvb').onclick=()=>{closeModal();startMove(s)};
@@ -852,7 +852,8 @@ function openSite(s,pre){
     let matchAt=0;const dsel=$('#fmd').value,tm=$('#fmt').value.trim().match(/^(\d{1,2})[:.](\d{2})$/);
     if(dsel!==''||$('#fmt').value.trim()){if(dsel===''||!tm||+tm[1]>23||+tm[2]>59){toast('اختار اليوم واكتب الوقت زي 20:00');return}
       const d=new Date();d.setDate(d.getDate()+(+dsel));d.setHours(+tm[1],+tm[2],0,0);matchAt=d.getTime()}
-    const searchUrl=$('#fsr').value.trim();if(searchUrl&&searchUrl.indexOf('{q}')<0){toast('رابط البحث لازم فيه {q}');$('#fsr').focus();return}
+    let searchUrl=$('#fsr').value.trim();if(searchUrl&&searchUrl.indexOf('{q}')<0){toast('رابط البحث لازم فيه {q}');$('#fsr').focus();return}
+    if(!searchUrl){try{searchUrl=new URL(url).origin+'/?s={q}'}catch(e){searchUrl=''}}   // the WordPress pattern covers most streaming sites; editable if a site differs
     put(Object.assign({},s,{id:s.id||('s-'+uid()),kind:'site',name,url,icon,group:$('#fg').value.trim(),matchAt,searchUrl,createdAt:s.createdAt||Date.now()}));
     closeModal();toast(isNew?'اتضاف الموقع':'اتحفظ التعديل');
   };
@@ -1029,11 +1030,22 @@ window.addEventListener('keydown',e=>{
 },true);
 window.addEventListener('keyup',e=>{if(moveId&&(isOk(e)||e.key.startsWith('Arrow'))){e.preventDefault();e.stopImmediatePropagation()}},true);
 
+function siteSearch(s){
+  openModal(`<h3>🔎 دور في «${esc(s.name)}»</h3><input id="ssq" type="search" placeholder="اكتب اللي بتدور عليه" data-nav>
+   <div class="acts"><button class="fbtn g" id="ssg" data-nav>🔎 بحث</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  const go=()=>{const q=$('#ssq').value.trim();if(!q){toast('اكتب اللي بتدور عليه');return}
+    const u=s.searchUrl.replace('{q}',encodeURIComponent(q));
+    if(s.ext&&window.Android&&Android.openExternal)Android.openExternal(u);else location.href=u};
+  $('#ssg').onclick=go;
+  $('#ssq').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();go()}});
+  setTimeout(()=>$('#ssq').focus(),80)}
 function tileMenu(kind,s,v){
   if(UI.kidsOn)return;   // kids mode: no edit/delete menus
   const items=[];
   if(kind==='site'||kind==='visit'){
     items.push(['▶ افتح',()=>{location.href=s.url}]);
+    if(s.searchUrl)items.push(['🔎 دور في «'+s.name+'»',()=>siteSearch(s)]);
     if(kind==='site')items.push(['↔ رتّب (حرّكه بالأسهم)',()=>startMove(s)]);
     if(kind==='site')items.push([s.fav?'☆ شيله من المفضلة':'⭐ ضيفه للمفضلة',()=>{put(Object.assign({},s,{fav:!s.fav}))}]);
     if(kind==='site')items.push([s.pin?'📌 شيل التثبيت':'📌 ثبّته فوق',()=>{put(Object.assign({},s,{pin:!s.pin}))}]);
