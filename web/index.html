@@ -237,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣٩',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
+const VERSION={n:'١٤٠',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1525,11 +1525,11 @@ async function trRefresh(force){
     };
     const work=async()=>{while(i<src.length){const s=src[i++];res.push([s,await one(s)])}};
     await Promise.all([work(),work()]);   // two sites at a time: the box stays calm while the rows fill
-    const per={sar:[],sfr:[],mar:[],mfr:[]},stats={};
+    const per={sar:[],sfr:[],str:[],mar:[],mfr:[]},stats={};
     res.forEach(([s,l])=>{
       const c=trAssignCats(l,s);
       stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
-      ['sar','sfr','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
+      ['sar','sfr','str','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
     // صف رجع فاضي خالص (موقع مارّدش أو اتغيّر): نكمله بالمنطق القديم بدل ما يختفي من الشاشة
     const empty=['sar','sfr','str','mar','mfr'].filter(k=>!per[k].some(a=>a.length));
     if(empty.length)res.forEach(([s,l])=>{
@@ -1540,7 +1540,7 @@ async function trRefresh(force){
       l.forEach((x,i)=>{x.cat=saved[i]});
     });
     const list=[],seenU=new Set();
-    for(let n=0;n<14;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
+    for(let n=0;n<14;n++)['sar','sfr','str','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
       const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
       list.push(x)}));
     if(list.length){const prev=(TR.list||[]);
