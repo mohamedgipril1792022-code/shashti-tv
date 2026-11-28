@@ -235,7 +235,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣١',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٣٠ ص'};
+const VERSION={n:'١٣٢',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٤٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -868,7 +868,7 @@ function openSite(s,pre){
    <label>🔎 رابط البحث في الموقع (اختياري)</label><input id="fsr" dir="ltr" inputmode="url" placeholder="https://site.com/?s={q}" value="${esc(s.searchUrl)}" data-nav>
    <div class="hint">حط {q} مكان كلمة البحث — يخليك تدوّر في كل مواقعك مرة واحدة. لو سيبته فاضي بيتحط النمط الشائع تلقائي؛ لو البحث في موقع طلع غلط، صحّح الرابط من هنا.</div>
    <label>🗂 الموقع ده بيتميّز في (صفوف الأقسام)</label><div class="acts" id="fcat"></div>
-   <div class="hint">«تلقائي» = التطبيق بيحسب القسم اللي الموقع فيه أكتر محتوى. دوس أي قسم عشان تثبّته بنفسك.</div>
+   <div class="hint">«تلقائي» = التطبيق بيحسب القسم اللي الموقع فيه أكتر محتوى. دوس أي قسم عشان تثبّته بنفسك — والموقع اللي تختاره بنفسك بيبقى الأول في القسم ده.</div>
    ${iconPicker()}
    <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn" id="mvb" data-nav>↔ رتّب</button><button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
   if(!isNew)$('#mvb').onclick=()=>{closeModal();startMove(s)};
@@ -1218,7 +1218,7 @@ function openSettings(){
    <label>تكملة المشاهدة</label><div class="acts"><button class="fbtn" data-nav data-eps="0">بلاطة لكل مسلسل</button><button class="fbtn" data-nav data-eps="1">كل الحلقات</button></div>
    <label>الخلفية السينمائية</label><div class="acts"><button class="fbtn" data-nav data-cn="0">شغالة</button><button class="fbtn" data-nav data-cn="1">مقفولة</button></div>
    <label>🚀 وضع الأداء (للأجهزة الضعيفة)</label><div class="acts"><button class="fbtn" data-nav data-pf="1">شغّال</button><button class="fbtn" data-nav data-pf="0">مقفول</button></div><div class="hint">بيقفل الخلفية السينمائية وكل الحركات والانتقالات — بيخلي التنقل أخف على البوكس.</div>
-   <label>🔥 الجديد والترند (من مواقعك)</label><div class="acts"><button class="fbtn" data-nav data-tn="0">شغّال</button><button class="fbtn" data-nav data-tn="1">مقفول</button><button class="fbtn" data-nav id="trnow">🔄 حدّث دلوقتي</button><button class="fbtn" data-nav id="trpick">☑ اختار المواقع</button></div>
+   <label>🔥 الجديد والترند (من مواقعك)</label><div class="acts"><button class="fbtn" data-nav data-tn="0">شغّال</button><button class="fbtn" data-nav data-tn="1">مقفول</button><button class="fbtn" data-nav id="trnow">🔄 حدّث دلوقتي</button><button class="fbtn" data-nav id="trpick">☑ اختار المواقع</button></div><div class="hint" id="trsrc"></div>
    ${hasSleep?'<label>😴 مؤقّت النوم'+(left>0?' — فاضل '+left+' د':'')+'</label><div class="acts"><button class="fbtn" data-nav data-sl="30">٣٠ د</button><button class="fbtn" data-nav data-sl="60">ساعة</button><button class="fbtn" data-nav data-sl="90">ساعة ونص</button><button class="fbtn del" data-nav data-sl="0">إلغاء</button></div><div class="hint">بعد المدة التطبيق يوقّف الفيديو ويرجع للرئيسية. اضبطه قبل ما تفتح الموقع.</div>':''}
    ${window.Android&&Android.setAutoNext?'<label>▶ الحلقة التالية تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-an="1">شغّالة</button><button class="fbtn" data-nav data-an="0">مقفولة</button></div><div class="hint">لما الحلقة تخلص، اللي بعدها تفتح لوحدها بعد ٨ ثواني. Back بيلغيها.</div>':''}
    ${window.Android&&Android.remoteInfo?'<label>📱 ريموت الموبايل</label><div class="acts"><button class="fbtn" data-nav data-rm="1">شغّال</button><button class="fbtn" data-nav data-rm="0">مقفول</button></div><div class="hint" id="rmi"></div>':''}
@@ -1242,6 +1242,8 @@ function openSettings(){
   bx.querySelectorAll('[data-pf]').forEach(b=>b.onclick=()=>{UI.perf=b.dataset.pf==='1';saveUI();applyUI();mark();if(UI.perf)setCine('');trSig='';trSync();toast(UI.perf?'🚀 وضع الأداء شغّال':'اتقفل وضع الأداء')});
   bx.querySelectorAll('[data-tn]').forEach(b=>b.classList.toggle('red',(b.dataset.tn==='1')===!!UI.notrend));
   bx.querySelectorAll('[data-tn]').forEach(b=>b.onclick=()=>{UI.notrend=b.dataset.tn==='1';saveUI();bx.querySelectorAll('[data-tn]').forEach(x=>x.classList.toggle('red',(x.dataset.tn==='1')===!!UI.notrend));trSync();if(!UI.notrend)trRefresh(true)});
+  const tse=$('#trsrc');if(tse){const all=sites().filter(s=>trEligible(s)&&siteVisible(s)),pick=all.filter(s=>s.tr===true),src=pick.length?pick:all;
+    tse.textContent='الصفوف بتاخد من '+src.length+' موقع من '+all.length+(pick.length?' — انت مختار '+pick.length+' بنفسك، و«اختار المواقع» بتوسّعها':'')+'.';}
   $('#trpick').onclick=openTrPick;
   $('#trnow').onclick=()=>{if(UI.notrend){toast('الجديد والترند مقفول');return}toast('🔄 بيجيب الجديد…');trRefresh(true)};
   const rmi=()=>{const el=$('#rmi');if(!el)return;const r=rmState();
@@ -1300,7 +1302,7 @@ window.quickAdd=function(kind,url,title,icon){
   setTimeout(()=>{const f=kind==='site'?$('#fn'):$('#cn2');f&&f.focus()},80);
 };
 /* ---------- trending: the newest cards of your own sites (Arabic / foreign), drifting by themselves ---------- */
-const TRK='sajo-trend';let TR={at:0,list:[]};try{const x=JSON.parse(localStorage.getItem(TRK)||'null');if(x&&x.list)TR=x;if(!TR.stats)TR.at=0}catch(e){}   // an old cache has no category counts: fetch again right away
+const TRK='sajo-trend';let TR={at:0,list:[]};try{const x=JSON.parse(localStorage.getItem(TRK)||'null');if(x&&x.list)TR=x;if(!TR.stats||TR.v!==2)TR.at=0}catch(e){}   // an old cache has no category counts: fetch again right away
 const TR_BAD=/youtube|youtu\.be|yalla|kora|koora|kooora|goal|sport|bein|365scores|fotmob|كور|مباريات|رياض|دوري|يوتيوب/i;
 const TR_SPEED=36;   // px per second
 const trEligible=s=>!!s.url&&!TR_BAD.test(hostOf(s.url))&&!TR_BAD.test(s.name||'')&&!TR_BAD.test(s.group||'')&&!s.matchAt;
@@ -1321,12 +1323,16 @@ const trKey=x=>x.t.toLowerCase().replace(/[\u064B-\u0652\u0670]/g,'').replace(/[
 /* ---------- the four categories: مسلسلات/أفلام × عربي/أجنبي ---------- */
 const CATS=[['sar','#c1H','#c1Row','#gf1'],['sfr','#c2H','#c2Row','#gf2'],['mar','#c3H','#c3Row','#gf3'],['mfr','#c4H','#c4Row','#gf4']];
 const CAT_T={sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية'};
-const TR_SERSIG=/مسلسل|حلق|series|\/tv\/|season|episode|انمي|أنمي/i,TR_MOVSIG=/فيلم|افلام|أفلام|\/movies?\/|\/film/i;
+const TR_SERSIG=/مسلسل|مسلسلات|حلق|series|\/tv\/|\/tvshows?\/|\/shows?\/|season|episode|انمي|أنمي/i,TR_MOVSIG=/فيلم|افلام|أفلام|\/movies?\/|\/films?\/|\/film\b/i;
 // series or movie: the link's own path and the section title say it; an episode number settles it
+// '?' = the page said nothing, so the site's own content decides later instead of guessing "movie"
 function trCatBase(path,sec,title){
-  const txt=path+' '+sec,ep=/الحلقة|حلقة|episode\s*\d+|s\d{1,2}\s*e\d{1,3}/i.test(title);
-  if(ep||(TR_SERSIG.test(txt)&&!TR_MOVSIG.test(txt)))return 's';
-  return 'm';
+  const txt=path+' '+sec,ep=/الحلقة|حلقة|episode\s*\d+|s\d{1,2}\s*e\d{1,3}|الموسم\s*\d|الجزء\s*\d/i.test(title);
+  if(ep)return 's';
+  const ser=TR_SERSIG.test(txt),mov=TR_MOVSIG.test(txt);
+  if(ser&&!mov)return 's';
+  if(mov&&!ser)return 'm';
+  return '?';
 }
 const TR_GENS=[['action',/اكشن|أكشن|action/i],['comedy',/كوميدي|كوميديا|ضحك|comedy/i],['drama',/دراما|درامي|drama/i],['horror',/رعب|horror/i],
   ['crime',/جريمة|اثارة|إثارة|thriller|crime|غموض|mystery/i],['romance',/رومانسي|رومانسية|romance/i],['scifi',/خيال\s*علمي|sci-?fi|fantasy|فانتازيا/i],
@@ -1345,7 +1351,7 @@ function trParse(html,base,s){
   let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
   const host=hostOf(base),out=[],seen=new Set();
   doc.querySelectorAll('a[href]').forEach(a=>{
-    if(out.length>=40)return;
+    if(out.length>=60)return;
     const im=a.querySelector('img');let src='';
     if(im){src=im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||im.getAttribute('data-original')||im.getAttribute('data-lazy')||'';
       if(!src){const ss=im.getAttribute('data-srcset')||im.getAttribute('srcset');if(ss)src=ss.split(',')[0].trim().split(/\s+/)[0]}
@@ -1363,7 +1369,7 @@ function trParse(html,base,s){
     const sec=a.closest('section,[class*=section],[class*=block],[class*=widget],[class*=slider],[class*=box]'),sh=sec&&sec.querySelector('h1,h2,h3,h4');
     let path=href.pathname;try{path=decodeURIComponent(path)}catch(e){}
     const secT=sh?sh.textContent:'',ctx=title+' '+path+' '+secT,kk=trKind(ctx,s);
-    out.push({t:title,u:href.href,i:img,k:kk,cat:trCatBase(path,secT,title)+kk,g:trGen(ctx)});
+    out.push({t:title,u:href.href,i:img,k:kk,ty:trCatBase(path,secT,title),g:trGen(ctx)});
   });
   return out;
 }
@@ -1376,6 +1382,16 @@ function trGet(url,sig){return new Promise(res=>{
   else{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),10000);
     if(sig)sig.addEventListener('abort',()=>ac.abort(),{once:true});
     fetch(url,{signal:ac.signal}).then(r=>r.ok?r.text():'').catch(()=>'').then(x=>{clearTimeout(t);res(x)})}})}
+// a card whose page said nothing takes the site's own bias: a series site stays series, a film site stays films,
+// and if the site never says anything either, the group he filed it under decides. Returns the per-category counts.
+function trAssignCats(l,s){
+  let ns=0,nm=0;l.forEach(x=>{if(x.ty==='s')ns++;else if(x.ty==='m')nm++});
+  const hint=(s.group||'')+' '+(s.name||'');
+  const dom=ns!==nm?(ns>nm?'s':'m'):(/مسلسل|series|دراما/i.test(hint)?'s':(/فيلم|movie|افلام|أفلام/i.test(hint)?'m':'m'));
+  const c={};
+  l.forEach(x=>{const ty=(x.ty==='s'||x.ty==='m')?x.ty:dom;x.cat=ty+(x.k==='fx'?'fx':'ar');c[x.cat]=(c[x.cat]||0)+1});
+  return c;
+}
 let trBusy=false;
 async function trRefresh(force){
   if(trBusy||UI.notrend)return;
@@ -1387,13 +1403,14 @@ async function trRefresh(force){
     await Promise.all([work(),work(),work(),work()]);
     const per={sar:[],sfr:[],mar:[],mfr:[]},stats={};
     res.forEach(([s,l])=>{
-      const c={};l.forEach(x=>{c[x.cat]=(c[x.cat]||0)+1});stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
-      ['sar','sfr','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,10).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
+      const c=trAssignCats(l,s);
+      stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
+      ['sar','sfr','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,12).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
     const list=[],seenU=new Set();
-    for(let n=0;n<10;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
+    for(let n=0;n<12;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
       const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
       list.push(x)}));
-    if(list.length){TR={at:Date.now(),list,stats};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
+    if(list.length){TR={at:Date.now(),list,stats,v:2};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
     else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
     else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
   }catch(e){}
@@ -1411,28 +1428,48 @@ function trEligibleList(){
   const ok=new Set(trSources().filter(s=>siteVisible(s)&&kidsOk(s)).map(s=>s.id));
   return TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid));
 }
-// does this site feed this category? what he picked by hand wins, otherwise the count from its own homepage decides
-function trContributes(sid,cat,min){
+// sites that lead a category by default (his call). The name or the host has to match, and his own
+// per-site pick still wins over this: ticking a category in a site's settings makes that site lead it.
+const TR_PREF=[[/توب\s*سينما|top\s*-?cinema|topcinema/i,['sfr','mfr']]];
+function trPref(s,cat){
+  if(!s)return false;
+  const h=(s.name||'')+' '+(hostOf(s.url)||'');
+  for(const p of TR_PREF){if(p[0].test(h)&&p[1].indexOf(cat)>=0)return true}
+  return false;
+}
+// does this site feed this category? only what he picked by hand can exclude it: every other site feeds
+// every category it actually has cards in (a card only ever lands in the category it was classified into)
+function trContributes(sid,cat){
   const s=siteById(sid);if(!s)return false;
   if(s.cats&&typeof s.cats==='object')return !!s.cats[cat];
-  return (((TR.stats||{})[sid]||{})[cat]||0)>=min;
+  return true;
 }
 function trCatList(cat,base){
   const st=TR.stats||{},w=sid=>(st[sid]||{})[cat]||0;
-  const build=min=>base.filter(x=>trCatOf(x)===cat&&trContributes(x.sid,cat,min));
-  let arr=build(2);if(arr.length<5)arr=build(1);   // a thin category still shows: drop the "at least two" rule
-  // the site strongest in this category comes first, so on a repeated title its card is the one that stays
-  return arr.map((x,i)=>[x,i]).sort((a,b)=>w(b[0].sid)-w(a[0].sid)||a[1]-b[1]).map(o=>o[0]);
+  // 2 = he picked this site for this category, 1 = it is the built-in default for it, 0 = automatic
+  const rank=sid=>{const s=siteById(sid);if(!s)return 0;if(s.cats&&typeof s.cats==='object')return 2;return trPref(s,cat)?1:0};
+  const arr=base.filter(x=>trCatOf(x)===cat&&trContributes(x.sid,cat));
+  // the leading site comes first, then the strongest one, so on a repeated title the better card stays
+  return arr.map((x,i)=>[x,i]).sort((a,b)=>rank(b[0].sid)-rank(a[0].sid)||w(b[0].sid)-w(a[0].sid)||a[1]-b[1]).map(o=>o[0]);
 }
-// one card per title, and no more than `cap` from any one site, so a row never turns into one site's shelf
-function trDedup(list,seen,opt){
-  opt=opt||{};const per={},out=[],cap=opt.cap||8,max=opt.max||24;
-  for(const x of list){
-    if(out.length>=max)break;
-    const kk=myKey(x.t)||trSKey(x);
-    if(!kk||seen.has(kk))continue;
-    if((per[x.sid]||0)>=cap)continue;
-    per[x.sid]=(per[x.sid]||0)+1;seen.add(kk);out.push(x);
+// one card per title; the sites take turns (strongest first), so every site gets a card in the row
+// before any single site gets a second one, and no site can take more than `cap` of it
+function trMix(list,seen,opt){
+  opt=opt||{};const cap=opt.cap||6,max=opt.max||24;
+  const by=new Map();list.forEach(x=>{if(!by.has(x.sid))by.set(x.sid,[]);by.get(x.sid).push(x)});
+  const ids=[...by.keys()],idx={},used={},out=[];
+  let go=true;
+  while(out.length<max&&go){
+    go=false;
+    for(const sid of ids){
+      if(out.length>=max)break;
+      if((used[sid]||0)>=cap)continue;
+      const q=by.get(sid);let n=idx[sid]||0,x=null;
+      while(n<q.length){const c=q[n++];const kk=myKey(c.t)||trSKey(c);if(!kk||seen.has(kk))continue;seen.add(kk);x=c;break}
+      idx[sid]=n;
+      if(!x)continue;
+      used[sid]=(used[sid]||0)+1;out.push(x);go=true;
+    }
   }
   return out;
 }
@@ -1471,22 +1508,22 @@ function renderTrend(){
   const mine=base.filter(x=>{const k=myKey(x.t);if(k.length<4)return false;if(mkS.has(k))return true;
     for(const w of mkS){if(w.length>=5&&(k.startsWith(w)||w.startsWith(k)))return true}return false});
   const mySeen=new Set();
-  fillRow($('#myRow'),$('#myH'),trDedup(mine,mySeen,{cap:6,max:20}),{sub:1});
+  fillRow($('#myRow'),$('#myH'),trMix(mine,mySeen,{cap:6,max:20}),{sub:1});
   // one mixed trend row: عربي وأجنبي في صف واحد
-  fillRow($('#trRow'),$('#trH'),trDedup(base,new Set(mySeen),{cap:8,max:30}),{badge:1});
+  fillRow($('#trRow'),$('#trH'),trMix(base,new Set(mySeen),{cap:6,max:30}),{badge:1});
   const catSeen=new Set();   // the four rows share one list: a title sits in one category only
   CATS.forEach(c=>{
     const cat=c[0],all=trCatList(cat,base);
     renderGF(c[3],cat,all);
     const sel=(UI.gf||{})[cat]||'';
     const f=sel?all.filter(x=>(x.g||[]).indexOf(sel)>=0):all;
-    fillRow($(c[2]),$(c[1]),trDedup(f,catSeen,{cap:6,max:24}),{badge:1});
+    fillRow($(c[2]),$(c[1]),trMix(f,catSeen,{cap:5,max:30}),{badge:1});
   });
 }
 // عرض الكل: the whole row as one big grid
 function openAllRow(cat){
   const base=trEligibleList();
-  let list=cat==='trend'?trDedup(base,new Set(),{cap:24,max:120}):trDedup(trCatList(cat,base),new Set(),{cap:99,max:120});
+  let list=cat==='trend'?trMix(base,new Set(),{cap:40,max:150}):trMix(trCatList(cat,base),new Set(),{cap:99,max:150});
   const sel=(UI.gf||{})[cat]||'';
   if(cat!=='trend'&&sel)list=list.filter(x=>(x.g||[]).indexOf(sel)>=0);
   openModal('<h3>'+esc(cat==='trend'?'🔥 الجديد والترند':(CAT_T[cat]||''))+(list.length?' <small>('+list.length+')</small>':'')+'</h3>'+
