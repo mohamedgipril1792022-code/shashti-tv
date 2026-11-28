@@ -235,7 +235,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣٣',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٤٥ ص'};
+const VERSION={n:'١٣٤',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٤٧ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1498,7 +1498,7 @@ function trContributes(sid,cat){
 function trCatList(cat,base){
   const st=TR.stats||{},w=sid=>(st[sid]||{})[cat]||0;
   // 2 = he picked this site for this category, 1 = it is the built-in default for it, 0 = automatic
-  const rank=sid=>{const s=siteById(sid);if(!s)return 0;if(s.cats&&typeof s.cats==='object')return 2;return trPref(s,cat)?1:0};
+  const rank=sid=>{const s=siteById(sid);if(!s)return 0;if(s.cats&&typeof s.cats==='object'&&s.cats[cat])return 2;return trPref(s,cat)?1:0};
   const arr=base.filter(x=>trCatOf(x)===cat&&trContributes(x.sid,cat));
   // the leading site comes first, then the strongest one, so on a repeated title the better card stays
   return arr.map((x,i)=>[x,i]).sort((a,b)=>rank(b[0].sid)-rank(a[0].sid)||w(b[0].sid)-w(a[0].sid)||a[1]-b[1]).map(o=>o[0]);
