@@ -1183,6 +1183,8 @@ const trEligible=s=>!!s.url&&!TR_BAD.test(hostOf(s.url))&&!TR_BAD.test(s.name||'
 // no site ticked = every eligible site feeds the rows; once you tick some, only those do
 const trSources=()=>{const el=sites().filter(trEligible),pick=el.filter(s=>s.tr===true);return pick.length?pick:el};
 const TR_AR=/عربي|عربى|مصري|مصرى|خليجي|خليجى|سوري|لبناني|رمضان|مسرحية|arab|egypt/i,TR_FX=/مترجم|اجنبي|أجنبي|اجنبى|foreign|english|netflix|hollywood|كوري|تركي|هندي|انمي|أنمي|anime|مدبلج|korean|turkish|dubbed/i;
+const TR_NOISE=/(?:الحلقة|حلقة|episode|ep)\s*\d+|s\d{1,2}\s*e\d{1,3}|مترجم|مدبلج|كامل(?:ة)?|اون\s*لاين|online|hd|4k|2160p|1080p|720p|480p|bluray|blu[- ]?ray|web[- ]?dl|webrip|dvdrip|hdtv|x264|x265|hevc|حصري(?:ا)?|بجودة\s*عالية/gi;
+const trSKey=x=>trKey({t:String(x.t||'').replace(TR_NOISE,' ')});   // series-level: all episodes and quality variants of one title share a key
 const trKey=x=>x.t.toLowerCase().replace(/[\u064B-\u0652\u0670]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim().slice(0,60);   // normalized: the same title written two ways counts once
 function trKind(text,s){
   if(TR_AR.test(text))return 'ar';if(TR_FX.test(text))return 'fx';
@@ -1237,7 +1239,7 @@ async function trRefresh(force){
     const per={ar:[],fx:[]};
     res.forEach(([s,l])=>['ar','fx'].forEach(k=>per[k].push(l.filter(x=>x.k===k).slice(0,12).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})))));
     const list=[],seen=new Set(),seenU=new Set();
-    ['ar','fx'].forEach(k=>{for(let n=0;n<12;n++)per[k].forEach(a=>{const x=a[n];if(!x)return;const kk=trKey(x);if(seen.has(kk))return;seen.add(kk);
+    ['ar','fx'].forEach(k=>{for(let n=0;n<12;n++)per[k].forEach(a=>{const x=a[n];if(!x)return;const kk=trSKey(x);if(seen.has(kk))return;seen.add(kk);
       const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // the same card from two sites, or two cards for one address: once
       list.push(x)})});
     if(list.length){TR={at:Date.now(),list};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
@@ -1257,10 +1259,10 @@ function trSync(){
 function renderTrend(){
   const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter,ov=UI.trk||{};
   const ok=new Set(trSources().map(s=>s.id));
+  const seen=new Set();   // shared across both rows: a title already shown in عربي never repeats in أجنبي
   [['ar','#trAr','#trH'],['fx','#trFx','#trH2']].forEach(([k,rid,hid])=>{
     const row=$(rid),h=$(hid);row.innerHTML='';row._loop=false;
-    const seen=new Set();
-    const l=hide?[]:TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid)&&(ov[trKey(x)]||x.k)===k).filter(x=>{const kk=trKey(x);if(seen.has(kk))return false;seen.add(kk);return true});
+    const l=hide?[]:TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid)&&(ov[trKey(x)]||x.k)===k).filter(x=>{const kk=trSKey(x);if(seen.has(kk))return false;seen.add(kk);return true});
     row.hidden=h.hidden=!l.length;if(!l.length)return;
     row._half=null;   // content changed: the loop's width is measured again on the next tick
     const mk=dup=>{const fr=document.createDocumentFragment();l.forEach(x=>{
