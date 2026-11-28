@@ -453,7 +453,9 @@ function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!
 const FOCUS_HOSTS='#chips,.row,#siteGrid,#myH,#trH,#c1H,#c2H,#c3H,#c4H,#c5H,#mH';
 function tileKey(a){const n=a.querySelector&&a.querySelector('.cap b,.name');return (a.getAttribute('href')||'')+'|'+(n?n.textContent:(a.textContent||'').trim().slice(0,40))}
 function focusKey(){const a=document.activeElement;if(!a||a===document.body||!a.closest)return null;const h=a.closest(FOCUS_HOSTS);if(!h||h.closest('#modal'))return null;return {h:h.id,k:tileKey(a)}}
-function focusHome(){const f=[...document.querySelectorAll('#contRow .tile[data-nav],#laterRow .tile[data-nav],#siteGrid .tile[data-nav],#myRow .tile[data-nav],#trRow .tile[data-nav],#c1Row .tile[data-nav],#c2Row .tile[data-nav],#c3Row .tile[data-nav],#c4Row .tile[data-nav],#c5Row .tile[data-nav],#matchRow .mcard[data-nav],header [data-nav]')].find(el=>el.offsetParent!==null);if(f){f.focus({preventScroll:true});return f}return null}
+function focusHome(){const gs=['#contRow .tile[data-nav]','#laterRow .tile[data-nav]','#siteGrid .tile[data-nav]','#myRow .tile[data-nav]','#trRow .tile[data-nav]','#c1Row .tile[data-nav]','#c2Row .tile[data-nav]','#c3Row .tile[data-nav]','#c4Row .tile[data-nav]','#c5Row .tile[data-nav]','#matchRow .mcard[data-nav]','header [data-nav]'];
+  for(const g of gs){const f=[...document.querySelectorAll(g)].find(el=>el.offsetParent!==null);if(f){f.focus({preventScroll:true});return f}}   // querySelectorAll بترتيب الصفحة مش بترتيب القايمة — لازم ندور مجموعة مجموعة عشان المحتوى قبل زراير الهيدر
+  return null}
 function focusBoot(){const a=document.activeElement;if(a&&a!==document.body)return;if($('#modal').classList.contains('open'))return;focusHome()}
 function restoreFocus(f){if(!f)return;const h=document.getElementById(f.h);if(!h)return;
   if(h.matches('[data-nav]')&&tileKey(h)===f.k){if(document.activeElement!==h)h.focus({preventScroll:true});return}
