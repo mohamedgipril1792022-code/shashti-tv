@@ -29,6 +29,9 @@ header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;
 .fav{position:absolute;top:8px;right:8px;z-index:2;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.25);color:#ffd54a;border-radius:12px;width:clamp(30px,2.6vw,44px);height:clamp(30px,2.6vw,44px);font-size:clamp(16px,1.6vw,26px);cursor:pointer;line-height:1}
 .fav:focus-visible,.fav:hover{background:var(--red);outline:none}
 .editing .fav{display:none}
+body.kids #addSite,body.kids #addCont,body.kids #addRm,body.kids #editBtn{display:none}
+body.kids footer{display:none}
+body.kids #chips{display:none}
 #push{position:fixed;inset:0;z-index:25;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;padding:16px}
 #push.open{display:flex}
 #push .box{text-align:center}
@@ -177,13 +180,14 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
   <button class="hbtn" data-nav id="addCont">▶<span class="t"> تكملة</span></button>
   <button class="hbtn" data-nav id="addRm" hidden>🎮<span class="t"> ريموت</span></button>
   <button class="hbtn" data-nav id="editBtn">✎<span class="t"> تعديل</span></button>
+  <button class="hbtn" data-nav id="kidsBtn">🧒<span class="t"> أطفال</span></button>
 </header>
 <div class="search"><input id="q" type="search" placeholder="🔍 دور في مواقعك وتكملاتك…" data-nav><a id="gq" class="hbtn" target="_blank" rel="noopener" data-nav hidden>🔎 جوجل</a><button class="hbtn" id="gall" data-nav hidden>🔎 كل مواقعي</button></div>
 <div id="status"></div>
 <main id="main">
-  <h2>▶ تكملة المشاهدة <small>اللي وقفت عنده</small></h2>
+  <h2 id="contH">▶ تكملة المشاهدة <small>اللي وقفت عنده</small></h2>
   <div class="row wide" id="contRow"></div>
-  <h2 hidden>🕘 آخر ما شاهدت</h2>
+  <h2 id="visitH" hidden>🕘 آخر ما شاهدت</h2>
   <div class="row" id="visitRow" hidden></div>
   <h2 id="laterH" hidden>⏳ هتفرج عليه بعدين</h2>
   <div class="row wide" id="laterRow" hidden></div>
@@ -386,7 +390,8 @@ const siteVisible=s=>!(isLocked(s.group)&&!unlocked.has(s.group))&&!/\u0642\u064
 const siteOk=id=>{const s=id&&siteById(id);return !s||siteVisible(s)};
 function matchF(s){if(gfilter==='')return true;if(gfilter==='__fav')return !!s.fav;if(gfilter==='__top')return s.opens>0;if(gfilter==='__now')return !!(s.hb&&s.hb[bucket()]>0);return s.group===gfilter}
 function renderChips(){
-  const el=$('#chips'),all=sites().filter(siteVisible),gs=[...new Set(all.map(s=>s.group).filter(Boolean))];
+  const el=$('#chips');if(UI.kidsOn){el.hidden=true;return}
+  const all=sites().filter(siteVisible),gs=[...new Set(all.map(s=>s.group).filter(Boolean))];
   const list=[['','الكل']];if(all.some(s=>s.fav))list.push(['__fav','⭐ المفضلة']);
   if(all.some(s=>s.opens>0)){list.push(['__top','🔥 الأكثر فتحًا']);if(all.some(s=>s.hb&&s.hb[bucket()]>0))list.push(['__now','🕐 مناسب دلوقتي'])}
   if(ramadan())gs.sort((x,y)=>(/رمضان/.test(y)?1:0)-(/رمضان/.test(x)?1:0));
@@ -418,13 +423,16 @@ function renderNow(){
   const qv=($('#q').value||'').trim();const gq=$('#gq');
   if(qv){gq.hidden=false;gq.href='https://www.google.com/search?q='+encodeURIComponent(qv);gq.textContent='🔎 جوجل: '+(qv.length>14?qv.slice(0,14)+'…':qv)}else gq.hidden=true;
   const noRes='<div class="empty">مفيش نتايج — جرّب زرار جوجل جنب البحث.</div>';
+  if(UI.kidsOn)editMode=false;
   document.body.classList.toggle('editing',editMode);
+  document.body.classList.toggle('kids',!!UI.kidsOn);
+  $('#kidsBtn').innerHTML=UI.kidsOn?'🔓<span class="t"> خروج</span>':'🧒<span class="t"> أطفال</span>';
   $('#editBtn').classList.toggle('on',editMode);
   $('#ver').textContent=`نسخة ${VERSION.n} · ${VERSION.date}`;
 
   renderChips();
   const grid=$('#siteGrid');grid.innerHTML='';
-  let ss=sites().filter(s=>siteVisible(s)&&qMatch(s.name,s.url)&&matchF(s));
+  let ss=sites().filter(s=>siteVisible(s)&&kidsOk(s)&&qMatch(s.name,s.url)&&matchF(s));
   if(gfilter==='__top')ss=ss.sort((a,b)=>(b.opens||0)-(a.opens||0)).slice(0,12);
   else if(gfilter==='__now'){const bk=bucket();ss=ss.sort((a,b)=>(b.hb[bk]||0)-(a.hb[bk]||0)).slice(0,12)}
   else if(!moveId){const se=ramadan(),w=x=>(x.pin?2:0)+(se&&/رمضان/.test(x.group||'')?1:0);   // pinned first, then this season's group
@@ -495,6 +503,7 @@ function renderNow(){
     lf.appendChild(t);
   });
   lr.appendChild(lf);
+  if(UI.kidsOn){['#contRow','#laterRow','#visitRow'].forEach(id=>{const r=$(id);if(r){r.innerHTML='';r.hidden=true}});['#contH','#visitH','#laterH'].forEach(id=>{const h=$(id);if(h)h.hidden=true})}
   trSync();
 }
 /* ---------- match times, archive, locks, extras ---------- */
@@ -528,6 +537,39 @@ function askPin(g,ok){
   $('#cc').onclick=closeModal;
   $('#go').onclick=async()=>{if(await sha($('#lp').value)===(UI.locks||{})[g]){closeModal();ok()}else{toast('الرقم غلط');$('#lp').value=''}};
 }
+/* ---------- kids mode: approved groups only, PIN to leave ---------- */
+const kidsOk=s=>!UI.kidsOn||(UI.kidsG||[]).indexOf(s.group||'')>=0;
+function kidsAsk(ok){openModal(`<h3>🧒 رقم وضع الأطفال</h3><input id="kp" type="password" inputmode="numeric" placeholder="الرقم السري" data-nav><div class="acts"><button class="fbtn g" id="kok" data-nav>تمام</button><button class="fbtn" id="kc" data-nav>إلغاء</button></div>`);
+  $('#kc').onclick=closeModal;
+  $('#kok').onclick=async()=>{if(await sha($('#kp').value)===UI.kidsPin){closeModal();ok()}else{toast('الرقم غلط');$('#kp').value=''}};
+  setTimeout(()=>$('#kp').focus(),80)}
+function kidsCfg(){
+  const gs=[...new Set(sites().map(s=>s.group).filter(Boolean))];
+  if(!gs.length){toast('اعمل مجموعة لمواقع الأطفال الأول (من تعديل الموقع)');return}
+  UI.kidsG=UI.kidsG||[];
+  openModal(`<h3>🧒 وضع الأطفال</h3>
+   <label>الأقسام المسموحة</label><div class="acts" id="kgs">${gs.map(g=>`<button class="fbtn" data-nav data-kg="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+   <div class="hint">في وضع الأطفال بتظهر المواقع اللي في الأقسام اللي اخترتها بس — من غير تعديل ولا إعدادات ولا تكملة مشاهدة. الخروج بالرقم السري.</div>
+   <label>الرقم السري</label><input id="kpn" type="password" inputmode="numeric" placeholder="${UI.kidsPin?'اتركه فاضي لو مش عايز تغيّره':'٤ أرقام على الأقل'}" data-nav>
+   <div class="acts"><button class="fbtn g" id="ksv" data-nav>حفظ</button><button class="fbtn" id="kc" data-nav>إلغاء</button></div>`);
+  const bx=$('#box');
+  const mark=()=>bx.querySelectorAll('[data-kg]').forEach(b=>b.classList.toggle('red',UI.kidsG.indexOf(b.dataset.kg)>=0));
+  mark();
+  bx.querySelectorAll('[data-kg]').forEach(b=>b.onclick=()=>{const g=b.dataset.kg,i=UI.kidsG.indexOf(g);if(i>=0)UI.kidsG.splice(i,1);else UI.kidsG.push(g);mark()});
+  $('#kc').onclick=closeModal;
+  $('#ksv').onclick=async()=>{
+    if(!UI.kidsG.length){toast('اختار قسم واحد على الأقل');return}
+    const p=$('#kpn').value.trim();
+    if(p){if(p.length<4){toast('الرقم لازم ٤ أرقام على الأقل');return}UI.kidsPin=await sha(p)}
+    if(!UI.kidsPin){toast('حط رقم سري للخروج');return}
+    saveUI();closeModal();toast('🧒 وضع الأطفال جاهز — شغّله من الزرار فوق')};
+}
+$('#kidsBtn').onclick=()=>{
+  if(!UI.kidsOn){
+    if(!UI.kidsPin||!(UI.kidsG||[]).length){kidsCfg();return}
+    editMode=false;UI.kidsOn=true;saveUI();render();toast('🧒 وضع الأطفال شغال')
+  }else kidsAsk(()=>{UI.kidsOn=false;saveUI();render();toast('اتقفل وضع الأطفال')})
+};
 function openLocks(){
   const gs=[...new Set(sites().map(x=>x.group).filter(Boolean))];
   openModal('<h3>🔒 قفل المجموعات</h3>'+(gs.length?'<label>المجموعة</label><select id="lg" data-nav>'+gs.map(g=>'<option value="'+esc(g)+'">'+esc(g)+(isLocked(g)?' 🔒':'')+'</option>').join('')+'</select>'+
@@ -984,6 +1026,7 @@ window.addEventListener('keydown',e=>{
 window.addEventListener('keyup',e=>{if(moveId&&(isOk(e)||e.key.startsWith('Arrow'))){e.preventDefault();e.stopImmediatePropagation()}},true);
 
 function tileMenu(kind,s,v){
+  if(UI.kidsOn)return;   // kids mode: no edit/delete menus
   const items=[];
   if(kind==='site'||kind==='visit'){
     items.push(['▶ افتح',()=>{location.href=s.url}]);
@@ -1110,6 +1153,7 @@ function openSettings(){
    ${window.Android&&Android.setAutoNext?'<label>▶ الحلقة التالية تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-an="1">شغّالة</button><button class="fbtn" data-nav data-an="0">مقفولة</button></div><div class="hint">لما الحلقة تخلص، اللي بعدها تفتح لوحدها بعد ٨ ثواني. Back بيلغيها.</div>':''}
    ${window.Android&&Android.remoteInfo?'<label>📱 ريموت الموبايل</label><div class="acts"><button class="fbtn" data-nav data-rm="1">شغّال</button><button class="fbtn" data-nav data-rm="0">مقفول</button></div><div class="hint" id="rmi"></div>':''}
    ${window.Android&&Android.setIntroAuto?'<label>⏭ تخطّي المقدمة تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-ia="1">شغّال</button><button class="fbtn" data-nav data-ia="0">مقفول</button></div><div class="hint">قدّم المقدمة بإيدك مرة في أول أي حلقة، والتطبيق بيفتكر المدة لنفس الموقع ويتخطّاها لوحده بعد كده.</div>':''}
+   <label>🧒 وضع الأطفال</label><div class="acts"><button class="fbtn" id="kdb" data-nav>إعداد وضع الأطفال</button></div>
    <label>🔒 قفل المجموعات</label><div class="acts"><button class="fbtn" id="lkb" data-nav>إدارة القفل</button></div>
    <div class="acts"><button class="fbtn red" id="cc" data-nav>تمام</button></div>`);
   const bx=$('#box');
@@ -1137,6 +1181,7 @@ function openSettings(){
   bx.querySelectorAll('[data-an]').forEach(b=>b.onclick=()=>{try{Android.setAutoNext(b.dataset.an==='1')}catch(e){}mark();toast(b.dataset.an==='1'?'▶ الحلقة التالية هتفتح لوحدها':'اتقفل التشغيل التلقائي')});
   bx.querySelectorAll('[data-sl]').forEach(b=>b.onclick=()=>{try{Android.sleepTimer(+b.dataset.sl)}catch(e){}toast(+b.dataset.sl?'😴 هيقفل بعد '+b.dataset.sl+' دقيقة':'اتلغى مؤقّت النوم');closeModal()});
   $('#lkb').onclick=openLocks;
+  $('#kdb').onclick=kidsCfg;
   $('#cc').onclick=closeModal;
 }
 function exportData(){
@@ -1258,7 +1303,7 @@ function trSync(){
 }
 function renderTrend(){
   const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter,ov=UI.trk||{};
-  const ok=new Set(trSources().map(s=>s.id));
+  const ok=new Set(trSources().filter(kidsOk).map(s=>s.id));
   const seen=new Set();   // shared across both rows: a title already shown in عربي never repeats in أجنبي
   [['ar','#trAr','#trH'],['fx','#trFx','#trH2']].forEach(([k,rid,hid])=>{
     const row=$(rid),h=$(hid);row.innerHTML='';row._loop=false;
