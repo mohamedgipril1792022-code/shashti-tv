@@ -237,6 +237,1707 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
+const VERSION={n:'١٣٧',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
+const LS='shashti-v1';
+let items=new Map();
+let col=null, editMode=false, gfilter='';
+const unlocked=new Set();   // locked groups opened during this visit
+let DEV='';try{DEV=localStorage.getItem('shashti-dev')||'';if(!DEV){DEV='d'+Math.random().toString(36).slice(2,10);localStorage.setItem('shashti-dev',DEV)}}catch(e){DEV='d'+Math.random().toString(36).slice(2,10)}
+let pushSeen=0;try{pushSeen=+localStorage.getItem('shashti-pushseen')||0}catch(e){}
+const $=s=>document.querySelector(s);
+
+/* ---------- storage ---------- */
+function loadLocal(){try{JSON.parse(localStorage.getItem(LS)||'[]').forEach(o=>o&&o.id&&items.set(o.id,o))}catch(e){}}
+let itemsVer=0,sitesVer=-1,sitesCache=[];   // sites() is asked for the same list many times in one render: build it once until items change
+function saveLocal(){itemsVer++;try{localStorage.setItem(LS,JSON.stringify([...items.values()]))}catch(e){}}
+const chains={};
+function cloudWrite(id,fn){
+  chains[id]=(chains[id]||Promise.resolve()).then(fn).catch(e=>{
+    if(e&&e.code==='quota_exceeded')toast('المساحة السحابية امتلأت — احذف بعض العناصر');
+    else if(e&&(e.code==='invalid_argument'||e.code==='revoked'||e.code==='not_granted')){col=null;setStatus('الحفظ السحابي غير متاح — الحفظ على هذا الجهاز فقط')}
+  });
+}
+function put(o){items.set(o.id,o);saveLocal();render();if(col){const c=col;cloudWrite(o.id,()=>c.doc(o.id).set(o))}}
+function del(id){items.delete(id);saveLocal();render();if(col){const c=col;cloudWrite(id,()=>c.doc(id).delete())}}
+
+async function initCloud(){
+  if(!window.claude||!claude.use)return;
+  let db,user;
+  try{[db,user]=await Promise.all([claude.use('db'),claude.use('user')])}catch(e){return}
+  if(!db||!user)return;
+  let uid=null;try{uid=await user.id()}catch(e){}
+  if(!uid)return;
+  const c=db.collection('data/users/'+uid);
+  col=c;
+  setStatus('جاري المزامنة…');
+  const timer=setTimeout(()=>setStatus('تعذّر الوصول للمزامنة الآن — المعروض هو المحفوظ على الجهاز'),10000);
+  let first=true;
+  c.onSnapshot(snap=>{
+    if(snap.metadata.fromCache)return;
+    clearTimeout(timer);setStatus('');
+    const m=new Map();
+    snap.docs.forEach(d=>{const v=d.data();if(v&&v.kind)m.set(d.id,Object.assign({},v,{id:d.id}))});
+    if(first){
+      first=false;
+      // نقل أي حاجة محفوظة على الجهاز ومش موجودة في السحابة
+      for(const o of items.values()){if(!m.has(o.id)){m.set(o.id,o);cloudWrite(o.id,()=>c.doc(o.id).set(o))}}
+    }
+    items=m;saveLocal();softRender();checkPush();pullDismiss();syncWatchCloud();
+  },err=>{clearTimeout(timer);col=null;setStatus('المزامنة غير متاحة — الحفظ على هذا الجهاز فقط')});
+}
+
+
+/* channels (M3U) are gone from the app: sweep whatever an older version imported, on this device and in the cloud */
+/* ---------- football: the matches that matter, Egyptian clubs first ---------- */
+const MATCH_LEAGUES=[
+  ['caf.champions','دوري أبطال أفريقيا'],
+  ['caf.confed','الكونفدرالية الأفريقية'],
+  ['uefa.champions','دوري أبطال أوروبا'],
+  ['eng.1','الدوري الإنجليزي'],
+  ['esp.1','الدوري الإسباني']];
+const MATCH_K='sajo-matches';
+let MATCH={at:0,list:[]};try{MATCH=JSON.parse(localStorage.getItem(MATCH_K)||'{"at":0,"list":[]}')}catch(e){}
+const EG_CLUBS=/ahly|zamalek|pyramids|ismaily|masry|ceramica|smouha|national bank|enppi|petrojet|haras|mahalla|wadi degla|ghazl|modern sport|future fc|zamalek|islamia/i;
+const TEAM_AR=[['pyramids','بيراميدز'],['zamalek','الزمالك'],['al ahly','الأهلي'],['ahly','الأهلي'],['ismaily','الإسماعيلي'],['masry','المصري'],['smouha','سموحة'],['ceramica','سيراميكا كليوباترا'],['national bank','البنك الأهلي'],['enppi','إنبي'],['petrojet','بتروجت'],['haras','حرس الحدود'],['mahalla','غزل المحلة'],['ghazl','غزل المحلة'],['wadi degla','وادي دجلة'],['modern sport','مودرن سبورت'],['future fc','فيوتشر'],['zed','زد'],['pharco','فاركو'],['gaish','طلائع الجيش'],['mokawloon','المقاولون'],['arab contractors','المقاولون'],['gouna','الجونة'],['el gouna','الجونة'],['al ittihad','الاتحاد السكندري'],['ittihad','الاتحاد السكندري'],['dakhleya','الداخلية'],['baladeya','بلدية المحلة'],['baladiyat','بلدية المحلة'],['tanta','طنطا'],['aswan','أسوان'],['aluminium','الألومنيوم'],['dikernis','دكرنس'],['proxy','بروكسي'],['el seka','سكة الحديد'],['ismailia electricity','كهرباء الإسماعيلية'],['kahraba','الكهرباء'],
+['esperance','الترجي'],['es tunis','الترجي'],['club africain','الإفريقي'],['c. africain','الإفريقي'],['etoile','النجم الساحلي'],['sahel','النجم الساحلي'],['wydad','الوداد'],['raja','الرجاء'],['far rabat','الجيش الملكي'],['as far','الجيش الملكي'],['maghreb de fes','المغرب الفاسي'],['maghreb fez','المغرب الفاسي'],['maghreb','المغرب الفاسي'],['mamelodi','ماميلودي صن داونز'],['sundowns','ماميلودي صن داونز'],['young africans','يانغ أفريكانز'],['simba','سيمبا'],['mc alger','مولودية الجزائر'],['mouloudia','مولودية الجزائر'],['usm alger','اتحاد العاصمة'],['belouizdad','شباب بلوزداد'],['kabylie','شبيبة القبائل'],['constantine','قسنطينة'],['mazembe','مازيمبي'],['petro de luanda','بيترو دي لواندا'],['petro atletico','بيترو أتلتيكو'],['hilal omdurman','الهلال السوداني'],['al hilal','الهلال السوداني'],['mimosas','أسيك ميموزا'],['asec','أسيك ميموزا'],['stade malien','الملعب المالي'],['orlando pirates','أورلاندو بايرتس'],['kaizer chiefs','كايزر تشيفز'],['berkane','نهضة بركان'],['horoya','هورويا كوناكري'],['coton sport','كوتون سبورت'],['enyimba','إنييمبا'],['maniema','مانييما يونيون'],['stellenbosch','ستيلينبوش'],['sekhukhune','سيخوخوني يونايتد'],['sagrada','ساغرادا إسبيرانزا'],
+['real madrid','ريال مدريد'],['barcelona','برشلونة'],['atletico madrid','أتلتيكو مدريد'],['sevilla','إشبيلية'],['villarreal','فياريال'],['valencia','فالنسيا'],['real sociedad','ريال سوسيداد'],['athletic','أتلتيك بلباو'],['betis','ريال بيتيس'],['girona','جيرونا'],['getafe','خيتافي'],['osasuna','أوساسونا'],['celta','سيلتا فيغو'],['mallorca','مايوركا'],['rayo','رايو فاليكانو'],['alaves','ألافيس'],['espanyol','إسبانيول'],['levante','ليفانتي'],['elche','إلتشي'],['oviedo','ريال أوفييدو'],['las palmas','لاس بالماس'],['valladolid','بلد الوليد'],['leganes','ليغانيس'],
+['arsenal','أرسنال'],['liverpool','ليفربول'],['manchester city','مانشستر سيتي'],['man city','مانشستر سيتي'],['manchester united','مانشستر يونايتد'],['man utd','مانشستر يونايتد'],['chelsea','تشيلسي'],['tottenham','توتنهام'],['spurs','توتنهام'],['newcastle','نيوكاسل يونايتد'],['aston villa','أستون فيلا'],['brighton','برايتون'],['west ham','وست هام'],['brentford','برينتفورد'],['crystal palace','كريستال بالاس'],['fulham','فولهام'],['everton','إيفرتون'],['wolverhampton','ولفرهامبتون'],['wolves','ولفرهامبتون'],['nottingham','نوتنغهام فورست'],['bournemouth','بورنموث'],['leicester','ليستر سيتي'],['ipswich','إيبسويتش تاون'],['southampton','ساوثهامبتون'],['leeds','ليدز يونايتد'],['burnley','بيرنلي'],['sunderland','سندرلاند'],
+['paris saint','باريس سان جيرمان'],['psg','باريس سان جيرمان'],['bayern','بايرن ميونخ'],['dortmund','بوروسيا دورتموند'],['leverkusen','باير ليفركوزن'],['leipzig','لايبزيغ'],['inter','إنتر ميلان'],['ac milan','ميلان'],['milan','ميلان'],['juventus','يوفنتوس'],['napoli','نابولي'],['atalanta','أتالانتا'],['roma','روما'],['lazio','لاتسيو'],['fiorentina','فيورنتينا'],['bologna','بولونيا'],['benfica','بنفيكا'],['porto','بورتو'],['sporting','سبورتينغ'],['ajax','أياكس'],['psv','آيندهوفن'],['feyenoord','فينورد'],['celtic','سيلتيك'],['rangers','رينجرز'],['galatasaray','غلطة سراي'],['fenerbahce','فنربخشة'],['besiktas','بشكتاش'],['brugge','كلوب بروج'],['salzburg','ريد بول سالزبورغ'],['shakhtar','شاختار'],['dynamo kyiv','دينامو كييف'],['dynamo kiev','دينامو كييف'],['dinamo zagreb','دينامو زغرب'],['copenhagen','كوبنهاغن'],['bodo','بودو غليمت'],['qarabag','كاراباغ'],['olympiacos','أولمبياكوس'],['marseille','مارسيليا'],['monaco','موناكو'],['lille','ليل'],['lyon','ليون'],['nice','نيس'],['rennes','رين'],['brest','بريست'],['lens','لانس'],['frankfurt','آينتراخت فرانكفورت'],['stuttgart','شتوتغارت'],['gladbach','بوروسيا مونشنغلادباخ'],['young boys','يانغ بويز'],['red star','النجم الأحمر'],['crvena','النجم الأحمر'],['slavia','سلافيا براغ'],['sparta','سبارتا براغ'],['anderlecht','أندرلخت'],['union sg','يونيون سان جيلواز'],['sturm','شتورم غراتس']];
+function arTeam(n){if(!n)return n;const s=n.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  for(let i=0;i<TEAM_AR.length;i++)if(s.includes(TEAM_AR[i][0]))return TEAM_AR[i][1];return n}
+async function fetchJson(u){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),9000);
+  try{const r=await fetch(u,{signal:ac.signal});return r.ok?await r.json():null}catch(e){return null}finally{clearTimeout(t)}}
+// the Egyptian league isn't on ESPN's free scoreboard: TheSportsDB's free key carries it (CORS-open, no signup)
+const TSDB='https://www.thesportsdb.com/api/v1/json/123/';
+const small=u=>u?u.replace(/\.(png|jpg|jpeg)$/i,'.$1/small'):u;
+async function egFetch(){
+  const [nx,ps]=await Promise.all([fetchJson(TSDB+'eventsnextleague.php?id=4829'),fetchJson(TSDB+'eventspastleague.php?id=4829')]);
+  const out=[],now=Date.now(),mk=(e,state)=>{const when=+new Date((e.strTimestamp||'')+'Z');if(!when)return;
+    out.push({id:'tsdb'+e.idEvent,lg:'الدوري المصري',hn:e.strHomeTeam||'',an:e.strAwayTeam||'',
+      hi:small(e.strHomeTeamBadge||''),ai:small(e.strAwayTeamBadge||''),
+      hs:state==='post'?String(e.intHomeScore==null?'':e.intHomeScore):'',as:state==='post'?String(e.intAwayScore==null?'':e.intAwayScore):'',
+      state,clock:'',when,eg:1,link:''})};
+  (nx&&nx.events||[]).forEach(e=>{const w=+new Date((e.strTimestamp||'')+'Z');if(w&&w-now<=14*864e5)mk(e,'pre')});
+  (ps&&ps.events||[]).forEach(e=>{const w=+new Date((e.strTimestamp||'')+'Z');if(w&&now-w<=96*36e5)mk(e,'post')});
+  return out}
+async function matchRefresh(force){
+  if(!force&&Date.now()-MATCH.at<20*60e3&&MATCH.list.length){renderMatches();return}
+  const res=await Promise.allSettled(MATCH_LEAGUES.map(([slug])=>fetchJson('https://site.api.espn.com/apis/site/v2/sports/soccer/'+slug+'/scoreboard')));
+  const out=[],now=Date.now();
+  res.forEach((r,i)=>{if(r.status!=='fulfilled'||!r.value)return;
+    (r.value.events||[]).forEach(e=>{try{
+      const c=e.competitions[0],H=c.competitors.find(x=>x.homeAway==='home'),A=c.competitors.find(x=>x.homeAway==='away');
+      if(!H||!A)return;
+      const st=e.status.type,when=+new Date(e.date);
+      if(st.state==='post'&&now-when>20*36e5)return;         // نتايج أقدم من النهاردة بكير مش مهمة
+      if(st.state==='pre'&&when-now>5*864e5)return;           // ولا اللي بعد أكتر من ٥ أيام
+      out.push({id:e.id,lg:MATCH_LEAGUES[i][1],hn:H.team.shortDisplayName||H.team.displayName,an:A.team.shortDisplayName||A.team.displayName,
+        hi:H.team.logo||'',ai:A.team.logo||'',hs:String(H.score==null?'':H.score),as:String(A.score==null?'':A.score),
+        state:st.state,clock:e.status.displayClock||'',when,
+        eg:EG_CLUBS.test(H.team.displayName+' '+A.team.displayName)?1:0,
+        link:(e.links&&e.links[0]&&e.links[0].href)||''});
+    }catch(_){}})});
+  out.push(...await egFetch());
+  if(!out.length){renderMatches();return}                      // every fetch failed: keep the old list
+  const rank=m=>m.state==='in'?0:m.state==='pre'?1:2;
+  out.sort((a,b)=>rank(a)-rank(b)||(b.eg-a.eg)||(a.state==='post'?b.when-a.when:a.when-b.when));
+  MATCH={at:now,list:out.slice(0,16)};
+  try{localStorage.setItem(MATCH_K,JSON.stringify(MATCH))}catch(e){}
+  renderMatches();
+}
+function fmtWhen(t){const d=new Date(t),now=new Date(),day=x=>x.toDateString();
+  if(day(d)===day(now))return 'اليوم';
+  if(day(d)===day(new Date(now.getTime()+864e5)))return 'بكرة';
+  return d.toLocaleDateString('ar-EG',{weekday:'long'})}
+function fmtTm(t){return new Date(t).toLocaleTimeString('ar-EG',{hour:'numeric',minute:'2-digit'})}
+function renderMatches(){
+  const row=$('#matchRow'),h=$('#mH');if(!row)return;row.innerHTML='';
+  const list=MATCH.list||[];
+  h.hidden=row.hidden=!list.length;
+  if(!list.length)return;
+  row._loop=false;row._half=null;   // content changed: measure the loop again on the next tick
+  const mk=dup=>{const f=document.createDocumentFragment();
+  list.forEach(m=>{
+    const a=document.createElement('a');a.className='mcard';a.href=m.link||'#';a.target='_blank';a.rel='noopener';a.setAttribute('data-nav','');
+    const center=m.state==='pre'?'\u2066'+fmtTm(m.when)+'\u2069':'\u2066'+m.hs+' - '+m.as+'\u2069';
+    const st=m.state==='in'?'<b class="live">مباشر'+(m.clock?' \u2066'+m.clock+'\u2069':'')+'</b>':m.state==='post'?'انتهت':fmtWhen(m.when);
+    a.innerHTML='<div class="mlg">'+esc(m.lg)+'</div>'+
+      '<div class="mteams">'+(m.hi?'<img src="'+esc(m.hi)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+
+      '<span class="msc">'+esc(center)+'</span>'+
+      (m.ai?'<img src="'+esc(m.ai)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</div>'+
+      '<div class="mvs">'+esc(arTeam(m.hn))+' × '+esc(arTeam(m.an))+'</div>'+
+      '<div class="mst">'+st+'</div>';
+    if(dup){a.classList.add('dup');a.removeAttribute('data-nav');a.tabIndex=-1;a.setAttribute('aria-hidden','true')}
+    f.appendChild(a)});
+  row.appendChild(f)};
+  mk(false);
+  if(row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
+}
+
+/* ---------- helpers ---------- */
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function normUrl(u){u=(u||'').trim();if(!u)return '';if(!/^https?:\/\//i.test(u))u='https://'+u;try{return new URL(u).href}catch(e){return ''}}
+const isStream=u=>/\.(m3u8|mp4|webm|mpd|ts)(\?|#|$)/i.test(String(u||''));   // a direct stream address: the built-in player takes it
+function hostOf(u){try{return new URL(u).hostname.replace(/^www\./,'')}catch(e){return ''}}
+function grad(s){let h=0;for(const ch of s||'x')h=(h*31+ch.charCodeAt(0))%360;return `linear-gradient(135deg,hsl(${h} 70% 38%),hsl(${(h+50)%360} 75% 18%))`}
+function ago(t){const m=Math.round((Date.now()-t)/60000);if(m<1)return 'الآن';if(m<60)return `من ${m} د`;const h=Math.round(m/60);if(h<24)return `من ${h} س`;const d=Math.round(h/24);return `من ${d} يوم`}
+function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',2600)}
+function setStatus(t){$('#status').textContent=t}
+const ord=o=>o.order!=null?o.order:(o.createdAt||0)/1e13;   // your own order; old sites keep the order they were added in
+const sites=()=>{if(sitesVer===itemsVer)return sitesCache;sitesVer=itemsVer;sitesCache=[...items.values()].filter(o=>o.kind==='site').sort((a,b)=>ord(a)-ord(b)||(a.createdAt||0)-(b.createdAt||0));return sitesCache};
+const siteById=id=>{const o=items.get(id);return o&&o.kind==='site'?o:null};
+
+function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav,menu,cap,onDone,badge,onWarn,src}){
+  const a=document.createElement('a');
+  a.className='tile';a.href=url||'#';if(menu)a._menu=menu;a.target='_blank';a.rel='noopener';a.setAttribute('data-nav','');
+  if(icon&&String(icon).indexOf('auto:')!==0)a.dataset.img=icon;
+  // cap: the picture stays in .thumb and the name + note sit below it in small text
+  let host=a;if(cap){host=document.createElement('div');host.className='thumb';a.classList.add('capt');if(cap==='sq')a.classList.add('sq');a.appendChild(host)}
+  const bg=document.createElement('div');bg.className='bg';
+  // 'auto:host' = the site's own icon (its apple-touch-icon, then the favicon), over a coloured background
+  if(icon&&icon.indexOf('auto:')===0){const h=icon.slice(5);bg.style.backgroundImage=`url("https://${h}/apple-touch-icon.png")${favOK[h]===true?`,url("https://www.google.com/s2/favicons?domain=${h}&sz=256")`:''},${grad(name)}`;if(favOK[h]===undefined)probeFav(h)}
+  else if(icon)bg.style.backgroundImage=`url("${icon}"),${grad(name)}`;
+  else bg.style.backgroundImage=grad(name);
+  host.appendChild(bg);
+  const sh=document.createElement('div');sh.className='shade';host.appendChild(sh);
+  if(!cap){
+    const n=document.createElement('span');n.className='name';n.textContent=name||hostOf(url);a.appendChild(n);
+    if(sub){const s=document.createElement('span');s.className='sub';s.textContent=sub;a.appendChild(s)}
+  }
+  if(agoT){const g=document.createElement('span');g.className='ago';g.textContent=ago(agoT);host.appendChild(g)}
+  if(onWarn){const w=document.createElement('button');w.type='button';w.className='warn';w.tabIndex=-1;w.title='الرابط مش شغال — حدّثه';w.textContent='⚠';w.onclick=e=>{e.preventDefault();e.stopPropagation();onWarn()};host.appendChild(w)}
+  if(badge){const nb=document.createElement('span');nb.className='newb';nb.textContent='جديد';host.appendChild(nb)}
+  if(src){const sb=document.createElement('span');sb.className='srcb';sb.textContent=src;host.appendChild(sb)}   // which site this card came from, before you open it
+  if(onDone){const d=document.createElement('button');d.type='button';d.className='done';d.tabIndex=-1;d.title='خلصته';d.textContent='✓';d.onclick=e=>{e.preventDefault();e.stopPropagation();onDone()};host.appendChild(d)}
+  if(cap){const c=document.createElement('div');c.className='cap';
+    const b=document.createElement('b');b.textContent=name||hostOf(url);b.title=b.textContent;c.appendChild(b);
+    if(sub){const s=document.createElement('span');s.textContent=sub;c.appendChild(s)}
+    a.appendChild(c)}
+  if(onFav){const f=document.createElement('button');f.type='button';f.className='fav';f.tabIndex=-1;f.title='المفضلة';f.textContent=fav?'★':'☆';f.onclick=e=>{e.preventDefault();e.stopPropagation();onFav()};a.appendChild(f)}
+  if(onUpd){const b=document.createElement('button');b.type='button';b.className='upd';b.tabIndex=-1;b.textContent='🔄 تحديث الرابط';b.onclick=e=>{e.preventDefault();e.stopPropagation();onUpd()};a.appendChild(b)}
+  return a;
+}
+
+/* ---------- render ---------- */
+// Google's favicon service answers with a tiny generic globe when a site has no real icon: only real (bigger) ones are used
+const favOK={};
+let favRT=0;   // many icons can answer at once: their re-renders merge into one
+function probeFav(h){favOK[h]=false;const im=new Image();im.onload=()=>{if(im.naturalWidth>16){favOK[h]=true;clearTimeout(favRT);favRT=setTimeout(softRender,350)}};im.src='https://www.google.com/s2/favicons?domain='+h+'&sz=256'}
+function siteIcon(s){if(s.icon)return s.icon;const h=hostOf(s.url);return h?'auto:'+h:''}
+function bucket(){const h=new Date().getHours();return h>=5&&h<12?0:h>=12&&h<17?1:h>=17&&h<23?2:3}
+function ramadan(){try{const f=new Intl.DateTimeFormat('en-u-ca-islamic-umalqura',{month:'numeric',day:'numeric'}).formatToParts(new Date());
+  const m=+f.find(x=>x.type==='month').value,d=+f.find(x=>x.type==='day').value;return m===9||(m===8&&d>=20)||(m===10&&d<=2)}catch(e){return false}}
+const isLocked=g=>!!(g&&UI.locks&&UI.locks[g]);
+const siteVisible=s=>!(isLocked(s.group)&&!unlocked.has(s.group))&&!/\u0642\u0646\u0648\u0627\u062a/.test(s.group||'');   // the channels feature is gone: قنوات groups stay stored but never render
+const siteOk=id=>{const s=id&&siteById(id);return !s||siteVisible(s)};
+function matchF(s){if(gfilter==='')return true;if(gfilter==='__fav')return !!s.fav;if(gfilter==='__top')return s.opens>0;if(gfilter==='__now')return !!(s.hb&&s.hb[bucket()]>0);return s.group===gfilter}
+function renderChips(){
+  const el=$('#chips');if(UI.kidsOn){el.hidden=true;return}
+  const all=sites().filter(siteVisible),gs=[...new Set(all.map(s=>s.group).filter(Boolean))];
+  const list=[['','الكل']];if(all.some(s=>s.fav))list.push(['__fav','⭐ المفضلة']);
+  if(all.some(s=>s.opens>0)){list.push(['__top','🔥 الأكثر فتحًا']);if(all.some(s=>s.hb&&s.hb[bucket()]>0))list.push(['__now','🕐 مناسب دلوقتي'])}
+  if(ramadan())gs.sort((x,y)=>(/رمضان/.test(y)?1:0)-(/رمضان/.test(x)?1:0));
+  gs.forEach(g=>list.push([g,(isLocked(g)&&!unlocked.has(g)?'🔒 ':'📁 ')+g]));
+  if(gfilter&&!list.some(x=>x[0]===gfilter))gfilter='';
+  el.hidden=list.length<2;el.innerHTML='';
+  const cf=document.createDocumentFragment();
+  list.forEach(([k,t])=>{const b=document.createElement('button');b.type='button';b.className='hbtn'+(gfilter===k?' on':'');b.setAttribute('data-nav','');b.textContent=t;
+    const go=()=>{gfilter=k;render();setTimeout(()=>{const x=[...$('#chips').children].find(c=>c.textContent.slice(2)===t.slice(2));x&&x.focus()},0)};
+    b.onclick=()=>{if(k&&k.indexOf('__')!==0&&isLocked(k)&&!unlocked.has(k))askPin(k,()=>{unlocked.add(k);go()});else go()};cf.appendChild(b)});
+  el.appendChild(cf);
+}
+function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!q)return true;return fields.some(f=>String(f||'').toLowerCase().includes(q))}
+/* a refresh rebuilds every tile; the focused tile would be lost (the next press went to the first button, «＋») or a tap that was in progress would be swallowed.
+   So: the focus is put back on the same tile, and refreshes that come from the background wait until you stop touching the screen. */
+const FOCUS_HOSTS='#chips,.row,#siteGrid';
+function tileKey(a){const n=a.querySelector&&a.querySelector('.cap b,.name');return (a.getAttribute('href')||'')+'|'+(n?n.textContent:(a.textContent||'').trim().slice(0,40))}
+function focusKey(){const a=document.activeElement;if(!a||a===document.body||!a.closest)return null;const h=a.closest(FOCUS_HOSTS);if(!h||h.closest('#modal'))return null;return {h:h.id,k:tileKey(a)}}
+function focusBoot(){const a=document.activeElement;if(a&&a!==document.body)return;if($('#modal').classList.contains('open'))return;
+  const f=document.querySelector('#contRow .tile[data-nav],#laterRow .tile[data-nav],#siteGrid .tile[data-nav],header [data-nav]');if(f)f.focus({preventScroll:true})}
+function restoreFocus(f){if(!f)return;const h=document.getElementById(f.h);if(!h)return;const e=[...h.querySelectorAll('[data-nav]')].find(x=>tileKey(x)===f.k);if(e&&document.activeElement!==e)e.focus({preventScroll:true})}
+function render(){const f=focusKey();renderNow();restoreFocus(f)}
+let lastInput=0,ptrDown=false,softT=0;
+['pointerdown','touchstart','mousedown','keydown'].forEach(ev=>document.addEventListener(ev,()=>{lastInput=Date.now()},true));
+document.addEventListener('pointerdown',()=>{ptrDown=true},true);
+['pointerup','pointercancel','touchend','touchcancel'].forEach(ev=>document.addEventListener(ev,()=>{ptrDown=false},true));
+function softRender(){clearTimeout(softT);if(ptrDown||Date.now()-lastInput<2000){softT=setTimeout(softRender,800);return}render()}
+function renderNow(){
+  const qv=($('#q').value||'').trim();const gq=$('#gq');
+  if(qv){gq.hidden=false;gq.href='https://www.google.com/search?q='+encodeURIComponent(qv);gq.textContent='🔎 جوجل: '+(qv.length>14?qv.slice(0,14)+'…':qv)}else gq.hidden=true;
+  const noRes='<div class="empty">مفيش نتايج — جرّب زرار جوجل جنب البحث.</div>';
+  if(UI.kidsOn)editMode=false;
+  document.body.classList.toggle('editing',editMode);
+  document.body.classList.toggle('kids',!!UI.kidsOn);
+  $('#kidsBtn').innerHTML=UI.kidsOn?'🔓<span class="t"> خروج</span>':'🧒<span class="t"> أطفال</span>';
+  $('#editBtn').classList.toggle('on',editMode);
+  $('#ver').textContent=`نسخة ${VERSION.n} · ${VERSION.date}`;
+
+  renderChips();
+  const grid=$('#siteGrid');grid.innerHTML='';
+  let ss=sites().filter(s=>siteVisible(s)&&kidsOk(s)&&qMatch(s.name,s.url)&&matchF(s));
+  if(gfilter==='__top')ss=ss.sort((a,b)=>(b.opens||0)-(a.opens||0)).slice(0,12);
+  else if(gfilter==='__now'){const bk=bucket();ss=ss.sort((a,b)=>(b.hb[bk]||0)-(a.hb[bk]||0)).slice(0,12)}
+  else if(!moveId){const se=ramadan(),w=x=>(x.pin?2:0)+(se&&/رمضان/.test(x.group||'')?1:0);   // pinned first, then this season's group
+    ss=ss.map((x,i)=>[x,i]).sort((a,b)=>w(b[0])-w(a[0])||a[1]-b[1]).map(x=>x[0])}
+  $('#gall').hidden=!(qv&&sites().some(x=>x.searchUrl&&siteVisible(x)));
+  if(!ss.length&&(qv||gfilter))grid.innerHTML=noRes;else if(!ss.length)grid.innerHTML='<div class="empty">لسه مفيش مواقع — دوس «＋ موقع» وحط رابط الموقع واختار صورة ليه.</div>';
+  const gf=document.createDocumentFragment();
+  ss.forEach(s=>{
+    const t=tileEl({name:s.name,url:s.url,icon:siteIcon(s),cap:'sq',sub:lcBroken(s)?'⚠ الرابط مش شغال':(matchSub(s)||(s.ext?'🌐 بيفتح في متصفح تاني':'')),onWarn:lcBroken(s)?()=>openUpdate(s):null,menu:()=>tileMenu('site',s),fav:!!s.fav,onFav:()=>{put(Object.assign({},s,{fav:!s.fav}));toast(s.fav?'اتشال من المفضلة':'⭐ اتضاف للمفضلة')}});
+    t.onclick=e=>{if(moveId){e.preventDefault();return}if(editMode){e.preventDefault();openSite(s)}else if(isStream(s.url)){e.preventDefault();visit(s.id);playStream(s.url,s.name)}else if(s.ext&&window.Android&&Android.openExternal){e.preventDefault();visit(s.id);Android.openExternal(s.url)}else visit(s.id)};
+    if(s.id===moveId){t.classList.add('moving');t.dataset.moving='1'}
+    gf.appendChild(t);
+  });
+  grid.appendChild(gf);
+  const mv=grid.querySelector('[data-moving]');if(mv)setTimeout(()=>mv.focus({preventScroll:false}),0);
+
+  const vr=$('#visitRow');vr.innerHTML='';
+  const vs=[...items.values()].filter(o=>o.kind==='visit'&&siteById(o.siteId)&&siteOk(o.siteId)&&qMatch(siteById(o.siteId).name,siteById(o.siteId).url)).sort((a,b)=>b.lastAt-a.lastAt).slice(0,15);
+  if(!vs.length&&qv)vr.innerHTML=noRes;else if(!vs.length)vr.innerHTML='<div class="empty">أول ما تفتح موقع من هنا هيظهر في القسم ده.</div>';
+  const vf=document.createDocumentFragment();
+  vs.forEach(v=>{
+    const s=siteById(v.siteId);
+    const t=tileEl({name:s.name,url:s.url,icon:s.icon,agoT:v.lastAt,onUpd:()=>openUpdate(s),menu:()=>tileMenu('visit',s,v)});
+    t.onclick=e=>{if(editMode){e.preventDefault();confirmBox('تشيل «'+s.name+'» من آخر ما شاهدت؟',()=>del(v.id))}else visit(s.id)};
+    vf.appendChild(t);
+  });
+  vr.appendChild(vf);
+
+  const cr=$('#contRow');cr.innerHTML='';
+  syncWatch();ytFix();
+  const W=watchNorm();
+  const allC=[...items.values()].filter(o=>o.kind==='cont'&&siteOk(o.siteId)&&!isYtSong(o)&&qMatch(o.title,o.note,o.url)).sort((a,b)=>b.lastAt-a.lastAt);
+  const groups=new Map();allC.forEach(o=>{const k=seriesKey(o);if(!groups.has(k))groups.set(k,[]);groups.get(k).push(o)});
+  const cs=UI.allEps?allC:[...groups.values()].map(a=>a[0]);   // one tile per series: the one you watched last
+  if(!cs.length&&qv)cr.innerHTML=noRes;else if(!cs.length)cr.innerHTML='<div class="empty">وانت بتتفرج، دوس «▶ تكملة» واحفظ رابط الحلقة والدقيقة اللي وقفت عندها.</div>';
+  const xf=document.createDocumentFragment();
+  cs.forEach(c=>{
+    const s=siteById(c.siteId);
+    const icon=c.icon||(s&&s.icon)||'';
+    const w=W[vkey(c.url)];let sub=c.note||(s?s.name:hostOf(c.url)),pct=0;
+    // progress kept on another device (it travels with the tile); the newer one wins
+    const rem=(c.pd>0&&c.pt>0&&c.pdev&&c.pdev!==DEV)?{t:c.pt,d:c.pd,at:c.pat||0}:null;
+    const pw=(w&&w.d>0&&(!rem||(w.at||0)>=rem.at))?w:rem,remote=!!rem&&pw===rem;
+    if(pw){pct=Math.min(1,pw.t/pw.d);sub=pct>=0.97?'✓ خلصتها':(remote?'📱 ':'⏱ ')+'\u2066'+fmtT(pw.t)+'\u2069 من \u2066'+fmtT(pw.d)+'\u2069'}
+    const gsz=(groups.get(seriesKey(c))||[c]).length;let nm=c.title;
+    if(gsz>1&&!UI.allEps){nm=seriesName(c.title);const en=epNum(c.title);if(en)sub='حلقة \u2066'+en+'\u2069 · '+sub}
+    if(c.rate>0)sub='★'+c.rate+' '+sub;
+    const t=tileEl({name:nm,url:c.url,icon,sub,agoT:c.lastAt,cap:true,badge:!!c.isNew,onDone:()=>{finishSeries(UI.allEps?[c]:groupOf(c));toast('✓ اتشالت من التكملة')},menu:()=>tileMenu('cont',c)});
+    if(pct>0&&pct<0.97){const b=document.createElement('div');b.className='pbar';b.innerHTML='<i style="width:'+Math.round(pct*100)+'%"></i>';t.querySelector('.thumb').appendChild(b)}
+    t.onclick=e=>{if(editMode){e.preventDefault();openCont(c)}else{if(remote&&window.Android&&Android.seedWatch){try{Android.seedWatch(c.url,c.pt,c.pd)}catch(_){}}put(Object.assign({},c,{lastAt:Date.now(),isNew:false}));if(c.siteId&&siteById(c.siteId))visit(c.siteId,true)}};
+    xf.appendChild(t);
+  });
+  cr.appendChild(xf);
+
+  const lr=$('#laterRow'),lh=$('#laterH');lr.innerHTML='';
+  const ls=[...items.values()].filter(o=>o.kind==='later'&&siteOk(o.siteId)&&qMatch(o.title,o.url)).sort((a,b)=>b.at-a.at);
+  lh.hidden=lr.hidden=!ls.length;
+  const lf=document.createDocumentFragment();
+  ls.forEach(l=>{
+    const s=siteById(l.siteId);
+    const t=tileEl({name:l.title,url:l.url,icon:l.icon||(s&&s.icon)||'',sub:s?s.name:hostOf(l.url),cap:true,onDone:()=>{del(l.id);toast('اتشال من بعدين')},menu:()=>tileMenu('later',l)});
+    t.onclick=e=>{
+      if(editMode){e.preventDefault();confirmBox('تشيل «'+l.title+'» من بعدين؟',()=>del(l.id));return}
+      // opening it turns it into a continue-watching tile
+      items.delete(l.id);if(col){const c=col;cloudWrite(l.id,()=>c.doc(l.id).delete())}
+      put({id:'c-'+uid(),kind:'cont',title:l.title,url:l.url,note:l.note||'',siteId:l.siteId||'',icon:l.icon||'',lastAt:Date.now()});
+      if(l.siteId&&siteById(l.siteId))visit(l.siteId,true)};
+    lf.appendChild(t);
+  });
+  lr.appendChild(lf);
+  if(UI.kidsOn){['#contRow','#laterRow','#visitRow'].forEach(id=>{const r=$(id);if(r){r.innerHTML='';r.hidden=true}});['#contH','#visitH','#laterH'].forEach(id=>{const h=$(id);if(h)h.hidden=true})}
+  trSync();
+}
+/* ---------- match times, archive, locks, extras ---------- */
+function matchSub(s){if(!s.matchAt)return '';const d=s.matchAt-Date.now();if(d<-3*3600e3)return '';if(d<=0)return '⏰ دلوقتي';
+  const m=Math.round(d/60000);if(m<60)return '⏰ بعد '+m+' د';const h=Math.floor(m/60);if(h<24)return '⏰ بعد '+h+' س'+(m%60?' '+(m%60)+' د':'');return '⏰ بعد '+Math.round(h/24)+' يوم'}
+const matchShown=new Set();
+function checkMatches(){sites().filter(siteVisible).forEach(s=>{if(!s.matchAt)return;const d=s.matchAt-Date.now(),k=s.id+'|'+s.matchAt;
+  if(d<=15*60e3&&d>-30*60e3&&!matchShown.has(k)){matchShown.add(k);toast('⏰ '+s.name+' — '+matchSub(s).replace('⏰ ',''))}});softRender()}
+function hid(u){let h=0;for(const ch of vkey(u))h=(h*31+ch.charCodeAt(0))|0;return 'h-'+(h>>>0).toString(36)}
+function histOf(c,at){return {id:hid(c.url),kind:'hist',title:c.title,url:c.url,at:at||Date.now()}}
+function trimHist(){const h=[...items.values()].filter(o=>o.kind==='hist').sort((a,b)=>a.at-b.at);
+  h.slice(0,Math.max(0,h.length-300)).forEach(o=>{items.delete(o.id);if(col){const c=col;cloudWrite(o.id,()=>c.doc(o.id).delete())}})}
+function openArchive(){
+  const all=[...items.values()].filter(o=>o.kind==='hist').sort((a,b)=>b.at-a.at),h=all.slice(0,80);
+  openModal('<h3>🗂 أرشيف اللي خلّصته ('+all.length+')</h3>'+(h.length?h.map(o=>'<a class="fbtn g" data-nav rel="noopener" href="'+esc(o.url)+'" style="margin-top:6px;text-align:right">'+esc(o.title)+'<div class="hint">'+new Date(o.at).toLocaleDateString('ar-EG')+'</div></a>').join(''):'<div class="empty">لسه مفيش حاجة — أي حلقة تخلّصها بتتسجل هنا.</div>')+
+    '<div class="acts">'+(h.length?'<button class="fbtn del" id="clr" data-nav>مسح الأرشيف</button>':'')+'<button class="fbtn" id="cc" data-nav>إغلاق</button></div>');
+  $('#cc').onclick=closeModal;
+  const c=$('#clr');if(c)c.onclick=()=>confirmBox('تمسح الأرشيف كله؟',()=>{all.forEach(o=>{items.delete(o.id);if(col){const cc=col;cloudWrite(o.id,()=>cc.doc(o.id).delete())}});saveLocal();render();toast('اتمسح الأرشيف')});
+}
+function openAllSearch(){
+  const q=($('#q').value||'').trim(),ss=sites().filter(x=>x.searchUrl&&siteVisible(x)&&kidsOk(x));if(!q||!ss.length)return;
+  openModal('<h3>🔎 «'+esc(q)+'» في كل مواقعي</h3>'+ss.map(x=>'<a class="fbtn g" data-nav rel="noopener" data-sid="'+esc(x.id)+'" href="'+esc(x.searchUrl.replace('{q}',encodeURIComponent(q)))+'" style="margin-top:6px">'+esc(x.name)+'</a>').join('')+'<div class="acts"><button class="fbtn" id="cc" data-nav>إغلاق</button></div>');
+  $('#cc').onclick=closeModal;
+  $('#box').querySelectorAll('[data-sid]').forEach(a=>a.addEventListener('click',()=>visit(a.dataset.sid,true)));
+}
+async function sha(t){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('sajo|'+t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+  catch(e){let h=5381;for(const ch of 'sajo|'+t)h=((h<<5)+h+ch.charCodeAt(0))|0;return 'f'+(h>>>0).toString(16)}}
+function saveUI(){try{localStorage.setItem(UIK,JSON.stringify(UI))}catch(e){}}
+function askPin(g,ok){
+  openModal('<h3>🔒 '+esc(g)+'</h3><label>الرقم السري</label><input id="lp" type="password" inputmode="numeric" data-nav><div class="acts"><button class="fbtn red" id="go" data-nav>فتح</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>');
+  $('#cc').onclick=closeModal;
+  $('#go').onclick=async()=>{if(await sha($('#lp').value)===(UI.locks||{})[g]){closeModal();ok()}else{toast('الرقم غلط');$('#lp').value=''}};
+}
+/* ---------- kids mode: approved groups only, PIN to leave ---------- */
+const kidsOk=s=>!UI.kidsOn||(UI.kidsG||[]).indexOf(s.group||'')>=0;
+function kidsAsk(ok){openModal(`<h3>🧒 رقم وضع الأطفال</h3><input id="kp" type="password" inputmode="numeric" placeholder="الرقم السري" data-nav><div class="acts"><button class="fbtn g" id="kok" data-nav>تمام</button><button class="fbtn" id="kc" data-nav>إلغاء</button></div>`);
+  $('#kc').onclick=closeModal;
+  $('#kok').onclick=async()=>{if(await sha($('#kp').value)===UI.kidsPin){closeModal();ok()}else{toast('الرقم غلط');$('#kp').value=''}};
+  setTimeout(()=>$('#kp').focus(),80)}
+function kidsCfg(){
+  const gs=[...new Set(sites().map(s=>s.group).filter(Boolean))];
+  if(!gs.length){toast('اعمل مجموعة لمواقع الأطفال الأول (من تعديل الموقع)');return}
+  UI.kidsG=UI.kidsG||[];
+  openModal(`<h3>🧒 وضع الأطفال</h3>
+   <label>الأقسام المسموحة</label><div class="acts" id="kgs">${gs.map(g=>`<button class="fbtn" data-nav data-kg="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+   <div class="hint">في وضع الأطفال بتظهر المواقع اللي في الأقسام اللي اخترتها بس — من غير تعديل ولا إعدادات ولا تكملة مشاهدة. الخروج بالرقم السري.</div>
+   <label>الرقم السري</label><input id="kpn" type="password" inputmode="numeric" placeholder="${UI.kidsPin?'اتركه فاضي لو مش عايز تغيّره':'٤ أرقام على الأقل'}" data-nav>
+   <div class="acts"><button class="fbtn g" id="ksv" data-nav>حفظ</button><button class="fbtn" id="kc" data-nav>إلغاء</button></div>`);
+  const bx=$('#box');
+  const mark=()=>bx.querySelectorAll('[data-kg]').forEach(b=>b.classList.toggle('red',UI.kidsG.indexOf(b.dataset.kg)>=0));
+  mark();
+  bx.querySelectorAll('[data-kg]').forEach(b=>b.onclick=()=>{const g=b.dataset.kg,i=UI.kidsG.indexOf(g);if(i>=0)UI.kidsG.splice(i,1);else UI.kidsG.push(g);mark()});
+  $('#kc').onclick=closeModal;
+  $('#ksv').onclick=async()=>{
+    if(!UI.kidsG.length){toast('اختار قسم واحد على الأقل');return}
+    const p=$('#kpn').value.trim();
+    if(p){if(p.length<4){toast('الرقم لازم ٤ أرقام على الأقل');return}UI.kidsPin=await sha(p)}
+    if(!UI.kidsPin){toast('حط رقم سري للخروج');return}
+    saveUI();closeModal();toast('🧒 وضع الأطفال جاهز — شغّله من الزرار فوق')};
+}
+$('#kidsBtn').onclick=()=>{
+  if(!UI.kidsOn){
+    if(!UI.kidsPin||!(UI.kidsG||[]).length){kidsCfg();return}
+    editMode=false;UI.kidsOn=true;saveUI();render();toast('🧒 وضع الأطفال شغال')
+  }else kidsAsk(()=>{UI.kidsOn=false;saveUI();render();toast('اتقفل وضع الأطفال')})
+};
+function openLocks(){
+  const gs=[...new Set(sites().map(x=>x.group).filter(Boolean))];
+  openModal('<h3>🔒 قفل المجموعات</h3>'+(gs.length?'<label>المجموعة</label><select id="lg" data-nav>'+gs.map(g=>'<option value="'+esc(g)+'">'+esc(g)+(isLocked(g)?' 🔒':'')+'</option>').join('')+'</select>'+
+    '<label>الرقم السري</label><input id="lp" type="password" inputmode="numeric" placeholder="٤ أرقام أو أكتر" data-nav>'+
+    '<div class="acts"><button class="fbtn red" id="lk" data-nav>🔒 اقفل</button><button class="fbtn" id="ul" data-nav>🔓 فك القفل</button></div>'+
+    '<div class="hint">القفل بيخفي المجموعة (وتكملاتها) من الشاشة لحد ما تدخل الرقم. هو قفل بسيط للأطفال، مش حماية قوية.</div>':'<div class="empty">اعمل مجموعة الأول: من تعديل أي موقع اكتب اسم في خانة «المجموعة».</div>')+
+    '<div class="acts"><button class="fbtn" id="cc" data-nav>رجوع</button></div>');
+  $('#cc').onclick=closeModal;
+  if(!gs.length)return;
+  $('#lk').onclick=async()=>{const g=$('#lg').value,pin=$('#lp').value;if(pin.length<4){toast('الرقم لازم ٤ أرقام على الأقل');return}
+    UI.locks=UI.locks||{};UI.locks[g]=await sha(pin);unlocked.delete(g);saveUI();closeModal();render();toast('🔒 اتقفلت «'+g+'»')};
+  $('#ul').onclick=async()=>{const g=$('#lg').value;if(!isLocked(g)){toast('المجموعة دي مش مقفولة');return}
+    if(await sha($('#lp').value)!==UI.locks[g]){toast('الرقم غلط');return}
+    delete UI.locks[g];saveUI();closeModal();render();toast('🔓 اتفتحت «'+g+'»')};
+}
+/* cinematic background: the picture of the tile you are on, blurred behind the page */
+const cine=$('#cine');let cineT=0,cineAt=0;
+function setCine(img){clearTimeout(cineT);
+  if(img&&!UI.nocine){
+    if(cine.dataset.cur===img&&cine.classList.contains('on'))return;
+    const dt=Date.now()-cineAt;
+    if(cineAt&&dt<450){cineT=setTimeout(()=>setCine(img),450-dt);return}   // holding a direction: the backdrop follows at a calm pace, not every hop
+    cineAt=Date.now();cine.dataset.cur=img;cine.style.backgroundImage='url("'+img+'")';cine.classList.add('on')}
+  else{cine.dataset.cur='';cineT=setTimeout(()=>cine.classList.remove('on'),350)}}
+const cineSel='#contRow .tile,#laterRow .tile,#siteGrid .tile';
+document.addEventListener('focusin',e=>{const t=e.target.closest&&e.target.closest(cineSel);setCine(t&&t.dataset.img)});
+document.addEventListener('mouseover',e=>{const t=e.target.closest&&e.target.closest(cineSel);if(t)setCine(t.dataset.img)});
+/* when the app window gets its focus back, the browser moves focus to the first button («＋»): put it back on the tile you were on */
+let lastTileKey=null;
+document.addEventListener('focusin',e=>{const t=e.target.closest&&e.target.closest(cineSel);if(t)lastTileKey={h:t.parentElement.id,k:tileKey(t),at:Date.now()}});
+window.addEventListener('focus',()=>setTimeout(()=>{
+  const a=document.activeElement;
+  if(lastTileKey&&Date.now()-lastTileKey.at<120000&&a&&a.id==='addSite'&&!$('#modal').classList.contains('open'))restoreFocus(lastTileKey)},0));
+/* ---------- a site that moved: the app saw its address redirect (twice), so its tile follows it ---------- */
+function applyRedirects(){try{
+  if(!(window.Android&&Android.redirects))return;
+  const m=JSON.parse(Android.redirects()||'{}'),moved=[],list=[];
+  Object.keys(m).forEach(from=>{const r=m[from];if(!r||!(r.n>=2)||!r.to)return;
+    const fh=hostOf(from),swap=u=>{try{const x=new URL(u);if(hostOf(u)!==fh)return u;const t=new URL(r.to);x.protocol=t.protocol;x.host=t.host;return x.href}catch(e){return u}};
+    items.forEach(o=>{if((o.kind==='site'||o.kind==='cont')&&hostOf(o.url)===fh){const nu=swap(o.url);if(nu!==o.url){list.push(Object.assign({},o,{url:nu}));if(o.kind==='site'){delete LC[o.id];moved.push(o.name)}}}});
+    try{Android.clearRedirect(from)}catch(e){}});
+  if(list.length){lcSave();setMany(list);toast('🔄 اتحدّث رابط: '+[...new Set(moved)].join('، '))}
+}catch(e){}}
+/* ---------- one tile per series ---------- */
+function epNum(t){const m=String(t||'').match(/([\d٠-٩]+)\D*$/);return m?m[1]:''}
+function seriesName(t){t=String(t||'');const r=t.replace(/[\s\-–—|:،,]*(?:الحلقة|حلقة|episode|ep\.?)?\s*[\d٠-٩]+\D*$/i,'').trim();return r.length>=2?r:t}
+// same series = same site + same title apart from the numbers (YouTube videos are never grouped by themselves)
+function seriesKey(c){
+  if(c.solo)return 'i:'+c.id;
+  if(c.sgroup)return 'm:'+c.sgroup;
+  const t=String(c.title||'');
+  if(!/[\d٠-٩]/.test(t)||vkey(c.url).indexOf('yt:')===0)return 'i:'+c.id;
+  return 'a:'+hostOf(c.url)+'|'+t.replace(/[\d٠-٩]+/g,'#').replace(/\s+/g,' ').trim().toLowerCase();
+}
+// the continue row is for series and films: a YouTube video only belongs in it when its title says episode
+const isYtSong=c=>vkey(c.url).indexOf('yt:')===0&&!/حلق|\bep(?:isode)?\.?\s*\d/i.test(String(c.title||''));
+function groupOf(c){const k=seriesKey(c);return [...items.values()].filter(o=>o.kind==='cont'&&seriesKey(o)===k).sort((a,b)=>b.lastAt-a.lastAt)}
+function setMany(list){list.forEach(o=>{items.set(o.id,o);if(col){const c=col;cloudWrite(o.id,()=>c.doc(o.id).set(o))}});saveLocal();render()}
+function finishSeries(list){list.forEach(c=>{dismiss(c.url);items.delete(c.id);const h=histOf(c);items.set(h.id,h);if(col){const cc=col;cloudWrite(c.id,()=>cc.doc(c.id).delete());cloudWrite(h.id,()=>cc.doc(h.id).set(h))}});trimHist();saveLocal();render()}
+function splitCont(c){setMany([Object.assign({},c,{solo:true,sgroup:''})]);toast('اتفصلت عن باقي الحلقات')}
+function mergeCont(c){
+  const k=seriesKey(c),others=[...items.values()].filter(o=>o.kind==='cont'&&seriesKey(o)!==k).sort((a,b)=>b.lastAt-a.lastAt);
+  if(!others.length){toast('مفيش مسلسل تاني تضمه معاه');return}
+  openModal('<h3>ضم «'+esc(seriesName(c.title))+'» مع…</h3>'+others.map((o,i)=>'<button class="fbtn" style="display:block;width:100%;margin-top:8px" data-nav data-i="'+i+'">'+esc(o.title)+'</button>').join('')+'<div class="acts"><button class="fbtn" id="cc" data-nav>إلغاء</button></div>');
+  $('#cc').onclick=closeModal;
+  $('#box').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const o=others[+b.dataset.i],gid=o.sgroup||('g-'+uid());
+    const all=[...groupOf(c),...groupOf(o)];closeModal();setMany(all.map(x=>Object.assign({},x,{sgroup:gid,solo:false})));toast('اتضمّوا في مسلسل واحد')});
+}
+/* ---------- links that stopped working: sites whose address no longer answers get a ⚠ ---------- */
+let LC={};try{LC=JSON.parse(localStorage.getItem('sajo-lc')||'{}')}catch(e){}
+const lcBroken=s=>{const r=LC[s.id];return !!r&&r.url===s.url&&r.f>=2};
+function lcSave(){try{localStorage.setItem('sajo-lc',JSON.stringify(LC))}catch(e){}}
+async function pingUrl(u){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),10000);
+  try{await fetch(u,{mode:'no-cors',cache:'no-store',signal:ac.signal});clearTimeout(t);return true}catch(e){clearTimeout(t);return false}}
+let lcBusy=false;
+async function checkLinks(){
+  if(lcBusy||navigator.onLine===false)return;
+  const due=sites().filter(s=>{
+    if(!siteVisible(s)||isStream(s.url))return false;   // hidden groups and direct streams are never pinged: that ping swarm is what froze the box
+    if(location.protocol==='https:'&&/^http:/i.test(s.url))return false;     // an http address can't be tested from an https page
+    const r=LC[s.id];return !r||r.url!==s.url||Date.now()-r.at>(r.f>0?30*60e3:6*3600e3)});
+  if(!due.length)return;
+  lcBusy=true;
+  try{
+    const res=[];let i=0;
+    const worker=async()=>{while(i<due.length){const s=due[i++];res.push([s,await pingUrl(s.url)])}};
+    await Promise.all([worker(),worker(),worker(),worker()]);
+    // a failure only counts when the connection itself works
+    if(res.some(r=>!r[1])&&!(await pingUrl('https://www.google.com/favicon.ico')))return;
+    res.forEach(([s,ok])=>{const r=LC[s.id]&&LC[s.id].url===s.url?LC[s.id]:{f:0};LC[s.id]={url:s.url,at:Date.now(),f:ok?0:r.f+1}});
+    lcSave();softRender();
+  }finally{lcBusy=false}
+}
+/* ---------- continue watching, kept by the app: how far each episode got, and its next episode ---------- */
+/* the app's watch store, parsed once until it actually changes (it changes only while a video plays), normalized by video */
+let watchRaw='',WN={};
+function watchNorm(){
+  let raw='{}';try{raw=window.Android&&Android.watchList?Android.watchList()||'{}':'{}'}catch(e){}
+  if(raw===watchRaw)return WN;
+  watchRaw=raw;
+  let W0={};try{W0=JSON.parse(raw)}catch(e){W0={}}
+  const W={};Object.keys(W0).forEach(u=>{const k=vkey(u),w=W0[u];if(!w)return;if(!W[k]||(w.at||0)>(W[k].at||0))W[k]=Object.assign({url:u},w)});
+  WN=W;return WN;
+}
+function fmtT(t){t=Math.max(0,Math.floor(t));const h=Math.floor(t/3600),m=Math.floor(t/60)%60,x=t%60;return (h?h+':'+String(m).padStart(2,'0'):m)+':'+String(x).padStart(2,'0')}
+let disRaw=null,disCache=[];
+function dismissed(){let raw='[]';try{raw=localStorage.getItem('sajo-dismiss')||'[]'}catch(e){}
+  if(raw!==disRaw){disRaw=raw;try{disCache=JSON.parse(raw)||[]}catch(e){disCache=[]}}return disCache}
+function dismiss(url){try{const d=dismissed();if(d.indexOf(url)<0){d.push(url);const s=JSON.stringify(d.slice(-200));localStorage.setItem('sajo-dismiss',s);disRaw=s;disCache=JSON.parse(s);pushDismiss()}}catch(e){}}
+function nextTitle(t){const m=String(t||'').match(/^(.*?)(\d+)(\D*)$/);return m?m[1]+(+m[2]+1)+m[3]:(t||'')+' — الحلقة التالية'}
+let syncing=false;
+/* one video = one tile: the same video under different addresses (?t=, &pp=, the TV page…) counts once */
+function vkey(u){try{u=String(u||'');const x=new URL(u),h=x.hostname.replace(/^(www|m)\./,'');
+  if(/youtube\.com$|youtu\.be$/.test(h)){const v=x.searchParams.get('v')||(x.hash.match(/[?&]v=([\w-]+)/)||[])[1]||(h==='youtu.be'?x.pathname.slice(1):'')||(x.pathname.match(/\/shorts\/([\w-]+)/)||[])[1];if(v)return 'yt:'+v}
+  ['t','pp','si','feature','start','utm_source','utm_medium','utm_campaign','fbclid'].forEach(k=>x.searchParams.delete(k));
+  return h+x.pathname.replace(/\/+$/,'')+(x.search||'')}catch(e){return String(u||'')}}
+function cleanTitle(t,u){t=String(t||'').replace(/^\(\d+\)\s*/,'').replace(/\s+/g,' ').replace(/\s*[-|–—]\s*(YouTube on TV|YouTube|يوتيوب)\s*$/i,'').trim();
+  if(t.length>70){let cut=t.slice(0,70);const sep=Math.max(cut.lastIndexOf(' | '),cut.lastIndexOf(' - '),cut.lastIndexOf(' – '));if(sep>30)cut=cut.slice(0,sep);
+    t=cut.replace(/[\s\-|–—:&،,]+$/,'').trim()}
+  return t||hostOf(u)}
+function syncWatch(){
+  if(syncing)return;
+  syncWatchCloud();   // the progress itself travels too (throttled inside)
+  const W=watchNorm();
+  const keys=Object.keys(W),gone=dismissed().map(vkey),ups=[],dels=[];
+  // duplicates already in the list: keep the newest
+  const seen={};[...items.values()].filter(o=>o.kind==='cont').sort((a,b)=>b.lastAt-a.lastAt).forEach(c=>{const k=vkey(c.url);if(seen[k])dels.push(c.id);else seen[k]=c});
+  const conts=Object.values(seen),have=new Set(Object.keys(seen));
+  conts.forEach(c=>{const k=vkey(c.url),w=W[k];if(!w)return;let n=null;
+    if(w.d>0&&w.t/w.d>=0.97&&w.next&&!have.has(vkey(w.next))){have.add(vkey(w.next));n=Object.assign({},c,{url:w.next,title:nextTitle(c.title),note:'',lastAt:Date.now(),isNew:true})}
+    else if(c.auto&&w.title&&cleanTitle(w.title,c.url)!==c.title)n=Object.assign({},c,{title:cleanTitle(w.title,c.url)});   // a better name came later
+    if(n&&n.url!==c.url){ups.push(n);ups.push(histOf(c,w.at));return}             // finished: the next episode takes the tile, the finished one goes to the archive
+    if(w.d>0&&w.t/w.d>=0.97&&Date.now()-(c.lastAt||0)>7*864e5){dels.push(c.id);dismiss(c.url);ups.push(histOf(c,w.at));return}   // finished a week ago and nothing next: tidy up
+    if(w.d>0&&w.t>=30){const nt=Math.floor(w.t),nd=Math.floor(w.d),mine=!c.pdev||c.pdev===DEV,same=Math.abs((c.pt||0)-nt)<=20&&c.pd===nd;
+      if(!same&&(mine||(w.at||0)>(c.pat||0)))n=Object.assign({},n||c,{pt:nt,pd:nd,pdev:DEV,pat:w.at||Date.now()})}   // progress travels with the tile to other devices
+    if(n)ups.push(n)});
+  keys.forEach(k=>{const w=W[k];if(!(w.d>0)||w.t<120||have.has(k)||gone.indexOf(k)>=0)return;
+    if(w.t/w.d>=0.97&&!w.next)return;
+    const nu=w.t/w.d>=0.97?w.next:w.url,nk=vkey(nu);if(have.has(nk)||gone.indexOf(nk)>=0)return;have.add(nk);
+    const title=cleanTitle(w.title,w.url),site=sites().find(x=>hostOf(x.url)===hostOf(w.url));
+    ups.push({id:'c-'+uid(),kind:'cont',title:nu===w.url?title:nextTitle(title),url:nu,note:'',siteId:site?site.id:'',icon:'',auto:true,isNew:nu!==w.url,lastAt:nu!==w.url?Date.now():(w.at||Date.now())})});
+  if(!ups.length&&!dels.length)return;
+  syncing=true;dels.forEach(id=>{items.delete(id);if(col){const c=col;cloudWrite(id,()=>c.doc(id).delete())}});
+  ups.forEach(o=>items.set(o.id,o));trimHist();saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}syncing=false;
+}
+/* YouTube: the real video name + picture (the TV interface's page is always called "YouTube on TV") */
+const ytAsked={};
+let ytCache=null;
+function ytFix(){
+  if(!ytCache){try{ytCache=JSON.parse(localStorage.getItem('sajo-yt')||'{}')}catch(e){ytCache={}}}
+  const cache=ytCache;
+  const ups=[];
+  [...items.values()].filter(o=>o.kind==='cont').forEach(c=>{const k=vkey(c.url);if(k.indexOf('yt:')!==0)return;const id=k.slice(3),m=cache[id];
+    if(m){const want={title:cleanTitle(m.title,c.url),icon:'https://i.ytimg.com/vi/'+id+'/hqdefault.jpg'};
+      if(c.title!==want.title&&(c.auto||/youtube/i.test(c.title)))ups.push(Object.assign({},c,want));
+      else if(!c.icon)ups.push(Object.assign({},c,{icon:want.icon}));return}
+    if(ytAsked[id])return;ytAsked[id]=1;
+    fetch('https://www.youtube.com/oembed?format=json&url='+encodeURIComponent('https://www.youtube.com/watch?v='+id))
+      .then(r=>r.ok?r.json():null).then(j=>{if(!j||!j.title)return;cache[id]={title:String(j.title)};
+        try{localStorage.setItem('sajo-yt',JSON.stringify(cache))}catch(e){}ytFix();softRender()}).catch(()=>{})});
+  if(!ups.length)return;ups.forEach(o=>items.set(o.id,o));saveLocal();if(col){const c=col;ups.forEach(o=>cloudWrite(o.id,()=>c.doc(o.id).set(o)))}
+}
+/* ---------- the progress itself travels between devices: one cloud doc per video, the newer record wins ---------- */
+function wid(u){return 'w-'+hid(u).slice(2)}
+let wCloudT=0,wBusy=false;
+function syncWatchCloud(){
+  if(!col||wBusy)return;
+  const now=Date.now();if(now-wCloudT<20000)return;wCloudT=now;
+  wBusy=true;
+  try{
+    const W=watchNorm(),byK={},up=[],adopt={};
+    [...items.values()].forEach(o=>{if(o.kind==='watch'&&o.k)byK[o.k]=o});
+    Object.keys(W).forEach(k=>{const w=W[k],c=byK[k];if(!(w.d>0))return;
+      if(!c||(w.at||0)>(c.at||0)+5000)up.push({id:wid(w.url),kind:'watch',k,url:w.url,t:w.t||0,d:w.d||0,at:w.at||now,title:w.title||'',next:w.next||'',pdev:DEV})});
+    Object.keys(byK).forEach(k=>{const c=byK[k],w=W[k];if(!w||(c.at||0)>(w.at||0)+5000)adopt[c.url]={t:c.t||0,d:c.d||0,at:c.at||0,title:c.title||'',next:c.next||''}});
+    // the cloud forgets what no device still holds, oldest first
+    const allW=[...items.values()].filter(o=>o.kind==='watch').sort((a,b)=>(a.at||0)-(b.at||0));
+    if(allW.length>120){const cands=allW.filter(o=>!W[o.k]).slice(0,allW.length-120);
+      if(cands.length){const cc=col;cands.forEach(o=>{items.delete(o.id);cloudWrite(o.id,()=>cc.doc(o.id).delete())})}}
+    if(up.length){const cc=col;up.forEach(o=>{items.set(o.id,o);cloudWrite(o.id,()=>cc.doc(o.id).set(o))});saveLocal()}
+    if(Object.keys(adopt).length&&window.Android&&Android.importWatch){try{Android.importWatch(JSON.stringify(adopt))}catch(e){}}
+  }finally{wBusy=false}
+}
+/* «خلصته» travels too, so a finished episode doesn't come back on the other device */
+function pushDismiss(){if(!col)return;const c=col,o={id:'dismiss',kind:'dismiss',list:dismissed().slice(-200),at:Date.now()};items.set(o.id,o);cloudWrite(o.id,()=>c.doc(o.id).set(o))}
+function pullDismiss(){const d=items.get('dismiss');if(!d||d.kind!=='dismiss'||!Array.isArray(d.list))return;
+  const l=dismissed();let ch=false;d.list.forEach(u=>{if(typeof u==='string'&&l.indexOf(u)<0){l.push(u);ch=true}});
+  if(ch){const s=JSON.stringify(l.slice(-200));try{localStorage.setItem('sajo-dismiss',s)}catch(e){}disRaw=s;disCache=JSON.parse(s)}}
+function autoIcon(url){const h=hostOf(url);return h?'https://www.google.com/s2/favicons?domain='+h+'&sz=256':''}
+
+function visit(siteId,silent){
+  const id='v-'+siteId,o={id,kind:'visit',siteId,lastAt:Date.now()},s0=siteById(siteId);
+  let su=null;if(s0){const hb=(s0.hb||[0,0,0,0]).slice();hb[bucket()]++;su=Object.assign({},s0,{opens:(s0.opens||0)+1,hb})}   // what you open, and at what time of day
+  items.set(id,o);if(su)items.set(su.id,su);saveLocal();
+  if(col){const c=col;cloudWrite(id,()=>c.doc(id).set(o));if(su)cloudWrite(su.id,()=>c.doc(su.id).set(su))}
+  if(!silent)setTimeout(render,80);
+}
+
+/* ---------- image ---------- */
+function fileToIcon(file){return new Promise((res,rej)=>{
+  const img=new Image();const u=URL.createObjectURL(file);
+  img.onload=()=>{const S=400,W=img.naturalWidth,H=img.naturalHeight,s=Math.min(W,H);
+    const cv=document.createElement('canvas');cv.width=S;cv.height=S;
+    cv.getContext('2d').drawImage(img,(W-s)/2,(H-s)/2,s,s,0,0,S,S);
+    URL.revokeObjectURL(u);res(cv.toDataURL('image/jpeg',0.75))};
+  img.onerror=()=>{URL.revokeObjectURL(u);rej()};img.src=u})}
+
+/* ---------- modal ---------- */
+let lastFocus=null;
+function guardInputs(root){root.querySelectorAll('input:not([type=file]),textarea').forEach(i=>{
+  if(i.dataset.g)return;i.dataset.g='1';i.readOnly=true;
+  const arm=()=>{if(i.readOnly){i.readOnly=false;i.blur();setTimeout(()=>{i.focus();try{i.setSelectionRange(i.value.length,i.value.length)}catch(e){}},15)}};
+  i.addEventListener('pointerdown',()=>{i.readOnly=false});
+  i.addEventListener('click',arm);
+  i.addEventListener('keydown',e=>{if((e.key==='Enter'||e.keyCode===23)&&i.readOnly){e.preventDefault();arm()}});
+  i.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==i)i.readOnly=true},60));
+})}
+function openModal(html){lastFocus=document.activeElement;$('#box').innerHTML=html;guardInputs($('#box'));$('#modal').classList.add('open');setTimeout(()=>{const f=$('#box input,#box select,#box button');f&&f.focus()},30)}
+function closeModal(){okSwallow=false;$('#box').classList.remove('wide');$('#modal').classList.remove('open');$('#box').innerHTML='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
+function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function confirmBox(msg,yes){
+  openModal(`<h3>${esc(msg)}</h3><div class="acts"><button class="fbtn del" data-nav id="cy">نعم، احذف</button><button class="fbtn" data-nav id="cn">إلغاء</button></div>`);
+  $('#cy').onclick=()=>{closeModal();yes()};$('#cn').onclick=closeModal;
+}
+
+function iconPicker(cur,name){
+  return `<label>الصورة (الأيقونة)</label>
+  <div class="prev"><div id="pv"></div><div style="flex:1">
+   <input type="file" accept="image/*" id="fi" data-nav>
+   <button type="button" class="fbtn" style="margin-top:8px;width:100%" id="rmImg" data-nav>بدون صورة</button>
+   <div class="hint">اختار أي صورة من الفون (بوستر أو لوجو) — هتتقص مربع تلقائي.</div></div></div>`;
+}
+function wirePicker(state){
+  const draw=()=>{const pv=$('#pv');pv.innerHTML='';const t=tileEl({name:state.nameFn(),icon:state.icon});t.removeAttribute('data-nav');t.removeAttribute('href');t.tabIndex=-1;pv.appendChild(t)};
+  draw();
+  $('#fi').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{state.icon=await fileToIcon(f);draw()}catch(_){toast('تعذّر قراءة الصورة')}};
+  $('#rmImg').onclick=()=>{state.icon='';state.removed=true;draw()};
+  return draw;
+}
+
+function openSite(s,pre){
+  const isNew=!s;s=s||{};pre=pre||{};
+  const mt=s.matchAt>Date.now()-3*3600e3?new Date(s.matchAt):null,md=mt?Math.round((new Date(mt).setHours(0,0,0,0)-new Date().setHours(0,0,0,0))/864e5):-1;
+  openModal(`<h3>${isNew?'إضافة موقع':'تعديل الموقع'}</h3>
+   <label>🔎 دوّر على الموقع في جوجل</label><input id="gsq" type="search" placeholder="اكتب اسم الموقع" data-nav>
+   <a class="fbtn g" id="gs2" data-nav target="_blank" rel="noopener" href="https://www.google.com/">🔎 ابحث في جوجل</a>
+   <div class="hint">افتح الموقع من النتايج. في تطبيق الـTV: دوس Menu (أو OK ضغطة طويلة) ← «أضف الموقع ده» ويتحط الرابط لوحده.</div>
+   <label>الاسم اللي يظهر على الأيقونة</label><input id="fn" placeholder="اسم الموقع" value="${esc(s.name)}" data-nav>
+   <label>الرابط (URL)</label><input id="fu" dir="ltr" inputmode="url" placeholder="https://example.com" value="${esc(s.url)}" data-nav>
+   <label>المجموعة (اختياري)</label><input id="fg" list="glist" placeholder="مثلاً: مسلسلات" value="${esc(s.group)}" data-nav><datalist id="glist">${[...new Set(sites().map(x=>x.group).filter(Boolean))].map(g=>'<option value="'+esc(g)+'">').join('')}</datalist>
+   <label>⏰ موعد (مباراة أو حلقة) — اختياري</label>
+   <div class="acts" style="margin-top:0"><select id="fmd" data-nav style="flex:1"><option value="">— بدون —</option><option value="0"${md===0?' selected':''}>النهارده</option><option value="1"${md===1?' selected':''}>بكره</option><option value="2"${md===2?' selected':''}>بعد بكره</option></select>
+   <input id="fmt" dir="ltr" inputmode="numeric" placeholder="20:00" value="${mt?String(mt.getHours()).padStart(2,'0')+':'+String(mt.getMinutes()).padStart(2,'0'):''}" data-nav style="flex:1"></div>
+   <label>🔎 رابط البحث في الموقع (اختياري)</label><input id="fsr" dir="ltr" inputmode="url" placeholder="https://site.com/?s={q}" value="${esc(s.searchUrl)}" data-nav>
+   <div class="hint">حط {q} مكان كلمة البحث — يخليك تدوّر في كل مواقعك مرة واحدة. لو سيبته فاضي بيتحط النمط الشائع تلقائي؛ لو البحث في موقع طلع غلط، صحّح الرابط من هنا.</div>
+   <label>🗂 الموقع ده بيتميّز في (صفوف الأقسام)</label><div class="acts" id="fcat"></div>
+   <div class="hint">«تلقائي» = التطبيق بيحسب القسم اللي الموقع فيه أكتر محتوى. دوس أي قسم عشان تثبّته بنفسك — والموقع اللي تختاره بنفسك بيبقى الأول في القسم ده.</div>
+   ${iconPicker()}
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn" id="mvb" data-nav>↔ رتّب</button><button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  if(!isNew)$('#mvb').onclick=()=>{closeModal();startMove(s)};
+  const st={icon:s.icon||pre.icon||'',nameFn:()=>$('#fn').value.trim()||hostOf(normUrl($('#fu').value))||'موقع'};
+  // which of the four category rows this site feeds: automatic, or picked by hand
+  let cats=s.cats?Object.assign({},s.cats):null;
+  const paintCat=()=>{const bx=$('#fcat');if(!bx)return;
+    bx.innerHTML='<button class="fbtn'+(cats?'':' red')+'" data-nav data-c="__auto">تلقائي</button>'+CATS.map(c=>'<button class="fbtn'+((cats&&cats[c[0]])?' red':'')+'" data-nav data-c="'+c[0]+'">'+esc(CAT_T[c[0]])+'</button>').join('');
+    bx.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{const c=b.dataset.c;
+      if(c==='__auto')cats=null;
+      else{cats=cats||{};if(cats[c])delete cats[c];else cats[c]=1;if(!Object.keys(cats).length)cats=null}
+      paintCat()})};
+  paintCat();
+  const draw=wirePicker(st);
+  const gq=()=>$('#gsq').value.trim()||$('#fn').value.trim();
+  const gl=()=>{const n=gq();$('#gs2').href=n?'https://www.google.com/search?q='+encodeURIComponent(n):'https://www.google.com/'};gl();
+  $('#gsq').oninput=()=>{gl()};
+  $('#gsq').addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('#gsq').readOnly&&gq()){e.preventDefault();$('#gs2').click()}});
+  $('#fn').oninput=()=>{draw();gl()};$('#fu').oninput=draw;
+  $('#gs2').onclick=e=>{if(!gq()){e.preventDefault();toast('اكتب اسم الموقع الأول');$('#gsq').focus()}else if(!$('#fn').value.trim()){$('#fn').value=$('#gsq').value.trim();draw()}};
+  $('#cc').onclick=closeModal;
+  if(!isNew)$('#dl').onclick=()=>confirmBox('تحذف «'+s.name+'»؟',()=>{del(s.id);del('v-'+s.id)});
+  $('#sv').onclick=()=>{
+    const url=normUrl($('#fu').value);if(!url){toast('اكتب رابط صحيح');$('#fu').focus();return}
+    const name=$('#fn').value.trim()||hostOf(url);
+    // no picture chosen: the site's own icon, by itself
+    const icon=st.icon||(isNew&&!st.removed?autoIcon(url):'');
+    let matchAt=0;const dsel=$('#fmd').value,tm=$('#fmt').value.trim().match(/^(\d{1,2})[:.](\d{2})$/);
+    if(dsel!==''||$('#fmt').value.trim()){if(dsel===''||!tm||+tm[1]>23||+tm[2]>59){toast('اختار اليوم واكتب الوقت زي 20:00');return}
+      const d=new Date();d.setDate(d.getDate()+(+dsel));d.setHours(+tm[1],+tm[2],0,0);matchAt=d.getTime()}
+    let searchUrl=$('#fsr').value.trim();if(searchUrl&&searchUrl.indexOf('{q}')<0){toast('رابط البحث لازم فيه {q}');$('#fsr').focus();return}
+    if(!searchUrl){try{searchUrl=new URL(url).origin+'/?s={q}'}catch(e){searchUrl=''}}   // the WordPress pattern covers most streaming sites; editable if a site differs
+    put(Object.assign({},s,{id:s.id||('s-'+uid()),kind:'site',name,url,icon,group:$('#fg').value.trim(),matchAt,searchUrl,cats:cats||undefined,createdAt:s.createdAt||Date.now()}));
+    trSig='';   // his category pick changes what the rows show
+    closeModal();toast(isNew?'اتضاف الموقع':'اتحفظ التعديل');
+  };
+}
+
+function openCont(c){
+  const isNew=!c;c=c||{};
+  const ss=sites();
+  let defSite=c.siteId;
+  if(isNew){const v=[...items.values()].filter(o=>o.kind==='visit'&&siteById(o.siteId)).sort((a,b)=>b.lastAt-a.lastAt)[0];defSite=v?v.siteId:''}
+  openModal(`<h3>${isNew?'حفظ تكملة مشاهدة':'تعديل التكملة'}</h3>
+   <label>اسم الفيلم / المسلسل</label><input id="ct" placeholder="مثلاً: مسلسل كذا" value="${esc(c.title)}" data-nav>
+   <label>رابط صفحة الحلقة أو الفيلم</label><input id="cu" dir="ltr" inputmode="url" placeholder="انسخ الرابط من المتصفح والصقه هنا" value="${esc(c.url)}" data-nav>
+   <label>وقفت فين؟</label><input id="cn2" placeholder="مثلاً: حلقة ٥ – دقيقة ٢٣" value="${esc(c.note)}" data-nav>
+   <label>من موقع</label><select id="cs" data-nav><option value="">— بدون —</option>${ss.map(s=>`<option value="${esc(s.id)}"${s.id===defSite?' selected':''}>${esc(s.name)}</option>`).join('')}</select>
+   <label>تقييمك</label><select id="cr" data-nav>${[0,1,2,3,4,5].map(n=>'<option value="'+n+'"'+((c.rate||0)===n?' selected':'')+'>'+(n?'★'.repeat(n):'— بدون —')+'</option>').join('')}</select>
+   ${iconPicker()}
+   <div class="hint">لو مختارتش صورة هتاخد صورة الموقع.</div>
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'<button class="fbtn" id="lt" data-nav>⏳ بعدين</button>':'<button class="fbtn del" id="dl" data-nav>خلصته — شيله</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  const st={icon:c.icon||'',nameFn:()=>$('#ct').value.trim()||'تكملة'};
+  const draw=wirePicker(st);$('#ct').oninput=draw;
+  $('#cc').onclick=closeModal;
+  if(!isNew)$('#dl').onclick=()=>{closeModal();finishSeries([c]);toast('اتشال من تكملة المشاهدة')};
+  const collect=()=>{
+    const title=$('#ct').value.trim();if(!title){toast('اكتب الاسم');$('#ct').focus();return null}
+    const siteId=$('#cs').value;
+    let url=normUrl($('#cu').value);
+    if(!url&&siteId&&siteById(siteId))url=siteById(siteId).url;
+    if(!url){toast('حط الرابط أو اختار الموقع');$('#cu').focus();return null}
+    return {title,siteId,url};
+  };
+  $('#sv').onclick=()=>{
+    const r=collect();if(!r)return;
+    put(Object.assign({},c,{id:c.id||('c-'+uid()),kind:'cont',title:r.title,url:r.url,note:$('#cn2').value.trim(),siteId:r.siteId,icon:st.icon,rate:+$('#cr').value||0,lastAt:Date.now()}));
+    closeModal();toast('اتحفظ في تكملة المشاهدة');
+  };
+  if(isNew)$('#lt').onclick=()=>{
+    const r=collect();if(!r)return;
+    put({id:'l-'+uid(),kind:'later',title:r.title,url:r.url,note:$('#cn2').value.trim(),siteId:r.siteId,icon:st.icon,at:Date.now()});
+    closeModal();toast('⏳ اتحفظ لبعدين');
+  };
+}
+
+function openUpdate(s){
+  openModal(`<h3>تحديث رابط «${esc(s.name)}»</h3>
+   <label>الرابط الحالي</label><div class="hint" dir="ltr" style="text-align:left;word-break:break-all">${esc(s.url)}</div>
+   <a class="fbtn g" id="gs" data-nav target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(s.name)}">🔎 ابحث عن «${esc(s.name)}» في جوجل</a>
+   <ol class="steps"><li>افتح الموقع من نتائج البحث</li><li>انسخ الرابط من شريط العنوان</li><li>ارجع هنا والصقه تحت</li></ol>
+   <label>الرابط الجديد</label><input id="nu" dir="ltr" inputmode="url" placeholder="الصق الرابط الجديد هنا" data-nav>
+   <div class="hint">الاسم والصورة هيفضلوا زي ما هم، وروابط التكملات اللي من نفس الموقع هتتحول للعنوان الجديد.</div>
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>تحديث</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  const back=()=>{const i=$('#nu');if(i&&document.visibilityState==='visible')setTimeout(()=>i.focus(),150)};
+  document.addEventListener('visibilitychange',back);window.addEventListener('focus',back);
+  const mo=new MutationObserver(()=>{if(!$('#nu')){document.removeEventListener('visibilitychange',back);window.removeEventListener('focus',back);mo.disconnect()}});
+  mo.observe($('#box'),{childList:true});
+  $('#nu').addEventListener('paste',()=>setTimeout(()=>{if(normUrl($('#nu').value))$('#sv').focus()},50));
+  $('#sv').onclick=()=>{
+    const url=normUrl($('#nu').value);if(!url){toast('الصق رابط صحيح');$('#nu').focus();return}
+    const oldHost=hostOf(s.url),nu=new URL(url);
+    put(Object.assign({},s,{url}));delete LC[s.id];lcSave();setTimeout(checkLinks,500);
+    let n=0;
+    [...items.values()].filter(o=>o.kind==='cont'&&(o.siteId===s.id||hostOf(o.url)===oldHost)).forEach(c=>{
+      try{const cu=new URL(c.url);if(hostOf(c.url)!==oldHost)return;cu.protocol=nu.protocol;cu.host=nu.host;put(Object.assign({},c,{url:cu.href}));n++}catch(e){}
+    });
+    closeModal();toast(n?`اتحدّث الرابط و${n} تكملة معاه`:'اتحدّث الرابط');
+  };
+}
+
+function openSend(){
+  if(!col){toast('الإرسال للشاشة محتاج المزامنة تكون شغالة — افتح البرنامج بنفس حساب Claude على الجهازين');return}
+  const opts=[...sites().map(s=>({t:s.name,u:s.url})),...[...items.values()].filter(o=>o.kind==='cont').map(c=>({t:c.title+(c.note?' – '+c.note:''),u:c.url}))];
+  openModal(`<h3>📲 ابعت رابط للشاشة</h3>
+   <label>الصق الرابط</label><input id="pu" dir="ltr" inputmode="url" placeholder="https://…" data-nav>
+   <label>أو اختار من عندك</label><select id="ps" data-nav><option value="">—</option>${opts.map((o,i)=>`<option value="${i}">${esc(o.t)}</option>`).join('')}</select>
+   <label>عنوان (اختياري)</label><input id="pt" placeholder="مثلاً: الحلقة ٦" data-nav>
+   <div class="hint">هيظهر على أي جهاز تاني فاتح البرنامج بنفس الحساب، وتدوس OK بالريموت يفتح.</div>
+   <div class="acts"><button class="fbtn red" id="sv" data-nav>ابعت</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  $('#ps').onchange=()=>{const o=opts[+$('#ps').value];if(o&&$('#ps').value!==''){$('#pu').value=o.u;if(!$('#pt').value)$('#pt').value=o.t}};
+  $('#sv').onclick=()=>{
+    const url=normUrl($('#pu').value);if(!url){toast('الصق رابط صحيح');$('#pu').focus();return}
+    put({id:'push',kind:'push',url,title:$('#pt').value.trim()||hostOf(url),from:DEV,sentAt:Date.now()});
+    closeModal();toast('📲 اتبعت — بص على الشاشة');
+  };
+}
+function checkPush(){
+  const p=items.get('push');
+  if(!p||p.kind!=='push'||p.from===DEV||!(p.sentAt>pushSeen))return;
+  pushSeen=p.sentAt;try{localStorage.setItem('shashti-pushseen',String(pushSeen))}catch(e){}
+  if(Date.now()-p.sentAt>15*60000)return;
+  const ov=$('#push');
+  $('#pbox').innerHTML=`<h3>📲 وصلك رابط</h3><div style="font-size:clamp(18px,2vw,30px);font-weight:900">${esc(p.title)}</div><div class="hint" dir="ltr">${esc(hostOf(p.url))}</div>
+   <a class="fbtn red big" id="po" data-nav target="_blank" rel="noopener" href="${esc(p.url)}">▶ افتح</a>
+   <div class="acts"><button class="fbtn" id="px" data-nav>تجاهل</button></div>`;
+  ov.classList.add('open');
+  const close=()=>ov.classList.remove('open');
+  $('#po').onclick=()=>setTimeout(close,100);$('#px').onclick=close;
+  setTimeout(()=>$('#po').focus(),50);
+}
+
+/* ---------- the built-in player for direct stream addresses (M3U channels…) ---------- */
+let plOpen=false;
+function playStream(url,title){
+  const pl=$('#ply'),v=$('#plyV');$('#plyT').textContent=title||hostOf(url);
+  pl.hidden=false;plOpen=true;try{history.pushState({pl:1},'')}catch(e){}
+  v.onerror=()=>{if(plOpen)toast('تعذّر تشغيل القناة دي على الجهاز ده')};
+  v.src=url;const p=v.play();if(p&&p.catch)p.catch(()=>{});
+}
+function closePlayer(){const v=$('#plyV');try{v.pause()}catch(e){}v.removeAttribute('src');try{v.load()}catch(e){}$('#ply').hidden=true;plOpen=false}
+window.addEventListener('popstate',()=>{if(plOpen)closePlayer()});
+$('#plyX').onclick=()=>{if(plOpen)history.back();else closePlayer()};
+
+/* ---------- the phone is the TV's remote: commands travel on the same sync channel ---------- */
+function openRemote(){
+  if(!col){toast('الريموت محتاج المزامنة شغالة على الجهازين بنفس الحساب');return}
+  const ss=sites();
+  openModal(`<h3>🎮 ريموت التلفزيون</h3>
+   <label>افتح موقع على التلفزيون</label><select id="rms" data-nav><option value="">— اختار —</option>${ss.map((s,i)=>`<option value="${i}">${esc(s.name)}</option>`).join('')}</select>
+   <div class="acts"><button class="fbtn" id="rmh" data-nav>🏠 الرئيسية</button><button class="fbtn" id="rmb" data-nav>⬅ رجوع</button><button class="fbtn" id="rmp" data-nav>⏯ تشغيل/إيقاف</button></div>
+   <div class="acts"><button class="fbtn" id="rmu" data-nav>⬆</button><button class="fbtn" id="rmd" data-nav>⬇</button><button class="fbtn" id="rml" data-nav>⬅</button><button class="fbtn" id="rmr" data-nav>➡</button><button class="fbtn red" id="rmo" data-nav>OK</button></div>
+   <label>اكتب للتلفزيون (للبحث مثلًا)</label><input id="rmt" placeholder="اكتب هنا وابعت" data-nav>
+   <div class="acts" style="margin-top:0"><button class="fbtn g" id="rmy" data-nav>⌨ ابعت النص</button></div>
+   <div class="hint">الأوامر بتوصل بالمزامنة السحابية: مفيش إعداد شبكة، وتشتغل حتى لو الموبايل والتلفزيون مش على نفس الواي فاي. بس الاتنين لازم يكونوا على نفس الحساب.</div>
+   <div class="acts"><button class="fbtn" id="cc" data-nav>إغلاق</button></div>`);
+  $('#cc').onclick=closeModal;
+  const send=(cmd,arg)=>{put({id:'remote',kind:'remote',cmd,arg:arg||'',from:DEV,sentAt:Date.now()});toast('🎮 اتبعت')};
+  $('#rms').onchange=()=>{const v=$('#rms').value;if(v==='')return;const s=ss[+v];if(s)send('open',s.url)};
+  $('#rmh').onclick=()=>send('home');$('#rmb').onclick=()=>send('back');$('#rmp').onclick=()=>send('play');
+  $('#rmu').onclick=()=>send('up');$('#rmd').onclick=()=>send('down');$('#rml').onclick=()=>send('left');$('#rmr').onclick=()=>send('right');$('#rmo').onclick=()=>send('ok');
+  $('#rmy').onclick=()=>{const t=$('#rmt').value.trim();if(t){send('type',t);$('#rmt').value=''}};
+}
+
+/* ---------- buttons ---------- */
+$('#addSite').onclick=()=>openSite();
+$('#addCont').onclick=()=>openCont();
+$('#addRm').onclick=openRemote;
+if(document.documentElement.classList.contains('phone'))$('#addRm').hidden=false;
+let qT;$('#q').addEventListener('input',()=>{clearTimeout(qT);qT=setTimeout(render,120)});
+$('#editBtn').onclick=()=>{editMode=!editMode;render();toast(editMode?'دوس على أي أيقونة لتعديلها أو حذفها':'خلص التعديل')};
+$('#ver').onclick=()=>{openModal(`<h3>نسخة ${VERSION.n}</h3><p>تاريخ إنشاء النسخة دي: ${VERSION.created}</p><div class="acts"><button class="fbtn" id="cc" data-nav>تمام</button></div>`);$('#cc').onclick=closeModal};
+
+/* ---------- arranging my sites: pick a tile, move it with the arrows, OK/Back to finish ---------- */
+let moveId=null;
+function startMove(s){if(($('#q').value||'').trim()){$('#q').value=''}gfilter='';moveId=s.id;render();
+  let b=$('#moveBar');if(!b){b=document.createElement('div');b.id='moveBar';document.body.appendChild(b)}
+  const ph=document.documentElement.classList.contains('phone');
+  if(ph){b.innerHTML='<div style="margin-bottom:8px">↔ رتّب «'+esc(s.name||'')+'»</div>'+
+    '<button class="fbtn" data-mv="-1">→ قبل</button> <button class="fbtn" data-mv="1">بعد ←</button> '+
+    '<button class="fbtn" data-mv="-c">↑ صف</button> <button class="fbtn" data-mv="c">↓ صف</button> <button class="fbtn red" data-mv="ok">✓ تم</button>';
+    b.querySelectorAll('[data-mv]').forEach(x=>x.onclick=e=>{e.preventDefault();e.stopPropagation();const m=x.dataset.mv;
+      if(m==='ok')endMove();else moveBy(m==='c'?gridCols():m==='-c'?-gridCols():+m)});}
+  else b.textContent='↔ حرّك «'+(s.name||'')+'» بالأسهم — OK أو رجوع لما تخلص';
+  b.hidden=false}
+function endMove(){if(!moveId)return 0;moveId=null;const b=$('#moveBar');if(b)b.hidden=true;render();toast('✓ اتحفظ الترتيب');return 1}
+window.endMove=endMove;
+function moveBy(step){
+  const list=sites().slice(),i=list.findIndex(o=>o.id===moveId),j=i+step;
+  if(i<0||j<0||j>=list.length)return;
+  const [m]=list.splice(i,1);list.splice(j,0,m);
+  list.forEach((o,k)=>{if(o.order!==k){const n=Object.assign({},o,{order:k});items.set(n.id,n);if(col){const c=col;cloudWrite(n.id,()=>c.doc(n.id).set(n))}}});
+  saveLocal();render();
+}
+function gridCols(){const ts=[...$('#siteGrid').querySelectorAll('.tile')];if(!ts.length)return 1;const top=ts[0].offsetTop;let n=0;for(const t of ts){if(t.offsetTop!==top)break;n++}return Math.max(1,n)}
+window.addEventListener('keydown',e=>{
+  if(!moveId||$('#modal').classList.contains('open'))return;
+  const k=e.key,rtl=getComputedStyle(document.documentElement).direction==='rtl';
+  let st=0;
+  if(k==='ArrowLeft')st=rtl?1:-1;else if(k==='ArrowRight')st=rtl?-1:1;
+  else if(k==='ArrowUp')st=-gridCols();else if(k==='ArrowDown')st=gridCols();
+  else if(isOk(e)||k==='Escape'||k==='Backspace'){e.preventDefault();e.stopImmediatePropagation();if(!e.repeat)endMove();return}
+  else return;
+  e.preventDefault();e.stopImmediatePropagation();moveBy(st);
+},true);
+window.addEventListener('keyup',e=>{if(moveId&&(isOk(e)||e.key.startsWith('Arrow'))){e.preventDefault();e.stopImmediatePropagation()}},true);
+
+function siteSearch(s){
+  openModal(`<h3>🔎 دور في «${esc(s.name)}»</h3><input id="ssq" type="search" placeholder="اكتب اللي بتدور عليه" data-nav>
+   <div class="acts"><button class="fbtn g" id="ssg" data-nav>🔎 بحث</button><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  const go=()=>{const q=$('#ssq').value.trim();if(!q){toast('اكتب اللي بتدور عليه');return}
+    const u=s.searchUrl.replace('{q}',encodeURIComponent(q));
+    if(s.ext&&window.Android&&Android.openExternal)Android.openExternal(u);else location.href=u};
+  $('#ssg').onclick=go;
+  $('#ssq').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();go()}});
+  setTimeout(()=>$('#ssq').focus(),80)}
+function tileMenu(kind,s,v){
+  if(UI.kidsOn)return;   // kids mode: no edit/delete menus
+  const items=[];
+  if(kind==='site'||kind==='visit'){
+    items.push(['▶ افتح',()=>{location.href=s.url}]);
+    if(s.searchUrl)items.push(['🔎 دور في «'+s.name+'»',()=>siteSearch(s)]);
+    if(kind==='site')items.push(['↔ رتّب (حرّكه بالأسهم)',()=>startMove(s)]);
+    if(kind==='site')items.push([s.fav?'☆ شيله من المفضلة':'⭐ ضيفه للمفضلة',()=>{put(Object.assign({},s,{fav:!s.fav}))}]);
+    if(kind==='site')items.push([s.pin?'📌 شيل التثبيت':'📌 ثبّته فوق',()=>{put(Object.assign({},s,{pin:!s.pin}))}]);
+    items.push([lcBroken(s)?'⚠ الرابط مش شغال — حدّثه':'🔄 تحديث الرابط',()=>openUpdate(s)]);
+    if(window.Android&&Android.openExternal)items.push(['🌐 افتحه في متصفح تاني (BrowseHere)',()=>Android.openExternal(s.url)]);
+    if(kind==='site'&&window.Android&&Android.openExternal)items.push([s.ext?'↩ خليه يفتح هنا في التطبيق تاني':'🌐 خليه يفتح دايمًا في المتصفح التاني',()=>{put(Object.assign({},s,{ext:!s.ext}));toast(s.ext?'هيفتح هنا في التطبيق':'🌐 هيفتح دايمًا في المتصفح التاني')}]);
+    items.push(['✎ تعديل',()=>openSite(s)]);
+    if(kind==='visit')items.push(['✕ شيله من آخر ما شاهدت',()=>del(v.id)]);
+    else items.push(['🗑 حذف',()=>confirmBox('تحذف «'+s.name+'»؟',()=>{del(s.id);del('v-'+s.id)})]);
+  }else if(kind==='later'){
+    items.push(['▶ افتح',()=>{location.href=s.url}]);
+    items.push(['🗑 شيله من بعدين',()=>del(s.id)]);
+  }else if(kind==='trend'){
+    items.push(['▶ افتح',()=>{location.href=s.url}]);
+    items.push(['⏳ هتفرج عليه بعدين',()=>{put({id:'l-'+uid(),kind:'later',title:s.title,url:s.url,note:'',siteId:s.siteId||'',icon:s.icon||'',at:Date.now()});toast('⏳ اتضاف لبعدين')}]);
+    items.push(['🗂 انقله لقسم تاني…',()=>openCatPick(s)]);
+  }else{
+    items.push(['▶ افتح',()=>{location.href=s.url}]);
+    items.push(['⏳ شيله لبعدين',()=>{del(s.id);put({id:'l-'+uid(),kind:'later',title:s.title,url:s.url,note:s.note||'',siteId:s.siteId||'',icon:s.icon||'',at:Date.now()});toast('⏳ اتنقل لبعدين')}]);
+    items.push(['✎ تعديل',()=>openCont(s)]);
+    items.push(['↔ ضمه مع مسلسل تاني…',()=>mergeCont(s)]);
+    if(groupOf(s).length>1)items.push(['✂ فصله عن باقي الحلقات',()=>splitCont(s)]);
+    items.push(['✓ خلصته — شيله',()=>{finishSeries(UI.allEps?[s]:groupOf(s))}]);
+  }
+  openModal(`<h3>${esc(s.name||s.title)}</h3>`+items.map((it,i)=>`<button class="fbtn" style="display:block;width:100%;margin-top:8px" data-nav data-i="${i}">${esc(it[0])}</button>`).join(''));
+  $('#box').querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{const f=items[+b.dataset.i][1];closeModal();f()});
+}
+// OK on a tile: opens on release (one press); held ~0.6 s opens the tile menu (works even when the box sends no key repeats)
+let okTile=null,okTimer=0,okLong=false;
+const isOk=e=>e.key==='Enter'||e.keyCode===13||e.keyCode===23;
+// while OK is still held after the menu opened, its repeats must not press the menu's first button («افتح»)
+let okSwallow=false;
+window.addEventListener('keydown',e=>{if(okSwallow&&isOk(e)){e.preventDefault();e.stopImmediatePropagation()}},true);
+window.addEventListener('keyup',e=>{if(okSwallow&&isOk(e)){okSwallow=false;e.preventDefault();e.stopImmediatePropagation()}},true);
+document.addEventListener('keydown',e=>{const a=e.target;if(!isOk(e)||!a.classList||!a.classList.contains('tile')||$('#modal').classList.contains('open')||moveId)return;
+  e.preventDefault();e.stopPropagation();
+  if(okTile===a)return;                       // auto-repeat while held
+  okTile=a;okLong=false;clearTimeout(okTimer);
+  okTimer=setTimeout(()=>{if(okTile===a){okLong=true;okTile=null;okSwallow=true;a._menu&&a._menu()}},600)},true);
+document.addEventListener('keyup',e=>{const a=e.target;if(!isOk(e))return;
+  if(okTile){e.preventDefault();clearTimeout(okTimer);const t=okTile;okTile=null;if(!okLong){const f=document.activeElement,c=t.isConnected?t:(f&&f.classList&&f.classList.contains('tile')?f:(a&&a.classList&&a.classList.contains('tile')?a:null));if(c)c.click()}okLong=false}},true);
+window.tileMenuFocused=function(){const a=document.activeElement;if(a&&a._menu){a._menu();return 1}return 0};
+document.addEventListener('keydown',e=>{if((e.key==='ContextMenu'||e.key==='F10')&&!$('#modal').classList.contains('open')){if(tileMenuFocused())e.preventDefault()}});
+document.addEventListener('contextmenu',e=>{const a=e.target.closest&&e.target.closest('.tile');if(a&&a._menu){e.preventDefault();a._menu()}});
+
+/* ---------- remote / keyboard navigation (TV) ---------- */
+document.addEventListener('keydown',e=>{
+  if($('#push').classList.contains('open')){if(e.key==='Escape'){$('#push').classList.remove('open');return}
+    const pe=[...document.querySelectorAll('#pbox [data-nav]')];if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();const i=pe.indexOf(document.activeElement);pe[(i+1)%pe.length].focus()}return}
+  const open=$('#modal').classList.contains('open');
+  if(open&&(e.key==='Escape'||e.key==='GoBack'||e.key==='BrowserBack')){e.preventDefault();closeModal();return}
+  const dirs={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]};
+  const d=dirs[e.key];if(!d)return;
+  const tg=e.target;
+  const editing=tg.matches&&((tg.matches('input:not([type=file])')&&!tg.readOnly)||tg.matches('select'));
+  if(editing&&d[1]===0)return;
+  if(tg.matches&&tg.matches('select')&&d[0]===0&&!e.altKey){/* allow up/down to leave select */}
+  const scope=open?'#box [data-nav]':'body > header [data-nav], .search [data-nav], main [data-nav], footer [data-nav]';
+  const els=[...document.querySelectorAll(scope)].filter(el=>el.offsetParent!==null);
+  if(!els.length)return;
+  const cur=document.activeElement;
+  if(!els.includes(cur)){e.preventDefault();els[0].focus();return}
+  if(open){ // dialogs: strictly top to bottom, in order
+    const i=els.indexOf(cur),next=(d[1]>0||d[0]<0)?i+1:i-1;
+    e.preventDefault();if(next>=0&&next<els.length){els[next].focus();els[next].scrollIntoView({block:'nearest'})}
+    return;
+  }
+  // main page: fixed rows, top to bottom; right/left move inside a row
+  const vis=el=>el&&!el.hidden&&el.offsetParent!==null;
+  const rows=[];
+  const add=list=>{list=list.filter(vis);if(list.length)rows.push(list)};
+  add([...document.querySelectorAll('header [data-nav]')]);
+  add([$('#q'),$('#gq'),$('#gall')]);
+  // every block on the page, in the order it is actually shown (the rows can be moved in the settings)
+  [...document.querySelectorAll('#main .rb')].forEach(blk=>{
+    if(blk.dataset.rk==='sites'){
+      add([...blk.querySelectorAll('#chips .hbtn')]);
+      const gr={};[...blk.querySelectorAll('#siteGrid .tile')].forEach(t=>{const k=Math.round(t.offsetTop/10);(gr[k]=gr[k]||[]).push(t)});
+      Object.keys(gr).map(Number).sort((x,y)=>x-y).forEach(k=>add(gr[k]));
+      return}
+    add([...blk.querySelectorAll('.rhead,.gf .hbtn')]);
+    add([...blk.querySelectorAll('.row .tile:not(.dup),.row .mcard:not(.dup)')]);
+  });
+  add([$('#ab'),$('#up'),$('#bk'),$('#rs'),$('#ar'),$('#st')]);
+  add([$('#ver')]);
+  let ri=rows.findIndex(row=>row.includes(cur));
+  e.preventDefault();
+  if(ri<0){rows[0][0].focus();return}
+  const row=rows[ri],ci=row.indexOf(cur);let target=null;
+  if(d[0]!==0){target=row[ci+(d[0]<0?1:-1)]||null} // RTL: left = next
+  else{
+    const nr=rows[ri+d[1]];
+    if(nr){const cx=cur.getBoundingClientRect().left+cur.offsetWidth/2;let bd=Infinity;
+      nr.forEach(el=>{const q=el.getBoundingClientRect(),dd=Math.abs(q.left+q.width/2-cx);if(dd<bd){bd=dd;target=el}});
+      if(nr[0].closest('footer'))target=nr[0];
+      else if(nr[0].closest('.row'))target=nr.find(el=>{const q=el.getBoundingClientRect();return q.right>0&&q.left<innerWidth})||nr[0];}
+  }
+  if(target){target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'})}
+});
+
+function backupJson(){return JSON.stringify({app:'shashti',v:1,at:Date.now(),items:[...items.values()].filter(o=>o.kind!=='push'&&o.kind!=='remote')})}
+// once a week: inside the app a backup file is saved by itself; in a browser a reminder shows up
+function autoBackup(){try{
+  const last=+localStorage.getItem('shashti-lastbk')||0;
+  if(!items.size||Date.now()-last<7*864e5)return;
+  if(window.Android&&Android.saveBackup){Android.saveBackup(backupJson());localStorage.setItem('shashti-lastbk',String(Date.now()));toast('💾 اتعملت نسخة احتياطية تلقائية')}
+  else{const r=+localStorage.getItem('shashti-bkremind')||0;if(Date.now()-r>864e5){localStorage.setItem('shashti-bkremind',String(Date.now()));toast('💾 عدّى أسبوع على آخر نسخة احتياطية — دوس «نسخة احتياطية»')}}
+}catch(e){}}
+/* ---------- settings: theme + text size ---------- */
+const UIK='shashti-ui';let UI={theme:'dark',zoom:1};try{Object.assign(UI,JSON.parse(localStorage.getItem(UIK)||'{}'))}catch(e){}
+const ROW_LABELS={cont:'▶ تكملة المشاهدة',my:'📺 مسلسلاتك',trend:'🔥 الجديد والترند',sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',str:'🇹🇷 مسلسلات تركية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية',later:'⏳ هتفرج عليه بعدين',visit:'🕘 آخر ما شاهدت',sites:'⭐ مواقعي',matches:'⚽ ماتشات الكورة'};
+const ROW_DEF=['cont','my','trend','sar','sfr','str','mar','mfr','later','visit','sites','matches'];
+function rowOrder(){const o=(UI.rowOrder||[]).filter(k=>ROW_DEF.indexOf(k)>=0);ROW_DEF.forEach(k=>{if(o.indexOf(k)<0)o.push(k)});return o}
+function applyRowOrder(){const m=$('#main');if(!m)return;rowOrder().forEach(k=>{const el=m.querySelector('[data-rk="'+k+'"]');if(el)m.appendChild(el)})}
+function applyUI(){document.documentElement.classList.toggle('light',UI.theme==='light');document.documentElement.classList.toggle('perf',!!UI.perf);document.body.style.zoom=UI.zoom;const m=document.querySelector('meta[name=theme-color]');if(m)m.content=UI.theme==='light'?'#f6f1f1':'#160e10'}
+function rmState(){try{return JSON.parse(Android.remoteInfo()||'{}')}catch(e){return {}}}
+function openSettings(){
+  const hasSleep=!!(window.Android&&Android.sleepTimer);let left=0;try{if(hasSleep)left=Android.sleepLeft()}catch(e){}
+  openModal(`<h3>⚙ الإعدادات</h3>
+   <label>المظهر</label><div class="acts"><button class="fbtn" data-nav data-th="dark">🌙 داكن</button><button class="fbtn" data-nav data-th="light">☀ فاتح</button></div>
+   <label>حجم الخط</label><div class="acts"><button class="fbtn" data-nav data-z="0.9">صغير</button><button class="fbtn" data-nav data-z="1">عادي</button><button class="fbtn" data-nav data-z="1.15">كبير</button></div>
+   <label>تكملة المشاهدة</label><div class="acts"><button class="fbtn" data-nav data-eps="0">بلاطة لكل مسلسل</button><button class="fbtn" data-nav data-eps="1">كل الحلقات</button></div>
+   <label>الخلفية السينمائية</label><div class="acts"><button class="fbtn" data-nav data-cn="0">شغالة</button><button class="fbtn" data-nav data-cn="1">مقفولة</button></div>
+   <label>🚀 وضع الأداء (للأجهزة الضعيفة)</label><div class="acts"><button class="fbtn" data-nav data-pf="1">شغّال</button><button class="fbtn" data-nav data-pf="0">مقفول</button></div><div class="hint">بيقفل الخلفية السينمائية وكل الحركات والانتقالات — بيخلي التنقل أخف على البوكس.</div>
+   <label>🔥 الجديد والترند (من مواقعك)</label><div class="acts"><button class="fbtn" data-nav data-tn="0">شغّال</button><button class="fbtn" data-nav data-tn="1">مقفول</button><button class="fbtn" data-nav id="trnow">🔄 حدّث دلوقتي</button><button class="fbtn" data-nav id="trpick">☑ اختار المواقع</button></div><div class="hint" id="trsrc"></div>
+   ${hasSleep?'<label>😴 مؤقّت النوم'+(left>0?' — فاضل '+left+' د':'')+'</label><div class="acts"><button class="fbtn" data-nav data-sl="30">٣٠ د</button><button class="fbtn" data-nav data-sl="60">ساعة</button><button class="fbtn" data-nav data-sl="90">ساعة ونص</button><button class="fbtn del" data-nav data-sl="0">إلغاء</button></div><div class="hint">بعد المدة التطبيق يوقّف الفيديو ويرجع للرئيسية. اضبطه قبل ما تفتح الموقع.</div>':''}
+   ${window.Android&&Android.setAutoNext?'<label>▶ الحلقة التالية تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-an="1">شغّالة</button><button class="fbtn" data-nav data-an="0">مقفولة</button></div><div class="hint">لما الحلقة تخلص، اللي بعدها تفتح لوحدها بعد ٨ ثواني. Back بيلغيها.</div>':''}
+   ${window.Android&&Android.remoteInfo?'<label>📱 ريموت الموبايل</label><div class="acts"><button class="fbtn" data-nav data-rm="1">شغّال</button><button class="fbtn" data-nav data-rm="0">مقفول</button></div><div class="hint" id="rmi"></div>':''}
+   ${window.Android&&Android.setIntroAuto?'<label>⏭ تخطّي المقدمة تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-ia="1">شغّال</button><button class="fbtn" data-nav data-ia="0">مقفول</button></div><div class="hint">قدّم المقدمة بإيدك مرة في أول أي حلقة، والتطبيق بيفتكر المدة لنفس الموقع ويتخطّاها لوحده بعد كده.</div>':''}
+   <label>↕ ترتيب الصفوف</label><div id="roL"></div><div class="hint">حرّك أي صف فوق أو تحت بالأسهم — الترتيب بيتحفظ على الجهاز ده.</div>
+   <label>🧒 وضع الأطفال</label><div class="acts"><button class="fbtn" id="kdb" data-nav>إعداد وضع الأطفال</button></div>
+   <label>🔒 قفل المجموعات</label><div class="acts"><button class="fbtn" id="lkb" data-nav>إدارة القفل</button></div>
+   <div class="acts"><button class="fbtn red" id="cc" data-nav>تمام</button></div>`);
+  const bx=$('#box');
+  const mark=()=>{bx.querySelectorAll('[data-th]').forEach(b=>b.classList.toggle('red',b.dataset.th===UI.theme));bx.querySelectorAll('[data-z]').forEach(b=>b.classList.toggle('red',+b.dataset.z===+UI.zoom));
+    bx.querySelectorAll('[data-eps]').forEach(b=>b.classList.toggle('red',(b.dataset.eps==='1')===!!UI.allEps));bx.querySelectorAll('[data-cn]').forEach(b=>b.classList.toggle('red',(b.dataset.cn==='1')===!!UI.nocine));
+    bx.querySelectorAll('[data-pf]').forEach(b=>b.classList.toggle('red',(b.dataset.pf==='1')===!!UI.perf));
+    let an=false;try{an=!!(window.Android&&Android.autoNext&&Android.autoNext())}catch(e){}bx.querySelectorAll('[data-an]').forEach(b=>b.classList.toggle('red',(b.dataset.an==='1')===an));
+    let ia=false;try{ia=!!(window.Android&&Android.introAuto&&Android.introAuto())}catch(e){}bx.querySelectorAll('[data-ia]').forEach(b=>b.classList.toggle('red',(b.dataset.ia==='1')===ia));
+    bx.querySelectorAll('[data-rm]').forEach(b=>b.classList.toggle('red',(b.dataset.rm==='1')===rmState().on))};
+  mark();
+  bx.querySelectorAll('[data-th]').forEach(b=>b.onclick=()=>{UI.theme=b.dataset.th;saveUI();applyUI();mark()});
+  bx.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{UI.zoom=+b.dataset.z;saveUI();applyUI();mark()});
+  bx.querySelectorAll('[data-eps]').forEach(b=>b.onclick=()=>{UI.allEps=b.dataset.eps==='1';saveUI();mark();render()});
+  bx.querySelectorAll('[data-cn]').forEach(b=>b.onclick=()=>{UI.nocine=b.dataset.cn==='1';saveUI();mark();if(UI.nocine)setCine('')});
+  bx.querySelectorAll('[data-pf]').forEach(b=>b.onclick=()=>{UI.perf=b.dataset.pf==='1';saveUI();applyUI();mark();if(UI.perf)setCine('');trSig='';trSync();toast(UI.perf?'🚀 وضع الأداء شغّال':'اتقفل وضع الأداء')});
+  bx.querySelectorAll('[data-tn]').forEach(b=>b.classList.toggle('red',(b.dataset.tn==='1')===!!UI.notrend));
+  bx.querySelectorAll('[data-tn]').forEach(b=>b.onclick=()=>{UI.notrend=b.dataset.tn==='1';saveUI();bx.querySelectorAll('[data-tn]').forEach(x=>x.classList.toggle('red',(x.dataset.tn==='1')===!!UI.notrend));trSync();if(!UI.notrend)trRefresh(true)});
+  const tse=$('#trsrc');if(tse){const all=sites().filter(s=>trEligible(s)&&siteVisible(s)),pick=all.filter(s=>s.tr===true),src=pick.length?pick:all;
+    tse.textContent='الصفوف بتاخد من '+src.length+' موقع من '+all.length+(pick.length?' — انت مختار '+pick.length+' بنفسك، و«اختار المواقع» بتوسّعها':'')+'.';}
+  $('#trpick').onclick=openTrPick;
+  $('#trnow').onclick=()=>{if(UI.notrend){toast('الجديد والترند مقفول');return}toast('🔄 بيجيب الجديد…');trRefresh(true)};
+  const rmi=()=>{const el=$('#rmi');if(!el)return;const r=rmState();
+    if(!r.on){el.textContent='';return}
+    el.innerHTML=r.ip?'افتح من الموبايل (على نفس الواي فاي):<br><b dir="ltr" style="word-break:break-all">http://'+esc(r.ip)+':'+r.port+'/?k='+esc(r.pin)+'</b><br>الرقم السري '+esc(r.pin)+' — بيمنع أي حد تاني على الشبكة. <button class="fbtn" id="np" data-nav style="min-width:0;padding:4px 10px;font-size:13px">غيّر الرقم</button>':'التلفزيون مش متصل بواي فاي.';
+    const n=$('#np');if(n)n.onclick=()=>{try{Android.newRemotePin()}catch(e){}setTimeout(rmi,500)}};
+  bx.querySelectorAll('[data-rm]').forEach(b=>b.onclick=()=>{try{Android.setRemote(b.dataset.rm==='1')}catch(e){}setTimeout(()=>{mark();rmi()},500)});
+  bx.querySelectorAll('[data-ia]').forEach(b=>b.onclick=()=>{try{Android.setIntroAuto(b.dataset.ia==='1')}catch(e){}mark();toast(b.dataset.ia==='1'?'⏭ هيتخطّى المقدمة لوحده':'اتقفل تخطّي المقدمة')});
+  rmi();
+  bx.querySelectorAll('[data-an]').forEach(b=>b.onclick=()=>{try{Android.setAutoNext(b.dataset.an==='1')}catch(e){}mark();toast(b.dataset.an==='1'?'▶ الحلقة التالية هتفتح لوحدها':'اتقفل التشغيل التلقائي')});
+  bx.querySelectorAll('[data-sl]').forEach(b=>b.onclick=()=>{try{Android.sleepTimer(+b.dataset.sl)}catch(e){}toast(+b.dataset.sl?'😴 هيقفل بعد '+b.dataset.sl+' دقيقة':'اتلغى مؤقّت النوم');closeModal()});
+  const roL=$('#roL'),paintRO=()=>{roL.innerHTML=rowOrder().map((k,i)=>'<div class="ro"><b>'+esc(ROW_LABELS[k]||k)+'</b><button class="hbtn" data-nav data-up="'+i+'">▲</button><button class="hbtn" data-nav data-dn="'+i+'">▼</button></div>').join('');
+    roL.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>mvRO(+b.dataset.up,-1));
+    roL.querySelectorAll('[data-dn]').forEach(b=>b.onclick=()=>mvRO(+b.dataset.dn,1))};
+  const mvRO=(i,d)=>{const o=rowOrder(),j=i+d;if(j<0||j>=o.length)return;const t=o[i];o[i]=o[j];o[j]=t;UI.rowOrder=o;saveUI();applyRowOrder();paintRO();
+    const nb=roL.querySelector((d<0?'[data-up="':'[data-dn="')+j+'"]');if(nb)nb.focus()};
+  paintRO();
+  $('#lkb').onclick=openLocks;
+  $('#kdb').onclick=kidsCfg;
+  $('#cc').onclick=closeModal;
+}
+function exportData(){
+  const data=backupJson();
+  let ok=false;
+  try{if(window.Android&&Android.saveBackup){Android.saveBackup(data);ok=true}}catch(e){}
+  if(!ok){try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json'}));a.download='shashti-backup.json';document.body.appendChild(a);a.click();a.remove();ok=true}catch(e){}}
+  if(ok)try{localStorage.setItem('shashti-lastbk',String(Date.now()))}catch(e){}
+  toast(ok?'اتحفظ ملف النسخة الاحتياطية (shashti-backup.json)':'تعذّر الحفظ');
+}
+function importData(){
+  openModal(`<h3>📥 استرجاع نسخة احتياطية</h3><label>اختار ملف shashti-backup.json</label><input type="file" id="bf" accept=".json,application/json" data-nav>
+   <div class="hint">المواقع والتكملات اللي في الملف هتتضاف للي عندك (المتشابه هيتحدّث).</div>
+   <div class="acts"><button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
+  $('#cc').onclick=closeModal;
+  $('#bf').onchange=async e=>{const f=e.target.files[0];if(!f)return;
+    try{const j=JSON.parse(await f.text());if(!j||!Array.isArray(j.items))throw 0;
+      let n=0;j.items.forEach(o=>{if(o&&o.id&&['site','visit','cont','later','hist','watch'].includes(o.kind)){items.set(o.id,o);n++}
+        else if(o&&o.kind==='dismiss'&&Array.isArray(o.list)){const l=dismissed();o.list.forEach(u=>{if(typeof u==='string'&&l.indexOf(u)<0)l.push(u)});const s=JSON.stringify(l.slice(-200));try{localStorage.setItem('sajo-dismiss',s)}catch(e){}disRaw=s;disCache=JSON.parse(s)}});
+      saveLocal();render();closeModal();toast(`اتسترجع ${n} عنصر`)}catch(_){toast('الملف ده مش نسخة احتياطية من شاشتي')}};
+}
+const AND=!!(window.Android&&Android.adblockOn);
+function drawAb(){const b=$('#ab');if(!AND)return;b.hidden=false;let on=true;try{on=Android.adblockOn()}catch(e){}
+  b.textContent=on?'🛡 مانع الإعلانات: شغال':'🛡 مانع الإعلانات: مقفول';b.classList.toggle('red',on)}
+$('#ab').onclick=()=>{try{const on=!Android.adblockOn();Android.setAdblock(on);drawAb();toast(on?'مانع الإعلانات اشتغل':'مانع الإعلانات اتقفل')}catch(e){}};
+drawAb();
+if(AND&&Android.checkUpdate){$('#up').hidden=false;$('#up').onclick=()=>Android.checkUpdate()}
+// inside the TV app: open links in the same screen (new windows are unreliable in Android WebView)
+if(window.Android){document.addEventListener('click',e=>{const a=e.target.closest&&e.target.closest('a[target]');if(a)a.removeAttribute('target')},true)}
+window.quickAdd=function(kind,url,title,icon){
+  title=(title||'').split(/[|\-–—]/)[0].trim().slice(0,40);
+  if(kind==='site'){const nu=u=>String(u||'').replace(/^https?:\/\//,'').replace(/\/+$/,'').toLowerCase();const ex=sites().find(x=>nu(x.url)===nu(url));   // same page twice (a site and one of its pages can both be tiles)
+   if(ex){toast('«'+ex.name+'» موجود عندك بالفعل');return}
+    openSite(null,{icon:icon||''});$('#fu').value=url;$('#fn').value=title;$('#fn').dispatchEvent(new Event('input'));}
+  else{openCont();$('#cu').value=url;$('#ct').value=title;$('#ct').dispatchEvent(new Event('input'));
+    const s=sites().find(x=>hostOf(x.url)===hostOf(url));if(s)$('#cs').value=s.id}
+  setTimeout(()=>{const f=kind==='site'?$('#fn'):$('#cn2');f&&f.focus()},80);
+};
+/* ---------- trending: the newest cards of your own sites (Arabic / foreign), drifting by themselves ---------- */
+const TRK='sajo-trend';let TR={at:0,list:[]};try{const x=JSON.parse(localStorage.getItem(TRK)||'null');if(x&&x.list)TR=x;if(!TR.stats||TR.v!==3)TR.at=0}catch(e){}   // an old cache has no category counts: fetch again right away
+const TR_BAD=/youtube|youtu\.be|yalla|kora|koora|kooora|goal|sport|bein|365scores|fotmob|كور|مباريات|رياض|دوري|يوتيوب/i;
+const TR_SPEED=36;   // px per second
+const trEligible=s=>!!s.url&&!TR_BAD.test(hostOf(s.url))&&!TR_BAD.test(s.name||'')&&!TR_BAD.test(s.group||'')&&!s.matchAt;
+// no site ticked = every eligible site feeds the rows; once you tick some, only those do
+const trSources=()=>{const el=sites().filter(trEligible),pick=el.filter(s=>s.tr===true);return pick.length?pick:el};
+const TR_AR=/عربي|عربى|مصري|مصرى|خليجي|خليجى|سوري|لبناني|رمضان|مسرحية|arab|egypt/i,TR_FX=/مترجم|اجنبي|أجنبي|اجنبى|foreign|english|netflix|hollywood|كوري|تركي|هندي|انمي|أنمي|anime|مدبلج|korean|turkish|dubbed/i;
+const TR_NOISE=/(?:الحلقة|حلقة|episode|ep)\s*\d+|s\d{1,2}\s*e\d{1,3}|مترجم|مدبلج|كامل(?:ة)?|اون\s*لاين|online|hd|4k|2160p|1080p|720p|480p|bluray|blu[- ]?ray|web[- ]?dl|webrip|dvdrip|hdtv|x264|x265|hevc|حصري(?:ا)?|بجودة\s*عالية/gi;
+const trSKey=x=>trKey({t:String(x.t||'').replace(TR_NOISE,' ')});   // series-level: all episodes and quality variants of one title share a key
+const TR_SEASON=/(?:الموسم|الجزء|موسم|جزء|season|part)\s*[\d٠-٩]+/gi;
+// one normal form for "which show is this": no episode/season markers, no quality tags, no leading نوع word, no trailing site name
+const myKey=t=>{let s=String(t||'').replace(TR_NOISE,' ');s=seriesName(s).replace(TR_SEASON,' ').replace(/^(?:مسلسل|فيلم|برنامج|مسرحية|انمي|أنمي)\s+/,'');
+  const cut=s.split(/\s[-|–—]\s/);if(cut.length>1&&cut[0].trim().length>=4)s=cut[0];
+  return trKey({t:s})};
+function mySeriesKeys(){const set=new Set();
+  [...items.values()].filter(o=>o.kind==='cont').forEach(c=>{const k=myKey(c.title);if(k.length>=4)set.add(k)});
+  return set}
+const trKey=x=>x.t.toLowerCase().replace(/[\u064B-\u0652\u0670]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim().slice(0,60);   // normalized: the same title written two ways counts once
+/* ---------- the four categories: مسلسلات/أفلام × عربي/أجنبي ---------- */
+const CATS=[['sar','#c1H','#c1Row','#gf1'],['sfr','#c2H','#c2Row','#gf2'],['str','#c5H','#c5Row','#gf5'],['mar','#c3H','#c3Row','#gf3'],['mfr','#c4H','#c4Row','#gf4']];
+const CAT_T={sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',str:'🇹🇷 مسلسلات تركية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية'};
+const TR_SERSIG=/مسلسل|مسلسلات|حلق|series|\/tv\/|\/tvshows?\/|\/shows?\/|season|episode|انمي|أنمي/i,TR_MOVSIG=/فيلم|افلام|أفلام|\/movies?\/|\/films?\/|\/film\b/i;
+// series or movie: the link's own path and the section title say it; an episode number settles it
+// '?' = the page said nothing, so the site's own content decides later instead of guessing "movie"
+function trCatBase(path,sec,title){
+  const txt=path+' '+sec,ep=/الحلقة|حلقة|episode\s*\d+|s\d{1,2}\s*e\d{1,3}|الموسم\s*\d|الجزء\s*\d/i.test(title);
+  if(ep)return 's';
+  const ser=TR_SERSIG.test(txt),mov=TR_MOVSIG.test(txt);
+  if(ser&&!mov)return 's';
+  if(mov&&!ser)return 'm';
+  return '?';
+}
+const TR_GENS=[['action',/اكشن|أكشن|action/i],['comedy',/كوميدي|كوميديا|ضحك|comedy/i],['drama',/دراما|درامي|drama/i],['horror',/رعب|horror/i],
+  ['crime',/جريمة|اثارة|إثارة|thriller|crime|غموض|mystery/i],['romance',/رومانسي|رومانسية|romance/i],['scifi',/خيال\s*علمي|sci-?fi|fantasy|فانتازيا/i],
+  ['anim',/انيمي|أنيمي|كرتون|animation|anime|cartoon/i],['doc',/وثائقي|documentary/i],['family',/عائلي|اطفال|أطفال|family|kids/i]];
+const TR_GN={action:'أكشن',comedy:'كوميدي',drama:'دراما',horror:'رعب',crime:'إثارة',romance:'رومانسي',scifi:'خيال علمي',anim:'أنيميشن',doc:'وثائقي',family:'عائلي'};
+function trGen(ctx){const o=[];for(const g of TR_GENS){if(g[1].test(ctx))o.push(g[0])}return o}
+function trCatOf(x){const ov=(UI.trk||{})[trKey(x)];return ov&&ov.length===3?ov:x.cat||'mfr'}   // what he moved by hand wins
+function trKind(text,s){
+  if(TR_AR.test(text))return 'ar';if(TR_FX.test(text))return 'fx';
+  const hint=(s.name||'')+' '+(s.group||'');if(TR_AR.test(hint))return 'ar';if(TR_FX.test(hint))return 'fx';
+  const lat=(text.match(/[A-Za-z]/g)||[]).length,arb=(text.match(/[؀-ۿ]/g)||[]).length;
+  return lat>arb?'fx':'ar';
+}
+const TR_SKIP=/logo|icon|avatar|sprite|flag|placeholder|blank|loading|pixel|\/ads?[\/_.-]|gravatar|emoji/i;
+function trParse(html,base,s,ty,fc){
+  let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
+  const host=hostOf(base),out=[],seen=new Set();
+  doc.querySelectorAll('a[href]').forEach(a=>{
+    if(out.length>=60)return;
+    const im=a.querySelector('img');let src='';
+    if(im){src=im.getAttribute('data-src')||im.getAttribute('data-lazy-src')||im.getAttribute('data-original')||im.getAttribute('data-lazy')||'';
+      if(!src){const ss=im.getAttribute('data-srcset')||im.getAttribute('srcset');if(ss)src=ss.split(',')[0].trim().split(/\s+/)[0]}
+      if(!src||/^data:/.test(src))src=im.getAttribute('src')||''}
+    if(!src||/^data:/.test(src)){const el=a.querySelector('[style*="url("],[data-bg],[data-background]')||a;const m=(el.getAttribute('style')||'').match(/url\(["']?([^"')]+)/);src=m?m[1]:(el.getAttribute('data-bg')||el.getAttribute('data-background')||'')}
+    if(!src||/^data:/.test(src)||TR_SKIP.test(src))return;
+    let title=(im&&im.getAttribute('alt'))||a.getAttribute('title')||'';
+    const hd=a.querySelector('h1,h2,h3,h4,h5,[class*=title],[class*=name]');if(hd&&hd.textContent.trim().length>1)title=hd.textContent;
+    if(!title||title.trim().length<2)title=a.textContent;
+    title=title.replace(/\s+/g,' ').replace(/^(مشاهدة|تحميل|فيلم|مسلسل)\s+/,'').trim();
+    if(title.length<2||title.length>90)return;
+    let href,img;try{href=new URL(a.getAttribute('href'),base);img=new URL(src,base).href}catch(e){return}
+    if(!/^https?:$/.test(href.protocol)||hostOf(href.href)!==host||href.pathname.length<4)return;
+    const key=href.origin+href.pathname;if(seen.has(key))return;seen.add(key);
+    const sec=a.closest('section,[class*=section],[class*=block],[class*=widget],[class*=slider],[class*=box]'),sh=sec&&sec.querySelector('h1,h2,h3,h4');
+    let path=href.pathname;try{path=decodeURIComponent(path)}catch(e){}
+    const secT=sh?sh.textContent:'',ctx=title+' '+path+' '+secT,kk=trKind(ctx,s);
+    out.push({t:title,u:href.href,i:img,k:kk,ty:ty||trCatBase(path,secT,title),fc:fc||'',g:trGen(ctx)});
+  });
+  return out;
+}
+/* the site's own listing pages: مسلسلات / افلام, or whatever it calls them */
+const TR_SEC=[['s',/مسلسل|مسلسلات|series|tvshows?|shows?/i],['m',/فيلم|افلام|أفلام|movies?|films?/i]];
+/* Sections we read from the site itself, checked one by one: [path, series|movie, forced category]. A site in this
+   table is read from its own catalogue pages first; anything not here falls back to the links found on its homepage. */
+const TR_CATALOG=[
+ [/arabseed|arbsd/i,[
+   ['/category/arabic-series/','s','sar'],['/category/arabic-movies/','m','mar'],
+   ['/category/tv/foreign-series/','s','sfr'],['/category/films/foreign-movies/','m','mfr'],
+   ['/category/tv/turkish-series/','s','str']]],
+ [/topcinema/i,[
+   ['/category/مسلسلات-اجنبي/','s','sfr'],['/category/افلام-اجنبي/','m','mfr'],
+   ['/category/مسلسلات-عربي/','s','sar'],['/category/افلام-عربي/','m','mar'],
+   ['/category/مسلسلات-تركية/','s','str']]],
+ [/tuktuk|tukcima/i,[
+   ['/category/movies-2/','m'],['/main/','s'],['/sercat/مسلسلات-اجنبي/','s','sfr']]],
+ [/weciima|wecima|mycima/i,[
+   ['/category/arabic-movies/','m','mar'],['/category/arabic-series/','s','sar']]]
+];
+function trCatCfg(s){
+  const h=(s.name||'')+' '+(hostOf(s.url)||'');
+  for(const c of TR_CATALOG)if(c[0].test(h))return c[1];
+  return null;
+}
+function trSections(html,base){
+  let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
+  const host=hostOf(base),cand={};
+  doc.querySelectorAll('a[href]').forEach(a=>{
+    let href;try{href=new URL(a.getAttribute('href'),base)}catch(e){return}
+    if(!/^https?:$/.test(href.protocol)||hostOf(href.href)!==host||href.pathname.length<4)return;
+    let path=href.pathname;try{path=decodeURIComponent(path)}catch(e){}
+    if(/\.(jpe?g|png|gif|webp|css|js|xml|mp4)$/i.test(path))return;
+    if(path===decodeURIComponent(new URL(base).pathname))return;
+    const txt=(a.textContent||'').replace(/\s+/g,' ').trim().slice(0,60),hay=txt+' '+path;
+    for(const pair of TR_SEC){
+      if(!pair[1].test(hay))continue;
+      const segs=path.split('/').filter(Boolean).length;
+      // a listing page is short and often says category/section; a card's own page is deep or ends in an id
+      const sc=(segs<=2?2:0)+(/categor|cat\/|section|genre|tag\//i.test(path)?3:0)+(txt.length<=22?2:0)-(/\/\d{3,}\/?$/.test(path)?3:0)-(segs>=4?2:0);
+      const cur=cand[pair[0]];if(!cur||sc>cur.sc)cand[pair[0]]={u:href.href,ty:pair[0],sc:sc};
+      return;
+    }
+  });
+  return ['s','m'].map(k=>cand[k]).filter(Boolean);
+}
+function trNextPage(html,base){
+  let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return ''}
+  const host=hostOf(base);let out='';
+  doc.querySelectorAll('a[href]').forEach(a=>{
+    if(out)return;
+    let href;try{href=new URL(a.getAttribute('href'),base)}catch(e){return}
+    if(hostOf(href.href)!==host)return;
+    if(/\/page\/2\/?$|[?&]paged?=2(&|$)/i.test(href.pathname+href.search))out=href.href;
+  });
+  return out;
+}
+const trCbs={};window.__pageCb=(id,html)=>{const f=trCbs[id];delete trCbs[id];f&&f(html)};
+function trGet(url,sig){return new Promise(res=>{
+  if(sig&&sig.aborted)return res('');
+  if(window.Android&&Android.fetchPage){const id='p'+Math.random().toString(36).slice(2);trCbs[id]=res;setTimeout(()=>{if(trCbs[id]){delete trCbs[id];res('')}},20000);
+    if(sig)sig.addEventListener('abort',()=>{if(trCbs[id]){delete trCbs[id];res('')}},{once:true});   // the native fetch runs out its clock, its answer is just dropped
+    try{Android.fetchPage(url,id)}catch(e){delete trCbs[id];res('')}}
+  else{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),10000);
+    if(sig)sig.addEventListener('abort',()=>ac.abort(),{once:true});
+    fetch(url,{signal:ac.signal}).then(r=>r.ok?r.text():'').catch(()=>'').then(x=>{clearTimeout(t);res(x)})}})}
+// a card whose page said nothing takes the site's own bias: a series site stays series, a film site stays films,
+// and if the site never says anything either, the group he filed it under decides. Returns the per-category counts.
+// what the card itself says: only an explicit Arabic or foreign marker counts, never a guess
+function trCardSig(x){const t=String(x.t||'')+' '+(x.u||'');
+  if(TR_FX.test(t))return 'fx';if(TR_AR.test(t))return 'ar';return ''}
+// the category named by the card's own address, e.g. /category/arabic-movies/ or /افلام-اجنبي/
+function trPathCat(u){let p='';try{p=decodeURIComponent(new URL(u).pathname).toLowerCase()}catch(e){p=String(u||'').toLowerCase()}
+  const mv=/movie|film|افلام|أفلام|فيلم/.test(p),sr=/series|shows?|مسلسل|دراما/.test(p);
+  if(/turkish|تركي|تركى/.test(p))return sr?'str':'mfr';
+  if(/arabic|عربي|عربى/.test(p))return mv?'mar':(sr?'sar':'');
+  if(/foreign|اجنبي|أجنبي|اجنبى/.test(p))return mv?'mfr':(sr?'sfr':'');
+  return ''}
+function trAssignCats(l,s){
+  let ns=0,nm=0;l.forEach(x=>{if(x.ty==='s')ns++;else if(x.ty==='m')nm++});
+  const hint=(s.group||'')+' '+(s.name||'');
+  const dom=ns!==nm?(ns>nm?'s':'m'):(/مسلسل|series|دراما/i.test(hint)?'s':(/فيلم|movie|افلام|أفلام/i.test(hint)?'m':'m'));
+  const turkSite=trPref(s,'str');
+  const c={};
+  l.forEach(x=>{let ty=(x.ty==='s'||x.ty==='m')?x.ty:dom;
+    const turk=turkSite||/تركي|تركى|turkish|torki|\bturk\b/i.test(x.t+' '+(x.u||''));
+    if(turk&&x.ty!=='m')ty='s';   // a Turkish site's unlabeled cards are its series, not its films
+    // Turkish series get their own row; a Turkish film stays under the foreign films
+    // القسم اللي الكارت اتقري منه هو اللي يحدد الفئة، أو فئتها من عنوان صفحتها.
+    // كارت مفيش عليه أي إشارة واضحة يفضل بره الصفوف الأربعة (بيظهر في صف الترند بس) —
+    // صف «أفلام عربية» فيه فيلم أجنبي أسوأ من صف أقصر.
+    const sig=trCardSig(x);
+    let cat=x.fc||trPathCat(x.u);
+    if(!cat&&sig&&x.ty!=='?')cat=turk?(ty==='m'?'mfr':'str'):ty+(sig==='fx'?'fr':'ar');
+    if(cat&&/^(mar|sar)$/.test(cat)&&sig==='fx')cat='';   // «مترجم/أجنبي» في العنوان مايدخلش صف عربي أبدًا
+    x.cat=cat;if(cat)c[cat]=(c[cat]||0)+1});
+  return c;
+}
+let trBusy=false;
+async function trRefresh(force){
+  if(trBusy||UI.notrend||plOpen)return;   // never pull pages while a video is playing
+  if(!force&&Date.now()-TR.at<45*60e3&&TR.list.length)return;
+  trBusy=true;
+  try{
+    const src=trSources(),res=[];let i=0;
+    const one=async s=>{
+      const out=[];
+      const h=await trGet(s.url);
+      if(h)trParse(h,s.url,s).forEach(x=>{x.src='h';out.push(x)});
+      // then the site's own catalogue pages, so the rows get its real catalog and not only the homepage highlights
+      const cfg=trCatCfg(s),todo=[];
+      if(cfg)cfg.forEach(c=>todo.push({u:new URL(encodeURI(c[0]),s.url).href,ty:c[1],fc:c[2]}));
+      else (h?trSections(h,s.url):[]).forEach(sec=>todo.push({u:sec.u,ty:sec.ty}));
+      let extra=0,got=0,nexts=0;
+      for(const sec of todo){
+        if(extra>=5)break;   // كل أقسام الكتالوج اللي عند الموقع، مش أول تلاتة بس
+        if(sec.u===s.url)continue;
+        let html=await trGet(sec.u);extra++;
+        if(!html)html=await trGet(sec.u);   // قسم ماردّش أول مرة بياخد محاولة تانية قبل ما نحسبه فاضي
+        if(!html)continue;
+        const cards=trParse(html,sec.u,s,sec.ty,sec.fc);got+=cards.length;
+        cards.forEach(x=>{x.src='c';out.push(x)});
+        // قسم قصير: نقرا صفحته التانية كمان، عشان صف الفئة مايفضلش بكارتين
+        const nx=trNextPage(html,sec.u);
+        if(nx&&nx!==sec.u&&nexts<3&&(cards.length<30||sec.fc==='mar')){nexts++;const h2=await trGet(nx);extra++;if(h2)trParse(h2,nx,s,sec.ty,sec.fc).forEach(x=>{x.src='c';out.push(x)})}
+      }
+      // a mapped site that answered nothing (moved, blocked): fall back to the links on its homepage
+      if(cfg&&!got&&h)for(const sec of trSections(h,s.url)){
+        if(sec.u===s.url)continue;
+        const html=await trGet(sec.u);if(!html)continue;
+        trParse(html,sec.u,s,sec.ty).forEach(x=>{x.src='c';out.push(x)});
+      }
+      return out;
+    };
+    const work=async()=>{while(i<src.length){const s=src[i++];res.push([s,await one(s)])}};
+    await Promise.all([work(),work()]);   // two sites at a time: the box stays calm while the rows fill
+    const per={sar:[],sfr:[],mar:[],mfr:[]},stats={};
+    res.forEach(([s,l])=>{
+      const c=trAssignCats(l,s);
+      stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
+      ['sar','sfr','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
+    const list=[],seenU=new Set();
+    for(let n=0;n<14;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
+      const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
+      list.push(x)}));
+    if(list.length){TR={at:Date.now(),list,stats,v:3,ver:VERSION.n};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
+    else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
+    else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
+  }catch(e){}
+  trBusy=false;
+  const f=focusKey();trSync();restoreFocus(f);
+  if(force)toast('🔥 اتحدّث');
+}
+let trSig='';
+function trSync(){
+  const qv=($('#q').value||'').trim();
+  const sig=[qv?'q':'',gfilter,UI.notrend?1:0,TR.at,sites().filter(siteVisible).map(s=>s.id+(s.tr?'+':'')).join(',')].join('|');
+  if(sig===trSig)return;trSig=sig;renderTrend();
+}
+function trEligibleList(){
+  const ok=new Set(trSources().filter(s=>siteVisible(s)&&kidsOk(s)).map(s=>s.id));
+  return TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid));
+}
+// sites that lead a category by default (his call). The name or the host has to match, and his own
+// per-site pick still wins over this: ticking a category in a site's settings makes that site lead it.
+const TR_PREF=[[/توب\s*سينما|top\s*-?cinema|topcinema/i,['sfr','mfr']],[/عرب\s*سيد|arab\s*s?eed|arabs?eed/i,['sar','mar']],[/توك\s*توك|توك\s*تيك|toc?k\s*-?toc?k|toktok|tiktok/i,['sfr','mfr']],[/شوف\s*تي\s*في|شوف\s*تيفي|شوف\s*تى\s*فى|shoo?f\s*-?tv|shof\s*-?tv/i,['str']]];
+function trPref(s,cat){
+  if(!s)return false;
+  const h=(s.name||'')+' '+(hostOf(s.url)||'');
+  for(const p of TR_PREF){if(p[0].test(h)&&p[1].indexOf(cat)>=0)return true}
+  return false;
+}
+// does this site feed this category? only what he picked by hand can exclude it: every other site feeds
+// every category it actually has cards in (a card only ever lands in the category it was classified into)
+function trContributes(sid,cat){
+  const s=siteById(sid);if(!s)return false;
+  if(s.cats&&typeof s.cats==='object')return !!s.cats[cat];
+  return true;
+}
+function trCatList(cat,base){
+  const st=TR.stats||{},w=sid=>(st[sid]||{})[cat]||0;
+  // 2 = he picked this site for this category, 1 = it is the built-in default for it, 0 = automatic
+  const rank=sid=>{const s=siteById(sid);if(!s)return 0;if(s.cats&&typeof s.cats==='object'&&s.cats[cat])return 2;return trPref(s,cat)?1:0};
+  const arr=base.filter(x=>trCatOf(x)===cat&&trContributes(x.sid,cat));
+  // the leading site comes first, then the strongest one, so on a repeated title the better card stays
+  return arr.map((x,i)=>[x,i]).sort((a,b)=>rank(b[0].sid)-rank(a[0].sid)||w(b[0].sid)-w(a[0].sid)||a[1]-b[1]).map(o=>o[0]);
+}
+// one card per title; the sites take turns (strongest first), so every site gets a card in the row
+// before any single site gets a second one, and no site can take more than `cap` of it
+function trMix(list,seen,opt){
+  opt=opt||{};const cap=opt.cap||6,max=opt.max||24;
+  const by=new Map();list.forEach(x=>{if(!by.has(x.sid))by.set(x.sid,[]);by.get(x.sid).push(x)});
+  const ids=[...by.keys()],idx={},used={},out=[];
+  let go=true;
+  while(out.length<max&&go){
+    go=false;
+    for(const sid of ids){
+      if(out.length>=max)break;
+      if((used[sid]||0)>=cap)continue;
+      const q=by.get(sid);let n=idx[sid]||0,x=null;
+      while(n<q.length){const c=q[n++];const kk=myKey(c.t)||trSKey(c);if(!kk||seen.has(kk))continue;seen.add(kk);x=c;break}
+      idx[sid]=n;
+      if(!x)continue;
+      used[sid]=(used[sid]||0)+1;out.push(x);go=true;
+    }
+  }
+  return out;
+}
+// genre chips under a category row, only for the genres its own cards carry
+function renderGF(sel,cat,list){
+  const box=$(sel);if(!box)return;
+  const cnt={};list.forEach(x=>(x.g||[]).forEach(g=>cnt[g]=(cnt[g]||0)+1));
+  const keys=Object.keys(cnt).filter(k=>cnt[k]>=2),cur=(UI.gf||{})[cat]||'';
+  if(!keys.length){box.hidden=true;box.innerHTML='';return}
+  box.hidden=false;
+  box.innerHTML='<button class="hbtn'+(cur?'':' red')+'" data-nav data-g="">الكل</button>'+
+    keys.map(k=>'<button class="hbtn'+(cur===k?' red':'')+'" data-nav data-g="'+k+'">'+esc(TR_GN[k]||k)+'</button>').join('');
+  box.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{
+    UI.gf=UI.gf||{};UI.gf[cat]=b.dataset.g;saveUI();renderTrend();
+    const nb=$(sel)&&$(sel).querySelector('[data-g="'+b.dataset.g+'"]');if(nb)nb.focus({preventScroll:true})});
+}
+function fillRow(row,h,l,opt){
+  opt=opt||{};
+  row.innerHTML='';row._loop=false;
+  row.hidden=h.hidden=!l.length;
+  if(!l.length)return;
+  row._half=null;   // content changed: the loop's width is measured again on the next tick
+  const mk=dup=>{const fr=document.createDocumentFragment();l.forEach(x=>{
+    const t=tileEl({name:x.t,url:x.u,icon:x.i,src:opt.badge?x.sn:'',sub:opt.sub?x.sn:'',cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:trCatOf(x),key:trKey(x)})});
+    t.classList.add('pst');t.onclick=()=>{if(siteById(x.sid))visit(x.sid,true)};
+    if(dup){t.classList.add('dup');t.removeAttribute('data-nav');t.tabIndex=-1;t.setAttribute('aria-hidden','true')}
+    fr.appendChild(t)});row.appendChild(fr)};
+  mk(false);
+  if(!UI.perf&&row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
+}
+function renderTrend(){
+  const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter;
+  const base=hide?[]:trEligibleList();
+  const fresh=base.filter(x=>x.src!=='c');   // the trend row is what the homepage shows as new, not the whole catalog
+  // مسلسلاتك: new cards from his sites that belong to a series already in تكملة المشاهدة
+  const mkS=mySeriesKeys();
+  const mine=fresh.filter(x=>{const k=myKey(x.t);if(k.length<4)return false;if(mkS.has(k))return true;
+    for(const w of mkS){if(w.length>=5&&(k.startsWith(w)||w.startsWith(k)))return true}return false});
+  const mySeen=new Set();
+  fillRow($('#myRow'),$('#myH'),trMix(mine,mySeen,{cap:6,max:20}),{sub:1});
+  // one mixed trend row: عربي وأجنبي في صف واحد
+  fillRow($('#trRow'),$('#trH'),trMix(fresh,new Set(mySeen),{cap:6,max:30}),{badge:1});
+  const catSeen=new Set();   // the four rows share one list: a title sits in one category only
+  CATS.forEach(c=>{
+    const cat=c[0],all=trCatList(cat,base);
+    renderGF(c[3],cat,all);
+    const sel=(UI.gf||{})[cat]||'';
+    const f=sel?all.filter(x=>(x.g||[]).indexOf(sel)>=0):all;
+    fillRow($(c[2]),$(c[1]),trMix(f,catSeen,{cap:8,max:40}),{badge:1});
+  });
+}
+// عرض الكل: the whole row as one big grid
+function openAllRow(cat){
+  const base=trEligibleList();
+  let list=cat==='trend'?trMix(base,new Set(),{cap:40,max:150}):trMix(trCatList(cat,base),new Set(),{cap:99,max:150});
+  const sel=(UI.gf||{})[cat]||'';
+  if(cat!=='trend'&&sel)list=list.filter(x=>(x.g||[]).indexOf(sel)>=0);
+  openModal('<h3>'+esc(cat==='trend'?'🔥 الجديد والترند':(CAT_T[cat]||''))+(list.length?' <small>('+list.length+')</small>':'')+'</h3>'+
+    (list.length?'<div class="mxgrid" id="agx"></div>':'<div class="empty">لسه مفيش حاجة هنا — التطبيق بيجيبها من مواقعك لوحده.</div>')+
+    '<div class="acts"><button class="fbtn" id="cc" data-nav>إغلاق</button></div>');
+  $('#box').classList.add('wide');
+  const g=$('#agx');
+  if(g)list.forEach(x=>{const t=tileEl({name:x.t,url:x.u,icon:x.i,src:x.sn,cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:trCatOf(x),key:trKey(x)})});
+    t.onclick=()=>{if(siteById(x.sid))visit(x.sid,true)};g.appendChild(t)});
+  $('#cc').onclick=closeModal;
+  if(g)setTimeout(()=>{const f=g.querySelector('.tile');f&&f.focus({preventScroll:true})},60);
+}
+function openCatPick(x){
+  openModal('<h3>🗂 '+esc(x.title)+'</h3><div class="hint">اختار القسم اللي الكارت يظهر فيه.</div>'+
+    CATS.map(c=>'<button class="fbtn'+(trCatOf({t:x.title,cat:''})===c[0]?' red':'')+'" data-nav data-c="'+c[0]+'" style="display:block;width:100%;margin-top:8px">'+esc(CAT_T[c[0]])+'</button>').join('')+
+    '<div class="acts"><button class="fbtn" id="cc" data-nav>إغلاق</button></div>');
+  $('#cc').onclick=closeModal;
+  $('#box').querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{UI.trk=UI.trk||{};UI.trk[x.key]=b.dataset.c;saveUI();closeModal();trSig='';render()});
+}
+let trLast=0,trFrame=0;
+const trHalf=r=>{const f=r.querySelector('.tile:not(.dup)'),d=r.querySelector('.tile.dup');return f&&d?Math.abs(d.offsetLeft-f.offsetLeft):0};
+function trPaused(r){return !!(r._h||r._tt||Date.now()-(r._touch||0)<3500||r.contains(document.activeElement)||$('#modal').classList.contains('open')||document.hidden)}
+function trTick(ts){
+  const dt=Math.min(64,ts-(trLast||ts));trLast=ts;
+  if(UI.perf){requestAnimationFrame(trTick);return}   // performance mode: the rows hold still and you scroll them yourself
+  trFrame=(trFrame+1)%15;
+  document.querySelectorAll('.row.tr').forEach(r=>{if(r.hidden||!r._loop)return;
+    if(trFrame===0){const b=r.getBoundingClientRect();r._vis=!(b.bottom<0||b.top>innerHeight)}   // the position check runs ~4 times a second, not every frame
+    if(r._vis===false||trPaused(r)){r._a=null;return}
+    if(r._sg==null)r._sg=getComputedStyle(r).direction==='rtl'?-1:1;
+    if(r._a==null)r._a=Math.abs(r.scrollLeft);
+    r._a+=TR_SPEED*dt/1000;
+    if(r._half==null)r._half=trHalf(r);   // offsetLeft forces a layout: measure once per content, not per frame
+    if(r._half>50)r._a%=r._half;
+    r.scrollLeft=r._sg*r._a});
+  requestAnimationFrame(trTick)}
+document.querySelectorAll('.row.tr').forEach(r=>{
+  r.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse')r._h=1});r.addEventListener('pointerleave',()=>{r._h=0});
+  r.addEventListener('touchstart',()=>{r._tt=1},{passive:true});
+  ['touchend','touchcancel'].forEach(ev=>r.addEventListener(ev,()=>{r._tt=0;r._touch=Date.now()},{passive:true}));
+  r.addEventListener('wheel',()=>{r._touch=Date.now()},{passive:true})});
+// the heading of a mixed row is a button: OK opens the whole row as a grid
+document.querySelectorAll('.rhead').forEach(h=>{
+  h.addEventListener('click',()=>openAllRow(h.dataset.rk));
+  h.addEventListener('keydown',e=>{if(isOk(e)){e.preventDefault();e.stopPropagation();openAllRow(h.dataset.rk)}})});
+function openTrPick(){
+  const el=sites().filter(s=>trEligible(s)&&siteVisible(s));
+  if(!el.length){toast('مفيش مواقع');return}
+  openModal('<h3>🔥 اختار المواقع</h3><div class="hint">علّم المواقع اللي تعرض الجديد والترند. لو ما علّمتش ولا واحد، كل المواقع بتتستخدم (من غير اليوتيوب والكورة).</div>'+
+    el.map(s=>'<button class="fbtn" style="display:block;width:100%;margin-top:8px;text-align:right" data-nav data-sid="'+esc(s.id)+'"></button>').join('')+
+    '<div class="acts"><button class="fbtn red" id="tpok" data-nav>تمام وحدّث</button></div>');
+  const bx=$('#box'),paint=()=>bx.querySelectorAll('[data-sid]').forEach(b=>{const s=siteById(b.dataset.sid);b.textContent=(s&&s.tr?'☑ ':'☐ ')+(s?s.name:'');b.classList.toggle('red',!!(s&&s.tr))});
+  paint();
+  bx.querySelectorAll('[data-sid]').forEach(b=>b.onclick=()=>{const s=siteById(b.dataset.sid);if(s){put(Object.assign({},s,{tr:!s.tr}));paint()}});
+  $('#tpok').onclick=()=>{closeModal();trSig='';trRefresh(true)};
+}
+$('#bk').onclick=exportData;$('#rs').onclick=importData;$('#st').onclick=openSettings;$('#ar').onclick=openArchive;$('#gall').onclick=openAllSearch;
+if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+guardInputs(document);
+applyUI();
+applyRowOrder();
+loadLocal();applyRedirects();render();setTimeout(focusBoot,1200);setTimeout(()=>trRefresh(!TR.list.length||TR.ver!==VERSION.n||Date.now()-TR.at>10*60e3),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
+setInterval(()=>{if(!$('#modal').classList.contains('open'))softRender()},60000);
+</script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Sajo TV</title>
+<meta name="theme-color" content="#160e10">
+<meta name="referrer" content="no-referrer">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#120d0e;--panel:#1d1416;--line:#3a2124;--red:#e50914;--txt:#fff;--mut:#b9a9ab}
+[hidden]{display:none!important}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font-family:Cairo,system-ui,sans-serif}
+body{min-height:100vh;padding-bottom:40px}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;padding:12px clamp(12px,3vw,40px);background:linear-gradient(#241316,#160e10);border-bottom:1px solid var(--line)}
+.logo{font-weight:900;font-size:clamp(22px,2.6vw,40px);flex:1;white-space:nowrap}
+.logo b{color:var(--red)}
+.hbtn{background:#2a1a1d;color:#fff;border:1px solid var(--line);border-radius:14px;padding:8px 14px;font:700 clamp(14px,1.4vw,22px) Cairo,sans-serif;cursor:pointer;white-space:nowrap}
+.hbtn.red{background:var(--red);border-color:var(--red)}
+.hbtn.on{background:#fff;color:#000}
+.search{display:flex;gap:8px;padding:10px clamp(12px,3vw,40px) 0}
+.search input{flex:1;min-width:0;background:#0f0a0b;color:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 14px;font:16px Cairo,sans-serif}
+.search a{text-decoration:none;display:flex;align-items:center}
+.search a[hidden]{display:none}
+.fav{position:absolute;top:8px;right:8px;z-index:2;background:rgba(0,0,0,.65);border:1px solid rgba(255,255,255,.25);color:#ffd54a;border-radius:12px;width:clamp(30px,2.6vw,44px);height:clamp(30px,2.6vw,44px);font-size:clamp(16px,1.6vw,26px);cursor:pointer;line-height:1}
+.fav:focus-visible,.fav:hover{background:var(--red);outline:none}
+.editing .fav{display:none}
+body.kids #addSite,body.kids #addCont,body.kids #addRm,body.kids #editBtn{display:none}
+body.kids footer{display:none}
+body.kids #chips{display:none}
+#push{position:fixed;inset:0;z-index:25;background:rgba(0,0,0,.8);display:none;align-items:center;justify-content:center;padding:16px}
+#push.open{display:flex}
+#push .box{text-align:center}
+#push .big{display:block;text-decoration:none;font-size:clamp(20px,2.4vw,36px);padding:16px;margin-top:14px}
+#status{font-size:13px;color:var(--mut);padding:6px clamp(12px,3vw,40px) 0;min-height:4px}
+main{padding:0 clamp(12px,3vw,40px)}
+h2{font-size:clamp(18px,2vw,32px);margin:22px 0 10px;display:flex;align-items:center;gap:8px}
+h2 small{font-size:.55em;color:var(--mut);font-weight:400}
+.row{display:flex;gap:clamp(10px,1.4vw,22px);overflow-x:auto;padding:6px 4px 12px;scroll-snap-type:x proximity}
+.row .tile{flex:0 0 clamp(100px,11vw,180px);scroll-snap-align:start}
+.mcard{position:relative;flex:0 0 clamp(170px,20vw,300px);scroll-snap-align:start;display:block;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px;text-decoration:none;color:var(--txt)}
+.mcard:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+.mcard .mlg{font-size:clamp(10px,.8vw,12px);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard .mteams{display:flex;align-items:center;justify-content:center;gap:12px;margin:8px 0 4px}
+.mcard .mteams img{width:clamp(26px,2.2vw,36px);height:clamp(26px,2.2vw,36px);object-fit:contain}
+.mcard .msc{font-weight:900;font-size:clamp(14px,1.3vw,21px);white-space:nowrap}
+.mcard .mvs{font-size:clamp(11px,.9vw,14px);font-weight:700;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcard .mst{margin-top:6px;text-align:center;font-size:clamp(10px,.85vw,13px);color:var(--mut)}
+.mcard .mst b.live{color:#fff;background:var(--red);border-radius:8px;padding:1px 10px;font-weight:900}
+
+.row.wide .tile{flex-basis:clamp(140px,19vw,280px);width:clamp(140px,19vw,280px);aspect-ratio:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(100px,10vw,185px),1fr));gap:clamp(10px,1.2vw,20px);padding:6px 4px}
+/* continue watching: picture on top, small text below it */
+.tile.capt{min-width:0;max-width:100%;aspect-ratio:auto;overflow:visible;background:none;border-radius:0;transform:none!important;box-shadow:none!important}
+.tile.capt .thumb{position:relative;aspect-ratio:16/10;border-radius:14px;overflow:hidden;background:#222;transition:transform .15s,box-shadow .15s}
+.tile.capt:focus-visible .thumb,.tile.capt:hover .thumb{transform:scale(1.04);box-shadow:0 0 0 3px var(--red),0 8px 22px rgba(0,0,0,.55)}
+.tile.capt .ago{font-size:clamp(10px,.85vw,13px);padding:0 7px}
+.cap{padding:6px 3px 0;text-align:right;min-width:0;width:100%}
+.cap b{color:var(--txt);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;font-size:clamp(12px,1.05vw,16px);font-weight:700;line-height:1.3;white-space:normal;overflow:hidden;word-break:break-word}
+.cap span{display:block;font-size:clamp(10px,.85vw,13px);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.editing .tile.capt::after{top:6px}
+.tile.sq .thumb{aspect-ratio:1;border-radius:20px}
+.phone .tile.sq .thumb{border-radius:14px}
+.tile.sq .cap b{-webkit-line-clamp:2}
+.tile.sq .cap{text-align:center}
+.warn{position:absolute;top:6px;left:6px;z-index:2;background:#ffb300;color:#111;border:none;border-radius:12px;min-width:30px;height:30px;padding:0 8px;font-size:16px;font-weight:900;cursor:pointer;line-height:1}
+.warn:hover,.warn:focus-visible{background:var(--red);color:#fff;outline:none}
+.editing .warn{display:none}
+#cine{position:fixed;inset:0;z-index:-1;background-size:cover;background-position:center;filter:blur(38px) brightness(.45) saturate(1.2);transform:scale(1.25);opacity:0;transition:opacity .6s;pointer-events:none}
+#cine.on{opacity:1}
+html.perf #cine{display:none!important}
+html.perf *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+html.light #cine{filter:blur(38px) brightness(1.05) saturate(1.1)}
+html.light #cine.on{opacity:.35}
+.search .hbtn{white-space:nowrap}
+.tile.capt.moving{outline:none}
+.tile.capt.moving .thumb{outline:5px dashed #ffd54a;outline-offset:-5px;transform:scale(1.07);box-shadow:0 0 0 6px rgba(255,213,74,.35)}
+.done{position:absolute;bottom:10px;right:6px;z-index:2;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.25);color:#7cfc9a;border-radius:12px;min-width:30px;height:30px;padding:0 8px;font-size:16px;font-weight:700;cursor:pointer;line-height:1}
+.done:hover,.done:focus-visible{background:var(--red);color:#fff;outline:none}
+.editing .done{display:none}
+.newb{position:absolute;top:8px;left:8px;z-index:2;background:var(--red);color:#fff;border-radius:10px;padding:1px 9px;font-size:clamp(10px,.9vw,14px);font-weight:900}
+#chips{display:flex;gap:8px;overflow-x:auto;padding:2px 4px 8px}
+#chips .hbtn{font-size:clamp(13px,1.2vw,18px);padding:6px 14px}
+.tile{position:relative;display:block;aspect-ratio:1;border-radius:20px;overflow:hidden;text-decoration:none;color:#fff;background:#222;outline:none;transition:transform .15s,box-shadow .15s;cursor:pointer}
+.tile.moving{outline:5px dashed #ffd54a;outline-offset:-5px;transform:scale(1.07);box-shadow:0 0 0 6px rgba(255,213,74,.35),0 12px 30px rgba(0,0,0,.6);z-index:3}
+#moveBar{position:fixed;left:50%;bottom:24px;text-align:center;max-width:94vw;transform:translateX(-50%);background:#ffd54a;color:#111;font-weight:900;padding:12px 22px;border-radius:14px;z-index:50;font-size:clamp(16px,1.5vw,24px);box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.tile .bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.tile .shade{position:absolute;inset:0;background:linear-gradient(transparent 30%,rgba(0,0,0,.55))}
+.tile .name{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:10px;font-weight:900;font-size:clamp(15px,1.7vw,28px);line-height:1.15;text-shadow:0 3px 10px rgba(0,0,0,.85),0 0 2px #000;word-break:break-word}
+.tile .pbar{position:absolute;left:0;right:0;bottom:0;height:5px;background:rgba(255,255,255,.25)}.tile .pbar i{display:block;height:100%;background:var(--red)}
+.tile .sub{position:absolute;bottom:0;left:0;right:0;padding:6px 10px;background:rgba(0,0,0,.65);font-size:clamp(12px,1.2vw,20px);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .ago{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.6);border-radius:10px;padding:1px 8px;font-size:clamp(11px,1vw,17px)}
+.tile:focus-visible,.tile:hover{transform:scale(1.05);box-shadow:0 0 0 4px var(--red),0 10px 30px rgba(0,0,0,.6)}
+.upd{position:absolute;top:8px;left:8px;z-index:2;background:rgba(0,0,0,.7);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:12px;padding:3px 9px;font:700 clamp(12px,1.1vw,18px) Cairo,sans-serif;cursor:pointer}
+.upd:focus-visible,.upd:hover{background:var(--red);outline:none}
+.editing .upd{display:none}
+.editing .tile::after{content:"✎ تعديل";position:absolute;top:8px;left:8px;background:var(--red);border-radius:10px;padding:2px 10px;font-size:14px;font-weight:700}
+.empty{color:var(--mut);padding:14px 4px;font-size:clamp(14px,1.3vw,20px)}
+.hbtn:focus-visible,.fbtn:focus-visible,input:focus,select:focus{outline:3px solid var(--red);outline-offset:2px}
+footer{text-align:center;margin-top:30px}
+#ver{background:none;border:none;color:var(--mut);font:13px Cairo,sans-serif;cursor:pointer;padding:6px 10px}
+/* modal */
+#modal{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;padding:16px}
+#modal.open{display:flex}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:22px;width:min(560px,100%);max-height:92vh;overflow:auto;padding:20px}
+.box h3{margin:0 0 14px;font-size:clamp(18px,1.8vw,28px)}
+.box label{display:block;font-weight:700;margin:12px 0 4px;font-size:clamp(14px,1.3vw,20px)}
+.box input,.box select{width:100%;background:#0f0a0b;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:16px Cairo,sans-serif}
+.box input[dir=ltr]{text-align:left}
+.prev{display:flex;gap:12px;align-items:center;margin-top:6px}
+.prev .tile{width:110px;flex:0 0 110px}
+.prev .tile .name{font-size:18px}
+.acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.fbtn{flex:1;min-width:110px;background:#2a1a1d;color:#fff;border:1px solid var(--line);border-radius:12px;padding:10px;font:700 16px Cairo,sans-serif;cursor:pointer}
+.fbtn.red{background:var(--red);border-color:var(--red)}
+.fbtn.g{display:block;text-align:center;text-decoration:none;background:#fff;color:#1a1a1a;margin-top:6px}
+.steps{color:var(--mut);font-size:13px;margin:8px 0 0;padding-inline-start:18px}
+.fbtn.del{background:transparent;color:#ff6b6b;border-color:#6b2a2a}
+.hint{color:var(--mut);font-size:13px;margin-top:4px}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#fff;color:#000;border-radius:14px;padding:8px 16px;font-weight:700;display:none;z-index:30}
+/* the built-in player: direct stream addresses (m3u8/mp4…) play over the launcher, Back closes it */
+#ply{position:fixed;inset:0;z-index:24;background:#000;display:flex;flex-direction:column}
+#ply .pbar{display:flex;align-items:center;gap:10px;padding:8px clamp(12px,3vw,40px);background:#160e10;border-bottom:1px solid var(--line)}
+#ply .pbar span{flex:1;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ply video{flex:1;width:100%;min-height:0;background:#000}
+/* light theme */
+html.light{--bg:#f6f1f1;--panel:#fff;--line:#d9cccd;--txt:#1b1213;--mut:#6d5b5e}
+html.light header{background:linear-gradient(#fff,#f1e8e8)}
+html.light .hbtn{background:#fff;color:#1b1213}
+html.light .hbtn.on{background:#1b1213;color:#fff}
+html.light .hbtn.red{background:var(--red);border-color:var(--red);color:#fff}
+html.light .search input,html.light .box input,html.light .box select{background:#fff;color:#1b1213}
+html.light .fbtn{background:#f1e8e8;color:#1b1213}
+html.light .fbtn.red{background:var(--red);border-color:var(--red);color:#fff}
+html.light .fbtn.g{background:#1b1213;color:#fff}
+html.light .fbtn.del{background:transparent;color:#d33}
+/* phone (the app on a phone): three tiles a row, finger-sized */
+.phone .grid{grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:10px}
+.phone .row .tile{flex-basis:100px}
+.phone .row.wide .tile{flex-basis:150px;width:150px}
+.phone .tile{border-radius:14px}
+.phone .tile .name{font-size:14px;padding:6px}
+.phone .tile .sub{font-size:11px}
+.phone .fav{width:30px;height:30px;font-size:16px;top:5px;right:5px}
+@media (max-width:520px){.hbtn .t{display:none}.hbtn{padding:8px 11px}}
+/* trending rows: posters that drift by themselves */
+.row.tr{scroll-snap-type:none;scrollbar-width:none}
+.row.tr::-webkit-scrollbar{display:none}
+.row.tr .tile{flex:0 0 clamp(105px,10vw,165px);scroll-snap-align:none}
+.tile.capt.pst .thumb{aspect-ratio:2/3}
+.phone .row.tr .tile{flex-basis:105px}
+/* ---------- polish: glow, depth and motion that stay cheap on the box ---------- */
+body{background:radial-gradient(1100px 480px at 85% -6%,rgba(229,9,20,.08),transparent 60%),radial-gradient(900px 480px at 8% 108%,rgba(229,9,20,.05),transparent 60%),var(--bg)}
+header{box-shadow:0 2px 16px rgba(0,0,0,.4)}
+.logo{text-shadow:0 2px 20px rgba(229,9,20,.3)}
+h2::before{content:"";flex:0 0 auto;width:6px;height:.95em;border-radius:4px;background:linear-gradient(180deg,var(--red),#7a0a10);box-shadow:0 0 12px rgba(229,9,20,.45)}
+.tile:focus-visible,.tile:hover{transform:scale(1.05);box-shadow:0 0 0 3px var(--red),0 0 30px rgba(229,9,20,.4),0 12px 32px rgba(0,0,0,.6)}
+.tile.capt:focus-visible .thumb,.tile.capt:hover .thumb{transform:scale(1.04);box-shadow:0 0 0 3px var(--red),0 0 26px rgba(229,9,20,.4),0 8px 22px rgba(0,0,0,.55)}
+.mcard{transition:transform .15s,box-shadow .15s,border-color .15s}
+.mcard:focus-visible,.mcard:hover{outline:none;transform:translateY(-3px);border-color:var(--red);box-shadow:0 0 0 2px var(--red),0 0 24px rgba(229,9,20,.35),0 10px 24px rgba(0,0,0,.5)}
+.mcard .mst b.live{animation:livePulse 1.6s ease-in-out infinite}
+@keyframes livePulse{50%{opacity:.6}}
+.hbtn,.fbtn{transition:transform .15s,box-shadow .15s,background .15s,color .15s}
+.hbtn:focus-visible,.fbtn:focus-visible{transform:scale(1.05)}
+.row{scrollbar-color:#4a272c transparent}
+.row::-webkit-scrollbar{height:8px}
+.row::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px}
+.row::-webkit-scrollbar-track{background:transparent}
+body::-webkit-scrollbar{width:10px}
+body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px solid var(--bg)}
+/* ---------- category rows: source badge, عرض الكل, genre chips, row order ---------- */
+.srcb{position:absolute;bottom:4px;right:5px;max-width:calc(100% - 10px);font-size:10px;line-height:1.5;padding:1px 7px;border-radius:8px;background:rgba(0,0,0,.72);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;z-index:3;text-shadow:none}
+.rhead{cursor:pointer}
+.rhead .allb{margin-right:auto;font-size:.5em;font-weight:400;color:var(--mut);border:1px solid #4a272c;border-radius:99px;padding:3px 11px;white-space:nowrap}
+.rhead:focus-visible{outline:2px solid var(--red);outline-offset:5px;border-radius:10px}
+.rhead:focus-visible .allb,.rhead:hover .allb{color:#fff;border-color:var(--red)}
+.gf{display:flex;gap:8px;overflow-x:auto;padding:0 4px 8px;scrollbar-width:none}
+.gf::-webkit-scrollbar{display:none}
+.gf[hidden]{display:none}
+.gf .hbtn{font-size:13px;padding:5px 13px;flex:0 0 auto}
+#box.wide{width:min(1100px,100%)}
+.mxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(96px,9vw,150px),1fr));gap:12px;margin-top:8px}
+.ro{display:flex;align-items:center;gap:8px;margin-top:6px}
+.ro b{flex:1;font-size:14px;font-weight:400;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ro .hbtn{padding:4px 11px;font-size:14px;min-width:0}
+</style>
+</head>
+<body>
+<div id="cine"></div>
+<header>
+  <div class="logo" dir="ltr" style="text-align:right"><span style="color:#ff8a00">S</span><span style="color:#8b6cff">a</span><span style="color:#f0388c">j</span><span style="color:#8ccb1f">o</span> <b style="color:#1e90ff">T</b><b>V</b></div>
+  <button class="hbtn red" data-nav id="addSite">＋<span class="t"> موقع</span></button>
+  <button class="hbtn" data-nav id="addCont">▶<span class="t"> تكملة</span></button>
+  <button class="hbtn" data-nav id="addRm" hidden>🎮<span class="t"> ريموت</span></button>
+  <button class="hbtn" data-nav id="editBtn">✎<span class="t"> تعديل</span></button>
+  <button class="hbtn" data-nav id="kidsBtn">🧒<span class="t"> أطفال</span></button>
+</header>
+<div class="search"><input id="q" type="search" placeholder="🔍 دور في مواقعك وتكملاتك…" data-nav><a id="gq" class="hbtn" target="_blank" rel="noopener" data-nav hidden>🔎 جوجل</a><button class="hbtn" id="gall" data-nav hidden>🔎 كل مواقعي</button></div>
+<div id="status"></div>
+<main id="main">
+  <section class="rb" data-rk="cont"><h2 id="contH">▶ تكملة المشاهدة <small>اللي وقفت عنده</small></h2>
+  <div class="row wide" id="contRow"></div></section>
+  <section class="rb" data-rk="my"><h2 id="myH" hidden>📺 مسلسلاتك <small>حلقات جديدة من اللي بتتفرج عليه</small></h2>
+  <div class="row tr" id="myRow" hidden></div></section>
+  <section class="rb" data-rk="trend"><h2 id="trH" class="rhead" data-rk="trend" tabindex="0" role="button" data-nav hidden>🔥 الجديد والترند <small>من كل مواقعك</small><span class="allb">عرض الكل ›</span></h2>
+  <div class="row tr" id="trRow" hidden></div></section>
+  <section class="rb" data-rk="sar"><h2 id="c1H" class="rhead" data-rk="sar" tabindex="0" role="button" data-nav hidden>📺 مسلسلات عربية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf1" hidden></div><div class="row tr" id="c1Row" hidden></div></section>
+  <section class="rb" data-rk="sfr"><h2 id="c2H" class="rhead" data-rk="sfr" tabindex="0" role="button" data-nav hidden>🎭 مسلسلات أجنبية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf2" hidden></div><div class="row tr" id="c2Row" hidden></div></section>
+  <section class="rb" data-rk="str"><h2 id="c5H" class="rhead" data-rk="str" tabindex="0" role="button" data-nav hidden>🇹🇷 مسلسلات تركية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf5" hidden></div><div class="row tr" id="c5Row" hidden></div></section>
+  <section class="rb" data-rk="mar"><h2 id="c3H" class="rhead" data-rk="mar" tabindex="0" role="button" data-nav hidden>🎬 أفلام عربية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf3" hidden></div><div class="row tr" id="c3Row" hidden></div></section>
+  <section class="rb" data-rk="mfr"><h2 id="c4H" class="rhead" data-rk="mfr" tabindex="0" role="button" data-nav hidden>🍿 أفلام أجنبية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf4" hidden></div><div class="row tr" id="c4Row" hidden></div></section>
+  <section class="rb" data-rk="later"><h2 id="laterH" hidden>⏳ هتفرج عليه بعدين</h2>
+  <div class="row wide" id="laterRow" hidden></div></section>
+  <section class="rb" data-rk="visit"><h2 id="visitH" hidden>🕘 آخر ما شاهدت</h2>
+  <div class="row" id="visitRow" hidden></div></section>
+  <section class="rb" data-rk="sites"><h2>⭐ مواقعي</h2>
+  <div id="chips" hidden></div>
+  <div class="grid" id="siteGrid"></div></section>
+  <section class="rb" data-rk="matches"><h2 id="mH" hidden>⚽ ماتشات الكورة <small>أهم الماتشات المصرية والعالمية</small></h2>
+  <div class="row tr" id="matchRow" hidden></div></section>
+</main>
+<footer><button class="hbtn" id="ab" data-nav hidden></button> <button class="hbtn" id="up" data-nav hidden>🔄 تحديث</button> <button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button> <button class="hbtn" id="ar" data-nav>🗂 الأرشيف</button> <button class="hbtn" id="st" data-nav>⚙ إعدادات</button><br><button id="ver" data-nav></button></footer>
+
+<div id="ply" hidden><div class="pbar"><span id="plyT"></span><button class="hbtn" id="plyX" data-nav>✕ إغلاق</button></div><video id="plyV" controls autoplay playsinline></video></div>
+<div id="modal"><div class="box" id="box"></div></div>
+<div id="push"><div class="box" id="pbox"></div></div>
+<div id="toast"></div>
+
+<script>
+try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
 const VERSION={n:'١٣٦',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
 const LS='shashti-v1';
 let items=new Map();
