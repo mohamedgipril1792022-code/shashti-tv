@@ -172,6 +172,21 @@ h2::before{content:"";flex:0 0 auto;width:6px;height:.95em;border-radius:4px;bac
 .row::-webkit-scrollbar-track{background:transparent}
 body::-webkit-scrollbar{width:10px}
 body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px solid var(--bg)}
+/* ---------- category rows: source badge, عرض الكل, genre chips, row order ---------- */
+.srcb{position:absolute;bottom:4px;right:5px;max-width:calc(100% - 10px);font-size:10px;line-height:1.5;padding:1px 7px;border-radius:8px;background:rgba(0,0,0,.72);color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;z-index:3;text-shadow:none}
+.rhead{cursor:pointer}
+.rhead .allb{margin-right:auto;font-size:.5em;font-weight:400;color:var(--mut);border:1px solid #4a272c;border-radius:99px;padding:3px 11px;white-space:nowrap}
+.rhead:focus-visible{outline:2px solid var(--red);outline-offset:5px;border-radius:10px}
+.rhead:focus-visible .allb,.rhead:hover .allb{color:#fff;border-color:var(--red)}
+.gf{display:flex;gap:8px;overflow-x:auto;padding:0 4px 8px;scrollbar-width:none}
+.gf::-webkit-scrollbar{display:none}
+.gf[hidden]{display:none}
+.gf .hbtn{font-size:13px;padding:5px 13px;flex:0 0 auto}
+#box.wide{width:min(1100px,100%)}
+.mxgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(96px,9vw,150px),1fr));gap:12px;margin-top:8px}
+.ro{display:flex;align-items:center;gap:8px;margin-top:6px}
+.ro b{flex:1;font-size:14px;font-weight:400;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ro .hbtn{padding:4px 11px;font-size:14px;min-width:0}
 </style>
 </head>
 <body>
@@ -187,23 +202,29 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 <div class="search"><input id="q" type="search" placeholder="🔍 دور في مواقعك وتكملاتك…" data-nav><a id="gq" class="hbtn" target="_blank" rel="noopener" data-nav hidden>🔎 جوجل</a><button class="hbtn" id="gall" data-nav hidden>🔎 كل مواقعي</button></div>
 <div id="status"></div>
 <main id="main">
-  <h2 id="contH">▶ تكملة المشاهدة <small>اللي وقفت عنده</small></h2>
-  <div class="row wide" id="contRow"></div>
-  <h2 id="visitH" hidden>🕘 آخر ما شاهدت</h2>
-  <div class="row" id="visitRow" hidden></div>
-  <h2 id="laterH" hidden>⏳ هتفرج عليه بعدين</h2>
-  <div class="row wide" id="laterRow" hidden></div>
-  <h2 id="myH" hidden>📺 مسلسلاتك <small>حلقات جديدة من اللي بتتفرج عليه</small></h2>
-  <div class="row tr" id="myRow" hidden></div>
-  <h2 id="trH" hidden>🔥 الجديد والترند <small>عربي</small></h2>
-  <div class="row tr" id="trAr" hidden></div>
-  <h2 id="trH2" hidden>🔥 الجديد والترند <small>أجنبي</small></h2>
-  <div class="row tr" id="trFx" hidden></div>
-  <h2>⭐ مواقعي</h2>
+  <section class="rb" data-rk="cont"><h2 id="contH">▶ تكملة المشاهدة <small>اللي وقفت عنده</small></h2>
+  <div class="row wide" id="contRow"></div></section>
+  <section class="rb" data-rk="my"><h2 id="myH" hidden>📺 مسلسلاتك <small>حلقات جديدة من اللي بتتفرج عليه</small></h2>
+  <div class="row tr" id="myRow" hidden></div></section>
+  <section class="rb" data-rk="trend"><h2 id="trH" class="rhead" data-rk="trend" tabindex="0" role="button" data-nav hidden>🔥 الجديد والترند <small>من كل مواقعك</small><span class="allb">عرض الكل ›</span></h2>
+  <div class="row tr" id="trRow" hidden></div></section>
+  <section class="rb" data-rk="sar"><h2 id="c1H" class="rhead" data-rk="sar" tabindex="0" role="button" data-nav hidden>📺 مسلسلات عربية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf1" hidden></div><div class="row tr" id="c1Row" hidden></div></section>
+  <section class="rb" data-rk="sfr"><h2 id="c2H" class="rhead" data-rk="sfr" tabindex="0" role="button" data-nav hidden>🎭 مسلسلات أجنبية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf2" hidden></div><div class="row tr" id="c2Row" hidden></div></section>
+  <section class="rb" data-rk="mar"><h2 id="c3H" class="rhead" data-rk="mar" tabindex="0" role="button" data-nav hidden>🎬 أفلام عربية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf3" hidden></div><div class="row tr" id="c3Row" hidden></div></section>
+  <section class="rb" data-rk="mfr"><h2 id="c4H" class="rhead" data-rk="mfr" tabindex="0" role="button" data-nav hidden>🍿 أفلام أجنبية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf4" hidden></div><div class="row tr" id="c4Row" hidden></div></section>
+  <section class="rb" data-rk="later"><h2 id="laterH" hidden>⏳ هتفرج عليه بعدين</h2>
+  <div class="row wide" id="laterRow" hidden></div></section>
+  <section class="rb" data-rk="visit"><h2 id="visitH" hidden>🕘 آخر ما شاهدت</h2>
+  <div class="row" id="visitRow" hidden></div></section>
+  <section class="rb" data-rk="sites"><h2>⭐ مواقعي</h2>
   <div id="chips" hidden></div>
-  <div class="grid" id="siteGrid"></div>
-  <h2 id="mH" hidden>⚽ ماتشات الكورة <small>أهم الماتشات المصرية والعالمية</small></h2>
-  <div class="row tr" id="matchRow" hidden></div>
+  <div class="grid" id="siteGrid"></div></section>
+  <section class="rb" data-rk="matches"><h2 id="mH" hidden>⚽ ماتشات الكورة <small>أهم الماتشات المصرية والعالمية</small></h2>
+  <div class="row tr" id="matchRow" hidden></div></section>
 </main>
 <footer><button class="hbtn" id="ab" data-nav hidden></button> <button class="hbtn" id="up" data-nav hidden>🔄 تحديث</button> <button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button> <button class="hbtn" id="ar" data-nav>🗂 الأرشيف</button> <button class="hbtn" id="st" data-nav>⚙ إعدادات</button><br><button id="ver" data-nav></button></footer>
 
@@ -214,7 +235,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣٠',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ١٢:٣٠ ص'};
+const VERSION={n:'١٣١',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٣٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -364,7 +385,7 @@ const ord=o=>o.order!=null?o.order:(o.createdAt||0)/1e13;   // your own order; o
 const sites=()=>{if(sitesVer===itemsVer)return sitesCache;sitesVer=itemsVer;sitesCache=[...items.values()].filter(o=>o.kind==='site').sort((a,b)=>ord(a)-ord(b)||(a.createdAt||0)-(b.createdAt||0));return sitesCache};
 const siteById=id=>{const o=items.get(id);return o&&o.kind==='site'?o:null};
 
-function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav,menu,cap,onDone,badge,onWarn}){
+function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav,menu,cap,onDone,badge,onWarn,src}){
   const a=document.createElement('a');
   a.className='tile';a.href=url||'#';if(menu)a._menu=menu;a.target='_blank';a.rel='noopener';a.setAttribute('data-nav','');
   if(icon&&String(icon).indexOf('auto:')!==0)a.dataset.img=icon;
@@ -384,6 +405,7 @@ function tileEl({name,url,icon,sub,agoT,onUpd,fav,onFav,menu,cap,onDone,badge,on
   if(agoT){const g=document.createElement('span');g.className='ago';g.textContent=ago(agoT);host.appendChild(g)}
   if(onWarn){const w=document.createElement('button');w.type='button';w.className='warn';w.tabIndex=-1;w.title='الرابط مش شغال — حدّثه';w.textContent='⚠';w.onclick=e=>{e.preventDefault();e.stopPropagation();onWarn()};host.appendChild(w)}
   if(badge){const nb=document.createElement('span');nb.className='newb';nb.textContent='جديد';host.appendChild(nb)}
+  if(src){const sb=document.createElement('span');sb.className='srcb';sb.textContent=src;host.appendChild(sb)}   // which site this card came from, before you open it
   if(onDone){const d=document.createElement('button');d.type='button';d.className='done';d.tabIndex=-1;d.title='خلصته';d.textContent='✓';d.onclick=e=>{e.preventDefault();e.stopPropagation();onDone()};host.appendChild(d)}
   if(cap){const c=document.createElement('div');c.className='cap';
     const b=document.createElement('b');b.textContent=name||hostOf(url);b.title=b.textContent;c.appendChild(b);
@@ -425,11 +447,11 @@ function renderChips(){
 function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!q)return true;return fields.some(f=>String(f||'').toLowerCase().includes(q))}
 /* a refresh rebuilds every tile; the focused tile would be lost (the next press went to the first button, «＋») or a tap that was in progress would be swallowed.
    So: the focus is put back on the same tile, and refreshes that come from the background wait until you stop touching the screen. */
-const FOCUS_HOSTS='#chips,#contRow,#laterRow,#myRow,#trAr,#trFx,#visitRow,#siteGrid,#matchRow';
+const FOCUS_HOSTS='#chips,.row,#siteGrid';
 function tileKey(a){const n=a.querySelector&&a.querySelector('.cap b,.name');return (a.getAttribute('href')||'')+'|'+(n?n.textContent:(a.textContent||'').trim().slice(0,40))}
 function focusKey(){const a=document.activeElement;if(!a||a===document.body||!a.closest)return null;const h=a.closest(FOCUS_HOSTS);if(!h||h.closest('#modal'))return null;return {h:h.id,k:tileKey(a)}}
 function focusBoot(){const a=document.activeElement;if(a&&a!==document.body)return;if($('#modal').classList.contains('open'))return;
-  const f=document.querySelector('#contRow .tile[data-nav],#laterRow .tile[data-nav],#siteGrid .tile[data-nav],#trAr .tile[data-nav],header [data-nav]');if(f)f.focus({preventScroll:true})}
+  const f=document.querySelector('#contRow .tile[data-nav],#laterRow .tile[data-nav],#siteGrid .tile[data-nav],header [data-nav]');if(f)f.focus({preventScroll:true})}
 function restoreFocus(f){if(!f)return;const h=document.getElementById(f.h);if(!h)return;const e=[...h.querySelectorAll('[data-nav]')].find(x=>tileKey(x)===f.k);if(e&&document.activeElement!==e)e.focus({preventScroll:true})}
 function render(){const f=focusKey();renderNow();restoreFocus(f)}
 let lastInput=0,ptrDown=false,softT=0;
@@ -806,7 +828,7 @@ function guardInputs(root){root.querySelectorAll('input:not([type=file]),textare
   i.addEventListener('blur',()=>setTimeout(()=>{if(document.activeElement!==i)i.readOnly=true},60));
 })}
 function openModal(html){lastFocus=document.activeElement;$('#box').innerHTML=html;guardInputs($('#box'));$('#modal').classList.add('open');setTimeout(()=>{const f=$('#box input,#box select,#box button');f&&f.focus()},30)}
-function closeModal(){okSwallow=false;$('#modal').classList.remove('open');$('#box').innerHTML='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
+function closeModal(){okSwallow=false;$('#box').classList.remove('wide');$('#modal').classList.remove('open');$('#box').innerHTML='';lastFocus&&lastFocus.focus&&lastFocus.focus()}
 $('#modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
 function esc(s){return String(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
@@ -845,10 +867,21 @@ function openSite(s,pre){
    <input id="fmt" dir="ltr" inputmode="numeric" placeholder="20:00" value="${mt?String(mt.getHours()).padStart(2,'0')+':'+String(mt.getMinutes()).padStart(2,'0'):''}" data-nav style="flex:1"></div>
    <label>🔎 رابط البحث في الموقع (اختياري)</label><input id="fsr" dir="ltr" inputmode="url" placeholder="https://site.com/?s={q}" value="${esc(s.searchUrl)}" data-nav>
    <div class="hint">حط {q} مكان كلمة البحث — يخليك تدوّر في كل مواقعك مرة واحدة. لو سيبته فاضي بيتحط النمط الشائع تلقائي؛ لو البحث في موقع طلع غلط، صحّح الرابط من هنا.</div>
+   <label>🗂 الموقع ده بيتميّز في (صفوف الأقسام)</label><div class="acts" id="fcat"></div>
+   <div class="hint">«تلقائي» = التطبيق بيحسب القسم اللي الموقع فيه أكتر محتوى. دوس أي قسم عشان تثبّته بنفسك.</div>
    ${iconPicker()}
    <div class="acts"><button class="fbtn red" id="sv" data-nav>حفظ</button>${isNew?'':'<button class="fbtn" id="mvb" data-nav>↔ رتّب</button><button class="fbtn del" id="dl" data-nav>حذف</button>'}<button class="fbtn" id="cc" data-nav>إلغاء</button></div>`);
   if(!isNew)$('#mvb').onclick=()=>{closeModal();startMove(s)};
   const st={icon:s.icon||pre.icon||'',nameFn:()=>$('#fn').value.trim()||hostOf(normUrl($('#fu').value))||'موقع'};
+  // which of the four category rows this site feeds: automatic, or picked by hand
+  let cats=s.cats?Object.assign({},s.cats):null;
+  const paintCat=()=>{const bx=$('#fcat');if(!bx)return;
+    bx.innerHTML='<button class="fbtn'+(cats?'':' red')+'" data-nav data-c="__auto">تلقائي</button>'+CATS.map(c=>'<button class="fbtn'+((cats&&cats[c[0]])?' red':'')+'" data-nav data-c="'+c[0]+'">'+esc(CAT_T[c[0]])+'</button>').join('');
+    bx.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{const c=b.dataset.c;
+      if(c==='__auto')cats=null;
+      else{cats=cats||{};if(cats[c])delete cats[c];else cats[c]=1;if(!Object.keys(cats).length)cats=null}
+      paintCat()})};
+  paintCat();
   const draw=wirePicker(st);
   const gq=()=>$('#gsq').value.trim()||$('#fn').value.trim();
   const gl=()=>{const n=gq();$('#gs2').href=n?'https://www.google.com/search?q='+encodeURIComponent(n):'https://www.google.com/'};gl();
@@ -868,7 +901,8 @@ function openSite(s,pre){
       const d=new Date();d.setDate(d.getDate()+(+dsel));d.setHours(+tm[1],+tm[2],0,0);matchAt=d.getTime()}
     let searchUrl=$('#fsr').value.trim();if(searchUrl&&searchUrl.indexOf('{q}')<0){toast('رابط البحث لازم فيه {q}');$('#fsr').focus();return}
     if(!searchUrl){try{searchUrl=new URL(url).origin+'/?s={q}'}catch(e){searchUrl=''}}   // the WordPress pattern covers most streaming sites; editable if a site differs
-    put(Object.assign({},s,{id:s.id||('s-'+uid()),kind:'site',name,url,icon,group:$('#fg').value.trim(),matchAt,searchUrl,createdAt:s.createdAt||Date.now()}));
+    put(Object.assign({},s,{id:s.id||('s-'+uid()),kind:'site',name,url,icon,group:$('#fg').value.trim(),matchAt,searchUrl,cats:cats||undefined,createdAt:s.createdAt||Date.now()}));
+    trSig='';   // his category pick changes what the rows show
     closeModal();toast(isNew?'اتضاف الموقع':'اتحفظ التعديل');
   };
 }
@@ -1075,7 +1109,7 @@ function tileMenu(kind,s,v){
   }else if(kind==='trend'){
     items.push(['▶ افتح',()=>{location.href=s.url}]);
     items.push(['⏳ هتفرج عليه بعدين',()=>{put({id:'l-'+uid(),kind:'later',title:s.title,url:s.url,note:'',siteId:s.siteId||'',icon:s.icon||'',at:Date.now()});toast('⏳ اتضاف لبعدين')}]);
-    items.push([s.k==='ar'?'🌍 انقله لـ أجنبي':'🇪🇬 انقله لـ عربي',()=>{UI.trk=UI.trk||{};UI.trk[s.key]=s.k==='ar'?'fx':'ar';saveUI();trSig='';render()}]);
+    items.push(['🗂 انقله لقسم تاني…',()=>openCatPick(s)]);
   }else{
     items.push(['▶ افتح',()=>{location.href=s.url}]);
     items.push(['⏳ شيله لبعدين',()=>{del(s.id);put({id:'l-'+uid(),kind:'later',title:s.title,url:s.url,note:s.note||'',siteId:s.siteId||'',icon:s.icon||'',at:Date.now()});toast('⏳ اتنقل لبعدين')}]);
@@ -1133,15 +1167,16 @@ document.addEventListener('keydown',e=>{
   const add=list=>{list=list.filter(vis);if(list.length)rows.push(list)};
   add([...document.querySelectorAll('header [data-nav]')]);
   add([$('#q'),$('#gq'),$('#gall')]);
-  add([...document.querySelectorAll('#contRow .tile')]);
-  add([...document.querySelectorAll('#laterRow .tile')]);
-  add([...document.querySelectorAll('#trAr .tile:not(.dup)')]);
-  add([...document.querySelectorAll('#trFx .tile:not(.dup)')]);
-  add([...document.querySelectorAll('#visitRow .tile')]);
-  add([...document.querySelectorAll('#chips .hbtn')]);
-  const gridRows={};[...document.querySelectorAll('#siteGrid .tile')].forEach(t=>{const k=Math.round(t.offsetTop/10);(gridRows[k]=gridRows[k]||[]).push(t)});
-  Object.keys(gridRows).map(Number).sort((a,b)=>a-b).forEach(k=>add(gridRows[k]));
-  add([...document.querySelectorAll('#matchRow .mcard:not(.dup)')]);
+  // every block on the page, in the order it is actually shown (the rows can be moved in the settings)
+  [...document.querySelectorAll('#main .rb')].forEach(blk=>{
+    if(blk.dataset.rk==='sites'){
+      add([...blk.querySelectorAll('#chips .hbtn')]);
+      const gr={};[...blk.querySelectorAll('#siteGrid .tile')].forEach(t=>{const k=Math.round(t.offsetTop/10);(gr[k]=gr[k]||[]).push(t)});
+      Object.keys(gr).map(Number).sort((x,y)=>x-y).forEach(k=>add(gr[k]));
+      return}
+    add([...blk.querySelectorAll('.rhead,.gf .hbtn')]);
+    add([...blk.querySelectorAll('.row .tile:not(.dup),.row .mcard:not(.dup)')]);
+  });
   add([$('#ab'),$('#up'),$('#bk'),$('#rs'),$('#ar'),$('#st')]);
   add([$('#ver')]);
   let ri=rows.findIndex(row=>row.includes(cur));
@@ -1169,6 +1204,10 @@ function autoBackup(){try{
 }catch(e){}}
 /* ---------- settings: theme + text size ---------- */
 const UIK='shashti-ui';let UI={theme:'dark',zoom:1};try{Object.assign(UI,JSON.parse(localStorage.getItem(UIK)||'{}'))}catch(e){}
+const ROW_LABELS={cont:'▶ تكملة المشاهدة',my:'📺 مسلسلاتك',trend:'🔥 الجديد والترند',sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية',later:'⏳ هتفرج عليه بعدين',visit:'🕘 آخر ما شاهدت',sites:'⭐ مواقعي',matches:'⚽ ماتشات الكورة'};
+const ROW_DEF=['cont','my','trend','sar','sfr','mar','mfr','later','visit','sites','matches'];
+function rowOrder(){const o=(UI.rowOrder||[]).filter(k=>ROW_DEF.indexOf(k)>=0);ROW_DEF.forEach(k=>{if(o.indexOf(k)<0)o.push(k)});return o}
+function applyRowOrder(){const m=$('#main');if(!m)return;rowOrder().forEach(k=>{const el=m.querySelector('[data-rk="'+k+'"]');if(el)m.appendChild(el)})}
 function applyUI(){document.documentElement.classList.toggle('light',UI.theme==='light');document.documentElement.classList.toggle('perf',!!UI.perf);document.body.style.zoom=UI.zoom;const m=document.querySelector('meta[name=theme-color]');if(m)m.content=UI.theme==='light'?'#f6f1f1':'#160e10'}
 function rmState(){try{return JSON.parse(Android.remoteInfo()||'{}')}catch(e){return {}}}
 function openSettings(){
@@ -1184,6 +1223,7 @@ function openSettings(){
    ${window.Android&&Android.setAutoNext?'<label>▶ الحلقة التالية تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-an="1">شغّالة</button><button class="fbtn" data-nav data-an="0">مقفولة</button></div><div class="hint">لما الحلقة تخلص، اللي بعدها تفتح لوحدها بعد ٨ ثواني. Back بيلغيها.</div>':''}
    ${window.Android&&Android.remoteInfo?'<label>📱 ريموت الموبايل</label><div class="acts"><button class="fbtn" data-nav data-rm="1">شغّال</button><button class="fbtn" data-nav data-rm="0">مقفول</button></div><div class="hint" id="rmi"></div>':''}
    ${window.Android&&Android.setIntroAuto?'<label>⏭ تخطّي المقدمة تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-ia="1">شغّال</button><button class="fbtn" data-nav data-ia="0">مقفول</button></div><div class="hint">قدّم المقدمة بإيدك مرة في أول أي حلقة، والتطبيق بيفتكر المدة لنفس الموقع ويتخطّاها لوحده بعد كده.</div>':''}
+   <label>↕ ترتيب الصفوف</label><div id="roL"></div><div class="hint">حرّك أي صف فوق أو تحت بالأسهم — الترتيب بيتحفظ على الجهاز ده.</div>
    <label>🧒 وضع الأطفال</label><div class="acts"><button class="fbtn" id="kdb" data-nav>إعداد وضع الأطفال</button></div>
    <label>🔒 قفل المجموعات</label><div class="acts"><button class="fbtn" id="lkb" data-nav>إدارة القفل</button></div>
    <div class="acts"><button class="fbtn red" id="cc" data-nav>تمام</button></div>`);
@@ -1213,6 +1253,12 @@ function openSettings(){
   rmi();
   bx.querySelectorAll('[data-an]').forEach(b=>b.onclick=()=>{try{Android.setAutoNext(b.dataset.an==='1')}catch(e){}mark();toast(b.dataset.an==='1'?'▶ الحلقة التالية هتفتح لوحدها':'اتقفل التشغيل التلقائي')});
   bx.querySelectorAll('[data-sl]').forEach(b=>b.onclick=()=>{try{Android.sleepTimer(+b.dataset.sl)}catch(e){}toast(+b.dataset.sl?'😴 هيقفل بعد '+b.dataset.sl+' دقيقة':'اتلغى مؤقّت النوم');closeModal()});
+  const roL=$('#roL'),paintRO=()=>{roL.innerHTML=rowOrder().map((k,i)=>'<div class="ro"><b>'+esc(ROW_LABELS[k]||k)+'</b><button class="hbtn" data-nav data-up="'+i+'">▲</button><button class="hbtn" data-nav data-dn="'+i+'">▼</button></div>').join('');
+    roL.querySelectorAll('[data-up]').forEach(b=>b.onclick=()=>mvRO(+b.dataset.up,-1));
+    roL.querySelectorAll('[data-dn]').forEach(b=>b.onclick=()=>mvRO(+b.dataset.dn,1))};
+  const mvRO=(i,d)=>{const o=rowOrder(),j=i+d;if(j<0||j>=o.length)return;const t=o[i];o[i]=o[j];o[j]=t;UI.rowOrder=o;saveUI();applyRowOrder();paintRO();
+    const nb=roL.querySelector((d<0?'[data-up="':'[data-dn="')+j+'"]');if(nb)nb.focus()};
+  paintRO();
   $('#lkb').onclick=openLocks;
   $('#kdb').onclick=kidsCfg;
   $('#cc').onclick=closeModal;
@@ -1254,7 +1300,7 @@ window.quickAdd=function(kind,url,title,icon){
   setTimeout(()=>{const f=kind==='site'?$('#fn'):$('#cn2');f&&f.focus()},80);
 };
 /* ---------- trending: the newest cards of your own sites (Arabic / foreign), drifting by themselves ---------- */
-const TRK='sajo-trend';let TR={at:0,list:[]};try{const x=JSON.parse(localStorage.getItem(TRK)||'null');if(x&&x.list)TR=x}catch(e){}
+const TRK='sajo-trend';let TR={at:0,list:[]};try{const x=JSON.parse(localStorage.getItem(TRK)||'null');if(x&&x.list)TR=x;if(!TR.stats)TR.at=0}catch(e){}   // an old cache has no category counts: fetch again right away
 const TR_BAD=/youtube|youtu\.be|yalla|kora|koora|kooora|goal|sport|bein|365scores|fotmob|كور|مباريات|رياض|دوري|يوتيوب/i;
 const TR_SPEED=36;   // px per second
 const trEligible=s=>!!s.url&&!TR_BAD.test(hostOf(s.url))&&!TR_BAD.test(s.name||'')&&!TR_BAD.test(s.group||'')&&!s.matchAt;
@@ -1272,6 +1318,22 @@ function mySeriesKeys(){const set=new Set();
   [...items.values()].filter(o=>o.kind==='cont').forEach(c=>{const k=myKey(c.title);if(k.length>=4)set.add(k)});
   return set}
 const trKey=x=>x.t.toLowerCase().replace(/[\u064B-\u0652\u0670]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim().slice(0,60);   // normalized: the same title written two ways counts once
+/* ---------- the four categories: مسلسلات/أفلام × عربي/أجنبي ---------- */
+const CATS=[['sar','#c1H','#c1Row','#gf1'],['sfr','#c2H','#c2Row','#gf2'],['mar','#c3H','#c3Row','#gf3'],['mfr','#c4H','#c4Row','#gf4']];
+const CAT_T={sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية'};
+const TR_SERSIG=/مسلسل|حلق|series|\/tv\/|season|episode|انمي|أنمي/i,TR_MOVSIG=/فيلم|افلام|أفلام|\/movies?\/|\/film/i;
+// series or movie: the link's own path and the section title say it; an episode number settles it
+function trCatBase(path,sec,title){
+  const txt=path+' '+sec,ep=/الحلقة|حلقة|episode\s*\d+|s\d{1,2}\s*e\d{1,3}/i.test(title);
+  if(ep||(TR_SERSIG.test(txt)&&!TR_MOVSIG.test(txt)))return 's';
+  return 'm';
+}
+const TR_GENS=[['action',/اكشن|أكشن|action/i],['comedy',/كوميدي|كوميديا|ضحك|comedy/i],['drama',/دراما|درامي|drama/i],['horror',/رعب|horror/i],
+  ['crime',/جريمة|اثارة|إثارة|thriller|crime|غموض|mystery/i],['romance',/رومانسي|رومانسية|romance/i],['scifi',/خيال\s*علمي|sci-?fi|fantasy|فانتازيا/i],
+  ['anim',/انيمي|أنيمي|كرتون|animation|anime|cartoon/i],['doc',/وثائقي|documentary/i],['family',/عائلي|اطفال|أطفال|family|kids/i]];
+const TR_GN={action:'أكشن',comedy:'كوميدي',drama:'دراما',horror:'رعب',crime:'إثارة',romance:'رومانسي',scifi:'خيال علمي',anim:'أنيميشن',doc:'وثائقي',family:'عائلي'};
+function trGen(ctx){const o=[];for(const g of TR_GENS){if(g[1].test(ctx))o.push(g[0])}return o}
+function trCatOf(x){const ov=(UI.trk||{})[trKey(x)];return ov&&ov.length===3?ov:x.cat||'mfr'}   // what he moved by hand wins
 function trKind(text,s){
   if(TR_AR.test(text))return 'ar';if(TR_FX.test(text))return 'fx';
   const hint=(s.name||'')+' '+(s.group||'');if(TR_AR.test(hint))return 'ar';if(TR_FX.test(hint))return 'fx';
@@ -1300,7 +1362,8 @@ function trParse(html,base,s){
     const key=href.origin+href.pathname;if(seen.has(key))return;seen.add(key);
     const sec=a.closest('section,[class*=section],[class*=block],[class*=widget],[class*=slider],[class*=box]'),sh=sec&&sec.querySelector('h1,h2,h3,h4');
     let path=href.pathname;try{path=decodeURIComponent(path)}catch(e){}
-    out.push({t:title,u:href.href,i:img,k:trKind(title+' '+path+' '+(sh?sh.textContent:''),s)});
+    const secT=sh?sh.textContent:'',ctx=title+' '+path+' '+secT,kk=trKind(ctx,s);
+    out.push({t:title,u:href.href,i:img,k:kk,cat:trCatBase(path,secT,title)+kk,g:trGen(ctx)});
   });
   return out;
 }
@@ -1322,13 +1385,15 @@ async function trRefresh(force){
     const src=trSources(),res=[];let i=0;
     const work=async()=>{while(i<src.length){const s=src[i++];const h=await trGet(s.url);res.push([s,h?trParse(h,s.url,s):[]])}};
     await Promise.all([work(),work(),work(),work()]);
-    const per={ar:[],fx:[]};
-    res.forEach(([s,l])=>['ar','fx'].forEach(k=>per[k].push(l.filter(x=>x.k===k).slice(0,12).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})))));
-    const list=[],seen=new Set(),seenU=new Set();
-    ['ar','fx'].forEach(k=>{for(let n=0;n<12;n++)per[k].forEach(a=>{const x=a[n];if(!x)return;const kk=trSKey(x);if(seen.has(kk))return;seen.add(kk);
-      const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // the same card from two sites, or two cards for one address: once
-      list.push(x)})});
-    if(list.length){TR={at:Date.now(),list};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
+    const per={sar:[],sfr:[],mar:[],mfr:[]},stats={};
+    res.forEach(([s,l])=>{
+      const c={};l.forEach(x=>{c[x.cat]=(c[x.cat]||0)+1});stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
+      ['sar','sfr','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,10).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
+    const list=[],seenU=new Set();
+    for(let n=0;n<10;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
+      const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
+      list.push(x)}));
+    if(list.length){TR={at:Date.now(),list,stats};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
     else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
     else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
   }catch(e){}
@@ -1342,38 +1407,113 @@ function trSync(){
   const sig=[qv?'q':'',gfilter,UI.notrend?1:0,TR.at,sites().filter(siteVisible).map(s=>s.id+(s.tr?'+':'')).join(',')].join('|');
   if(sig===trSig)return;trSig=sig;renderTrend();
 }
-function renderTrend(){
-  const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter,ov=UI.trk||{};
-  const ok=new Set(trSources().filter(kidsOk).map(s=>s.id));
-  const seen=new Set();   // shared across all three rows: a title shown once never repeats in another row
-  const base=hide?[]:TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid));
-  // مسلسلاتك: new cards from his sites that belong to a series already in تكملة المشاهدة
-  const mkS=mySeriesKeys();
-  const mine=base.filter(x=>{const k=myKey(x.t);if(k.length<4)return false;if(mkS.has(k))return true;
-    for(const w of mkS){if(w.length>=5&&(k.startsWith(w)||w.startsWith(k)))return true}return false});
-  renderTrRow($('#myRow'),$('#myH'),mine,seen,ov);
-  [['ar','#trAr','#trH'],['fx','#trFx','#trH2']].forEach(([k,rid,hid])=>{
-    renderTrRow($(rid),$(hid),base.filter(x=>(ov[trKey(x)]||x.k)===k),seen,ov)});
+function trEligibleList(){
+  const ok=new Set(trSources().filter(s=>siteVisible(s)&&kidsOk(s)).map(s=>s.id));
+  return TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid));
 }
-function renderTrRow(row,h,l,seen,ov){
+// does this site feed this category? what he picked by hand wins, otherwise the count from its own homepage decides
+function trContributes(sid,cat,min){
+  const s=siteById(sid);if(!s)return false;
+  if(s.cats&&typeof s.cats==='object')return !!s.cats[cat];
+  return (((TR.stats||{})[sid]||{})[cat]||0)>=min;
+}
+function trCatList(cat,base){
+  const st=TR.stats||{},w=sid=>(st[sid]||{})[cat]||0;
+  const build=min=>base.filter(x=>trCatOf(x)===cat&&trContributes(x.sid,cat,min));
+  let arr=build(2);if(arr.length<5)arr=build(1);   // a thin category still shows: drop the "at least two" rule
+  // the site strongest in this category comes first, so on a repeated title its card is the one that stays
+  return arr.map((x,i)=>[x,i]).sort((a,b)=>w(b[0].sid)-w(a[0].sid)||a[1]-b[1]).map(o=>o[0]);
+}
+// one card per title, and no more than `cap` from any one site, so a row never turns into one site's shelf
+function trDedup(list,seen,opt){
+  opt=opt||{};const per={},out=[],cap=opt.cap||8,max=opt.max||24;
+  for(const x of list){
+    if(out.length>=max)break;
+    const kk=myKey(x.t)||trSKey(x);
+    if(!kk||seen.has(kk))continue;
+    if((per[x.sid]||0)>=cap)continue;
+    per[x.sid]=(per[x.sid]||0)+1;seen.add(kk);out.push(x);
+  }
+  return out;
+}
+// genre chips under a category row, only for the genres its own cards carry
+function renderGF(sel,cat,list){
+  const box=$(sel);if(!box)return;
+  const cnt={};list.forEach(x=>(x.g||[]).forEach(g=>cnt[g]=(cnt[g]||0)+1));
+  const keys=Object.keys(cnt).filter(k=>cnt[k]>=2),cur=(UI.gf||{})[cat]||'';
+  if(!keys.length){box.hidden=true;box.innerHTML='';return}
+  box.hidden=false;
+  box.innerHTML='<button class="hbtn'+(cur?'':' red')+'" data-nav data-g="">الكل</button>'+
+    keys.map(k=>'<button class="hbtn'+(cur===k?' red':'')+'" data-nav data-g="'+k+'">'+esc(TR_GN[k]||k)+'</button>').join('');
+  box.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{
+    UI.gf=UI.gf||{};UI.gf[cat]=b.dataset.g;saveUI();renderTrend();
+    const nb=$(sel)&&$(sel).querySelector('[data-g="'+b.dataset.g+'"]');if(nb)nb.focus({preventScroll:true})});
+}
+function fillRow(row,h,l,opt){
+  opt=opt||{};
   row.innerHTML='';row._loop=false;
-  l=l.filter(x=>{const kk=trSKey(x);if(seen.has(kk))return false;seen.add(kk);return true});
-  row.hidden=h.hidden=!l.length;if(!l.length)return;
+  row.hidden=h.hidden=!l.length;
+  if(!l.length)return;
   row._half=null;   // content changed: the loop's width is measured again on the next tick
   const mk=dup=>{const fr=document.createDocumentFragment();l.forEach(x=>{
-    const t=tileEl({name:x.t,url:x.u,icon:x.i,sub:x.sn,cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:(ov[trKey(x)]||x.k),key:trKey(x)})});
+    const t=tileEl({name:x.t,url:x.u,icon:x.i,src:opt.badge?x.sn:'',sub:opt.sub?x.sn:'',cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:trCatOf(x),key:trKey(x)})});
     t.classList.add('pst');t.onclick=()=>{if(siteById(x.sid))visit(x.sid,true)};
     if(dup){t.classList.add('dup');t.removeAttribute('data-nav');t.tabIndex=-1;t.setAttribute('aria-hidden','true')}
     fr.appendChild(t)});row.appendChild(fr)};
   mk(false);
-  if(row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
+  if(!UI.perf&&row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
+}
+function renderTrend(){
+  const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter;
+  const base=hide?[]:trEligibleList();
+  // مسلسلاتك: new cards from his sites that belong to a series already in تكملة المشاهدة
+  const mkS=mySeriesKeys();
+  const mine=base.filter(x=>{const k=myKey(x.t);if(k.length<4)return false;if(mkS.has(k))return true;
+    for(const w of mkS){if(w.length>=5&&(k.startsWith(w)||w.startsWith(k)))return true}return false});
+  const mySeen=new Set();
+  fillRow($('#myRow'),$('#myH'),trDedup(mine,mySeen,{cap:6,max:20}),{sub:1});
+  // one mixed trend row: عربي وأجنبي في صف واحد
+  fillRow($('#trRow'),$('#trH'),trDedup(base,new Set(mySeen),{cap:8,max:30}),{badge:1});
+  const catSeen=new Set();   // the four rows share one list: a title sits in one category only
+  CATS.forEach(c=>{
+    const cat=c[0],all=trCatList(cat,base);
+    renderGF(c[3],cat,all);
+    const sel=(UI.gf||{})[cat]||'';
+    const f=sel?all.filter(x=>(x.g||[]).indexOf(sel)>=0):all;
+    fillRow($(c[2]),$(c[1]),trDedup(f,catSeen,{cap:6,max:24}),{badge:1});
+  });
+}
+// عرض الكل: the whole row as one big grid
+function openAllRow(cat){
+  const base=trEligibleList();
+  let list=cat==='trend'?trDedup(base,new Set(),{cap:24,max:120}):trDedup(trCatList(cat,base),new Set(),{cap:99,max:120});
+  const sel=(UI.gf||{})[cat]||'';
+  if(cat!=='trend'&&sel)list=list.filter(x=>(x.g||[]).indexOf(sel)>=0);
+  openModal('<h3>'+esc(cat==='trend'?'🔥 الجديد والترند':(CAT_T[cat]||''))+(list.length?' <small>('+list.length+')</small>':'')+'</h3>'+
+    (list.length?'<div class="mxgrid" id="agx"></div>':'<div class="empty">لسه مفيش حاجة هنا — التطبيق بيجيبها من مواقعك لوحده.</div>')+
+    '<div class="acts"><button class="fbtn" id="cc" data-nav>إغلاق</button></div>');
+  $('#box').classList.add('wide');
+  const g=$('#agx');
+  if(g)list.forEach(x=>{const t=tileEl({name:x.t,url:x.u,icon:x.i,src:x.sn,cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:trCatOf(x),key:trKey(x)})});
+    t.onclick=()=>{if(siteById(x.sid))visit(x.sid,true)};g.appendChild(t)});
+  $('#cc').onclick=closeModal;
+  if(g)setTimeout(()=>{const f=g.querySelector('.tile');f&&f.focus({preventScroll:true})},60);
+}
+function openCatPick(x){
+  openModal('<h3>🗂 '+esc(x.title)+'</h3><div class="hint">اختار القسم اللي الكارت يظهر فيه.</div>'+
+    CATS.map(c=>'<button class="fbtn'+(trCatOf({t:x.title,cat:''})===c[0]?' red':'')+'" data-nav data-c="'+c[0]+'" style="display:block;width:100%;margin-top:8px">'+esc(CAT_T[c[0]])+'</button>').join('')+
+    '<div class="acts"><button class="fbtn" id="cc" data-nav>إغلاق</button></div>');
+  $('#cc').onclick=closeModal;
+  $('#box').querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{UI.trk=UI.trk||{};UI.trk[x.key]=b.dataset.c;saveUI();closeModal();trSig='';render()});
 }
 let trLast=0,trFrame=0;
 const trHalf=r=>{const f=r.querySelector('.tile:not(.dup)'),d=r.querySelector('.tile.dup');return f&&d?Math.abs(d.offsetLeft-f.offsetLeft):0};
 function trPaused(r){return !!(r._h||r._tt||Date.now()-(r._touch||0)<3500||r.contains(document.activeElement)||$('#modal').classList.contains('open')||document.hidden)}
 function trTick(ts){
-  const dt=Math.min(64,ts-(trLast||ts));trLast=ts;trFrame=(trFrame+1)%15;
-  ['#myRow','#trAr','#trFx','#matchRow'].forEach(id=>{const r=$(id);if(r.hidden||!r._loop)return;
+  const dt=Math.min(64,ts-(trLast||ts));trLast=ts;
+  if(UI.perf){requestAnimationFrame(trTick);return}   // performance mode: the rows hold still and you scroll them yourself
+  trFrame=(trFrame+1)%15;
+  document.querySelectorAll('.row.tr').forEach(r=>{if(r.hidden||!r._loop)return;
     if(trFrame===0){const b=r.getBoundingClientRect();r._vis=!(b.bottom<0||b.top>innerHeight)}   // the position check runs ~4 times a second, not every frame
     if(r._vis===false||trPaused(r)){r._a=null;return}
     if(r._sg==null)r._sg=getComputedStyle(r).direction==='rtl'?-1:1;
@@ -1383,11 +1523,15 @@ function trTick(ts){
     if(r._half>50)r._a%=r._half;
     r.scrollLeft=r._sg*r._a});
   requestAnimationFrame(trTick)}
-['#myRow','#trAr','#trFx','#matchRow'].forEach(id=>{const r=$(id);
+document.querySelectorAll('.row.tr').forEach(r=>{
   r.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse')r._h=1});r.addEventListener('pointerleave',()=>{r._h=0});
   r.addEventListener('touchstart',()=>{r._tt=1},{passive:true});
   ['touchend','touchcancel'].forEach(ev=>r.addEventListener(ev,()=>{r._tt=0;r._touch=Date.now()},{passive:true}));
   r.addEventListener('wheel',()=>{r._touch=Date.now()},{passive:true})});
+// the heading of a mixed row is a button: OK opens the whole row as a grid
+document.querySelectorAll('.rhead').forEach(h=>{
+  h.addEventListener('click',()=>openAllRow(h.dataset.rk));
+  h.addEventListener('keydown',e=>{if(isOk(e)){e.preventDefault();e.stopPropagation();openAllRow(h.dataset.rk)}})});
 function openTrPick(){
   const el=sites().filter(s=>trEligible(s)&&siteVisible(s));
   if(!el.length){toast('مفيش مواقع');return}
@@ -1403,6 +1547,7 @@ $('#bk').onclick=exportData;$('#rs').onclick=importData;$('#st').onclick=openSet
 if('serviceWorker' in navigator&&location.protocol==='https:'&&!/androidplatform/.test(location.host)){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 guardInputs(document);
 applyUI();
+applyRowOrder();
 loadLocal();applyRedirects();render();setTimeout(focusBoot,1200);setTimeout(()=>trRefresh(false),2500);setInterval(()=>trRefresh(false),10*60e3);requestAnimationFrame(trTick);setTimeout(autoBackup,8000);setTimeout(checkLinks,6000);setTimeout(checkMatches,3000);setInterval(checkMatches,60e3);setInterval(checkLinks,10*60e3);renderMatches();setTimeout(()=>matchRefresh(false),4000);setInterval(()=>matchRefresh(false),20*60e3);
 setInterval(()=>{if(!$('#modal').classList.contains('open'))softRender()},60000);
 </script>
