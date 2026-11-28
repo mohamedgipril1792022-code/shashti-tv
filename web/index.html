@@ -72,6 +72,8 @@ h2 small{font-size:.55em;color:var(--mut);font-weight:400}
 .editing .warn{display:none}
 #cine{position:fixed;inset:0;z-index:-1;background-size:cover;background-position:center;filter:blur(38px) brightness(.45) saturate(1.2);transform:scale(1.25);opacity:0;transition:opacity .6s;pointer-events:none}
 #cine.on{opacity:1}
+html.perf #cine{display:none!important}
+html.perf *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 html.light #cine{filter:blur(38px) brightness(1.05) saturate(1.1)}
 html.light #cine.on{opacity:.35}
 .search .hbtn{white-space:nowrap}
@@ -1141,7 +1143,7 @@ function autoBackup(){try{
 }catch(e){}}
 /* ---------- settings: theme + text size ---------- */
 const UIK='shashti-ui';let UI={theme:'dark',zoom:1};try{Object.assign(UI,JSON.parse(localStorage.getItem(UIK)||'{}'))}catch(e){}
-function applyUI(){document.documentElement.classList.toggle('light',UI.theme==='light');document.body.style.zoom=UI.zoom;const m=document.querySelector('meta[name=theme-color]');if(m)m.content=UI.theme==='light'?'#f6f1f1':'#160e10'}
+function applyUI(){document.documentElement.classList.toggle('light',UI.theme==='light');document.documentElement.classList.toggle('perf',!!UI.perf);document.body.style.zoom=UI.zoom;const m=document.querySelector('meta[name=theme-color]');if(m)m.content=UI.theme==='light'?'#f6f1f1':'#160e10'}
 function rmState(){try{return JSON.parse(Android.remoteInfo()||'{}')}catch(e){return {}}}
 function openSettings(){
   const hasSleep=!!(window.Android&&Android.sleepTimer);let left=0;try{if(hasSleep)left=Android.sleepLeft()}catch(e){}
@@ -1150,6 +1152,7 @@ function openSettings(){
    <label>حجم الخط</label><div class="acts"><button class="fbtn" data-nav data-z="0.9">صغير</button><button class="fbtn" data-nav data-z="1">عادي</button><button class="fbtn" data-nav data-z="1.15">كبير</button></div>
    <label>تكملة المشاهدة</label><div class="acts"><button class="fbtn" data-nav data-eps="0">بلاطة لكل مسلسل</button><button class="fbtn" data-nav data-eps="1">كل الحلقات</button></div>
    <label>الخلفية السينمائية</label><div class="acts"><button class="fbtn" data-nav data-cn="0">شغالة</button><button class="fbtn" data-nav data-cn="1">مقفولة</button></div>
+   <label>🚀 وضع الأداء (للأجهزة الضعيفة)</label><div class="acts"><button class="fbtn" data-nav data-pf="1">شغّال</button><button class="fbtn" data-nav data-pf="0">مقفول</button></div><div class="hint">بيقفل الخلفية السينمائية وكل الحركات والانتقالات — بيخلي التنقل أخف على البوكس.</div>
    <label>🔥 الجديد والترند (من مواقعك)</label><div class="acts"><button class="fbtn" data-nav data-tn="0">شغّال</button><button class="fbtn" data-nav data-tn="1">مقفول</button><button class="fbtn" data-nav id="trnow">🔄 حدّث دلوقتي</button><button class="fbtn" data-nav id="trpick">☑ اختار المواقع</button></div>
    ${hasSleep?'<label>😴 مؤقّت النوم'+(left>0?' — فاضل '+left+' د':'')+'</label><div class="acts"><button class="fbtn" data-nav data-sl="30">٣٠ د</button><button class="fbtn" data-nav data-sl="60">ساعة</button><button class="fbtn" data-nav data-sl="90">ساعة ونص</button><button class="fbtn del" data-nav data-sl="0">إلغاء</button></div><div class="hint">بعد المدة التطبيق يوقّف الفيديو ويرجع للرئيسية. اضبطه قبل ما تفتح الموقع.</div>':''}
    ${window.Android&&Android.setAutoNext?'<label>▶ الحلقة التالية تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-an="1">شغّالة</button><button class="fbtn" data-nav data-an="0">مقفولة</button></div><div class="hint">لما الحلقة تخلص، اللي بعدها تفتح لوحدها بعد ٨ ثواني. Back بيلغيها.</div>':''}
@@ -1161,6 +1164,7 @@ function openSettings(){
   const bx=$('#box');
   const mark=()=>{bx.querySelectorAll('[data-th]').forEach(b=>b.classList.toggle('red',b.dataset.th===UI.theme));bx.querySelectorAll('[data-z]').forEach(b=>b.classList.toggle('red',+b.dataset.z===+UI.zoom));
     bx.querySelectorAll('[data-eps]').forEach(b=>b.classList.toggle('red',(b.dataset.eps==='1')===!!UI.allEps));bx.querySelectorAll('[data-cn]').forEach(b=>b.classList.toggle('red',(b.dataset.cn==='1')===!!UI.nocine));
+    bx.querySelectorAll('[data-pf]').forEach(b=>b.classList.toggle('red',(b.dataset.pf==='1')===!!UI.perf));
     let an=false;try{an=!!(window.Android&&Android.autoNext&&Android.autoNext())}catch(e){}bx.querySelectorAll('[data-an]').forEach(b=>b.classList.toggle('red',(b.dataset.an==='1')===an));
     let ia=false;try{ia=!!(window.Android&&Android.introAuto&&Android.introAuto())}catch(e){}bx.querySelectorAll('[data-ia]').forEach(b=>b.classList.toggle('red',(b.dataset.ia==='1')===ia));
     bx.querySelectorAll('[data-rm]').forEach(b=>b.classList.toggle('red',(b.dataset.rm==='1')===rmState().on))};
@@ -1169,6 +1173,7 @@ function openSettings(){
   bx.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{UI.zoom=+b.dataset.z;saveUI();applyUI();mark()});
   bx.querySelectorAll('[data-eps]').forEach(b=>b.onclick=()=>{UI.allEps=b.dataset.eps==='1';saveUI();mark();render()});
   bx.querySelectorAll('[data-cn]').forEach(b=>b.onclick=()=>{UI.nocine=b.dataset.cn==='1';saveUI();mark();if(UI.nocine)setCine('')});
+  bx.querySelectorAll('[data-pf]').forEach(b=>b.onclick=()=>{UI.perf=b.dataset.pf==='1';saveUI();applyUI();mark();if(UI.perf)setCine('');toast(UI.perf?'🚀 وضع الأداء شغّال':'اتقفل وضع الأداء')});
   bx.querySelectorAll('[data-tn]').forEach(b=>b.classList.toggle('red',(b.dataset.tn==='1')===!!UI.notrend));
   bx.querySelectorAll('[data-tn]').forEach(b=>b.onclick=()=>{UI.notrend=b.dataset.tn==='1';saveUI();bx.querySelectorAll('[data-tn]').forEach(x=>x.classList.toggle('red',(x.dataset.tn==='1')===!!UI.notrend));trSync();if(!UI.notrend)trRefresh(true)});
   $('#trpick').onclick=openTrPick;
