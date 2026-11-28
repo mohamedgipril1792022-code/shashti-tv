@@ -191,6 +191,8 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
   <div class="row" id="visitRow" hidden></div>
   <h2 id="laterH" hidden>⏳ هتفرج عليه بعدين</h2>
   <div class="row wide" id="laterRow" hidden></div>
+  <h2 id="myH" hidden>📺 مسلسلاتك <small>حلقات جديدة من اللي بتتفرج عليه</small></h2>
+  <div class="row tr" id="myRow" hidden></div>
   <h2 id="trH" hidden>🔥 الجديد والترند <small>عربي</small></h2>
   <div class="row tr" id="trAr" hidden></div>
   <h2 id="trH2" hidden>🔥 الجديد والترند <small>أجنبي</small></h2>
@@ -407,7 +409,7 @@ function renderChips(){
 function qMatch(...fields){const q=($('#q').value||'').trim().toLowerCase();if(!q)return true;return fields.some(f=>String(f||'').toLowerCase().includes(q))}
 /* a refresh rebuilds every tile; the focused tile would be lost (the next press went to the first button, «＋») or a tap that was in progress would be swallowed.
    So: the focus is put back on the same tile, and refreshes that come from the background wait until you stop touching the screen. */
-const FOCUS_HOSTS='#chips,#contRow,#laterRow,#trAr,#trFx,#visitRow,#siteGrid,#matchRow';
+const FOCUS_HOSTS='#chips,#contRow,#laterRow,#myRow,#trAr,#trFx,#visitRow,#siteGrid,#matchRow';
 function tileKey(a){const n=a.querySelector&&a.querySelector('.cap b,.name');return (a.getAttribute('href')||'')+'|'+(n?n.textContent:(a.textContent||'').trim().slice(0,40))}
 function focusKey(){const a=document.activeElement;if(!a||a===document.body||!a.closest)return null;const h=a.closest(FOCUS_HOSTS);if(!h||h.closest('#modal'))return null;return {h:h.id,k:tileKey(a)}}
 function focusBoot(){const a=document.activeElement;if(a&&a!==document.body)return;if($('#modal').classList.contains('open'))return;
@@ -1230,6 +1232,14 @@ const trSources=()=>{const el=sites().filter(trEligible),pick=el.filter(s=>s.tr=
 const TR_AR=/عربي|عربى|مصري|مصرى|خليجي|خليجى|سوري|لبناني|رمضان|مسرحية|arab|egypt/i,TR_FX=/مترجم|اجنبي|أجنبي|اجنبى|foreign|english|netflix|hollywood|كوري|تركي|هندي|انمي|أنمي|anime|مدبلج|korean|turkish|dubbed/i;
 const TR_NOISE=/(?:الحلقة|حلقة|episode|ep)\s*\d+|s\d{1,2}\s*e\d{1,3}|مترجم|مدبلج|كامل(?:ة)?|اون\s*لاين|online|hd|4k|2160p|1080p|720p|480p|bluray|blu[- ]?ray|web[- ]?dl|webrip|dvdrip|hdtv|x264|x265|hevc|حصري(?:ا)?|بجودة\s*عالية/gi;
 const trSKey=x=>trKey({t:String(x.t||'').replace(TR_NOISE,' ')});   // series-level: all episodes and quality variants of one title share a key
+const TR_SEASON=/(?:الموسم|الجزء|موسم|جزء|season|part)\s*[\d٠-٩]+/gi;
+// one normal form for "which show is this": no episode/season markers, no quality tags, no leading نوع word, no trailing site name
+const myKey=t=>{let s=String(t||'').replace(TR_NOISE,' ');s=seriesName(s).replace(TR_SEASON,' ').replace(/^(?:مسلسل|فيلم|برنامج|مسرحية|انمي|أنمي)\s+/,'');
+  const cut=s.split(/\s[-|–—]\s/);if(cut.length>1&&cut[0].trim().length>=4)s=cut[0];
+  return trKey({t:s})};
+function mySeriesKeys(){const set=new Set();
+  [...items.values()].filter(o=>o.kind==='cont').forEach(c=>{const k=myKey(c.title);if(k.length>=4)set.add(k)});
+  return set}
 const trKey=x=>x.t.toLowerCase().replace(/[\u064B-\u0652\u0670]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim().slice(0,60);   // normalized: the same title written two ways counts once
 function trKind(text,s){
   if(TR_AR.test(text))return 'ar';if(TR_FX.test(text))return 'fx';
@@ -1304,27 +1314,35 @@ function trSync(){
 function renderTrend(){
   const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter,ov=UI.trk||{};
   const ok=new Set(trSources().filter(kidsOk).map(s=>s.id));
-  const seen=new Set();   // shared across both rows: a title already shown in عربي never repeats in أجنبي
+  const seen=new Set();   // shared across all three rows: a title shown once never repeats in another row
+  const base=hide?[]:TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid));
+  // مسلسلاتك: new cards from his sites that belong to a series already in تكملة المشاهدة
+  const mkS=mySeriesKeys();
+  const mine=base.filter(x=>{const k=myKey(x.t);if(k.length<4)return false;if(mkS.has(k))return true;
+    for(const w of mkS){if(w.length>=5&&(k.startsWith(w)||w.startsWith(k)))return true}return false});
+  renderTrRow($('#myRow'),$('#myH'),mine,seen,ov);
   [['ar','#trAr','#trH'],['fx','#trFx','#trH2']].forEach(([k,rid,hid])=>{
-    const row=$(rid),h=$(hid);row.innerHTML='';row._loop=false;
-    const l=hide?[]:TR.list.filter(x=>ok.has(x.sid)&&siteOk(x.sid)&&(ov[trKey(x)]||x.k)===k).filter(x=>{const kk=trSKey(x);if(seen.has(kk))return false;seen.add(kk);return true});
-    row.hidden=h.hidden=!l.length;if(!l.length)return;
-    row._half=null;   // content changed: the loop's width is measured again on the next tick
-    const mk=dup=>{const fr=document.createDocumentFragment();l.forEach(x=>{
-      const t=tileEl({name:x.t,url:x.u,icon:x.i,sub:x.sn,cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:(ov[trKey(x)]||x.k),key:trKey(x)})});
-      t.classList.add('pst');t.onclick=()=>{if(siteById(x.sid))visit(x.sid,true)};
-      if(dup){t.classList.add('dup');t.removeAttribute('data-nav');t.tabIndex=-1;t.setAttribute('aria-hidden','true')}
-      fr.appendChild(t)});row.appendChild(fr)};
-    mk(false);
-    if(row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
-  });
+    renderTrRow($(rid),$(hid),base.filter(x=>(ov[trKey(x)]||x.k)===k),seen,ov)});
+}
+function renderTrRow(row,h,l,seen,ov){
+  row.innerHTML='';row._loop=false;
+  l=l.filter(x=>{const kk=trSKey(x);if(seen.has(kk))return false;seen.add(kk);return true});
+  row.hidden=h.hidden=!l.length;if(!l.length)return;
+  row._half=null;   // content changed: the loop's width is measured again on the next tick
+  const mk=dup=>{const fr=document.createDocumentFragment();l.forEach(x=>{
+    const t=tileEl({name:x.t,url:x.u,icon:x.i,sub:x.sn,cap:true,menu:()=>tileMenu('trend',{title:x.t,url:x.u,siteId:x.sid,icon:x.i,k:(ov[trKey(x)]||x.k),key:trKey(x)})});
+    t.classList.add('pst');t.onclick=()=>{if(siteById(x.sid))visit(x.sid,true)};
+    if(dup){t.classList.add('dup');t.removeAttribute('data-nav');t.tabIndex=-1;t.setAttribute('aria-hidden','true')}
+    fr.appendChild(t)});row.appendChild(fr)};
+  mk(false);
+  if(row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
 }
 let trLast=0,trFrame=0;
 const trHalf=r=>{const f=r.querySelector('.tile:not(.dup)'),d=r.querySelector('.tile.dup');return f&&d?Math.abs(d.offsetLeft-f.offsetLeft):0};
 function trPaused(r){return !!(r._h||r._tt||Date.now()-(r._touch||0)<3500||r.contains(document.activeElement)||$('#modal').classList.contains('open')||document.hidden)}
 function trTick(ts){
   const dt=Math.min(64,ts-(trLast||ts));trLast=ts;trFrame=(trFrame+1)%15;
-  ['#trAr','#trFx','#matchRow'].forEach(id=>{const r=$(id);if(r.hidden||!r._loop)return;
+  ['#myRow','#trAr','#trFx','#matchRow'].forEach(id=>{const r=$(id);if(r.hidden||!r._loop)return;
     if(trFrame===0){const b=r.getBoundingClientRect();r._vis=!(b.bottom<0||b.top>innerHeight)}   // the position check runs ~4 times a second, not every frame
     if(r._vis===false||trPaused(r)){r._a=null;return}
     if(r._sg==null)r._sg=getComputedStyle(r).direction==='rtl'?-1:1;
@@ -1334,7 +1352,7 @@ function trTick(ts){
     if(r._half>50)r._a%=r._half;
     r.scrollLeft=r._sg*r._a});
   requestAnimationFrame(trTick)}
-['#trAr','#trFx','#matchRow'].forEach(id=>{const r=$(id);
+['#myRow','#trAr','#trFx','#matchRow'].forEach(id=>{const r=$(id);
   r.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse')r._h=1});r.addEventListener('pointerleave',()=>{r._h=0});
   r.addEventListener('touchstart',()=>{r._tt=1},{passive:true});
   ['touchend','touchcancel'].forEach(ev=>r.addEventListener(ev,()=>{r._tt=0;r._touch=Date.now()},{passive:true}));
