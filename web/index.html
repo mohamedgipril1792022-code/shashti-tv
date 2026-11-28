@@ -294,8 +294,8 @@ async function egFetch(){
       hi:small(e.strHomeTeamBadge||''),ai:small(e.strAwayTeamBadge||''),
       hs:state==='post'?String(e.intHomeScore==null?'':e.intHomeScore):'',as:state==='post'?String(e.intAwayScore==null?'':e.intAwayScore):'',
       state,clock:'',when,eg:1,link:''})};
-  (nx&&nx.events||[]).forEach(e=>{const w=+new Date((e.strTimestamp||'')+'Z');if(w&&w-now<=7*864e5)mk(e,'pre')});
-  (ps&&ps.events||[]).forEach(e=>{const w=+new Date((e.strTimestamp||'')+'Z');if(w&&now-w<=26*36e5)mk(e,'post')});
+  (nx&&nx.events||[]).forEach(e=>{const w=+new Date((e.strTimestamp||'')+'Z');if(w&&w-now<=14*864e5)mk(e,'pre')});
+  (ps&&ps.events||[]).forEach(e=>{const w=+new Date((e.strTimestamp||'')+'Z');if(w&&now-w<=96*36e5)mk(e,'post')});
   return out}
 async function matchRefresh(force){
   if(!force&&Date.now()-MATCH.at<20*60e3&&MATCH.list.length){renderMatches();return}
