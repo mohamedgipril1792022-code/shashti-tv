@@ -275,7 +275,7 @@ const MATCH_LEAGUES=[
 const MATCH_K='sajo-matches';
 let MATCH={at:0,list:[]};try{MATCH=JSON.parse(localStorage.getItem(MATCH_K)||'{"at":0,"list":[]}')}catch(e){}
 const EG_CLUBS=/ahly|zamalek|pyramids|ismaily|masry|ceramica|smouha|national bank|enppi|petrojet|haras|mahalla|wadi degla|ghazl|modern sport|future fc|zamalek|islamia/i;
-const TEAM_AR=[['pyramids','بيراميدز'],['zamalek','الزمالك'],['al ahly','الأهلي'],['ahly','الأهلي'],['ismaily','الإسماعيلي'],['masry','المصري'],['smouha','سموحة'],['ceramica','سيراميكا كليوباترا'],['national bank','البنك الأهلي'],['enppi','إنبي'],['petrojet','بتروجت'],['haras','حرس الحدود'],['mahalla','غزل المحلة'],['ghazl','غزل المحلة'],['wadi degla','وادي دجلة'],['modern sport','مودرن سبورت'],['future fc','فيوتشر'],['zed','زد'],['pharco','فاركو'],['gaish','طلائع الجيش'],['mokawloon','المقاولون'],['arab contractors','المقاولون'],['gouna','الجونة'],['el gouna','الجونة'],
+const TEAM_AR=[['pyramids','بيراميدز'],['zamalek','الزمالك'],['al ahly','الأهلي'],['ahly','الأهلي'],['ismaily','الإسماعيلي'],['masry','المصري'],['smouha','سموحة'],['ceramica','سيراميكا كليوباترا'],['national bank','البنك الأهلي'],['enppi','إنبي'],['petrojet','بتروجت'],['haras','حرس الحدود'],['mahalla','غزل المحلة'],['ghazl','غزل المحلة'],['wadi degla','وادي دجلة'],['modern sport','مودرن سبورت'],['future fc','فيوتشر'],['zed','زد'],['pharco','فاركو'],['gaish','طلائع الجيش'],['mokawloon','المقاولون'],['arab contractors','المقاولون'],['gouna','الجونة'],['el gouna','الجونة'],['al ittihad','الاتحاد السكندري'],['ittihad','الاتحاد السكندري'],['dakhleya','الداخلية'],['baladeya','بلدية المحلة'],['baladiyat','بلدية المحلة'],['tanta','طنطا'],['aswan','أسوان'],['aluminium','الألومنيوم'],['dikernis','دكرنس'],['proxy','بروكسي'],['el seka','سكة الحديد'],['ismailia electricity','كهرباء الإسماعيلية'],['kahraba','الكهرباء'],
 ['esperance','الترجي'],['es tunis','الترجي'],['club africain','الإفريقي'],['c. africain','الإفريقي'],['etoile','النجم الساحلي'],['sahel','النجم الساحلي'],['wydad','الوداد'],['raja','الرجاء'],['far rabat','الجيش الملكي'],['as far','الجيش الملكي'],['maghreb de fes','المغرب الفاسي'],['maghreb fez','المغرب الفاسي'],['maghreb','المغرب الفاسي'],['mamelodi','ماميلودي صن داونز'],['sundowns','ماميلودي صن داونز'],['young africans','يانغ أفريكانز'],['simba','سيمبا'],['mc alger','مولودية الجزائر'],['mouloudia','مولودية الجزائر'],['usm alger','اتحاد العاصمة'],['belouizdad','شباب بلوزداد'],['kabylie','شبيبة القبائل'],['constantine','قسنطينة'],['mazembe','مازيمبي'],['petro de luanda','بيترو دي لواندا'],['petro atletico','بيترو أتلتيكو'],['hilal omdurman','الهلال السوداني'],['al hilal','الهلال السوداني'],['mimosas','أسيك ميموزا'],['asec','أسيك ميموزا'],['stade malien','الملعب المالي'],['orlando pirates','أورلاندو بايرتس'],['kaizer chiefs','كايزر تشيفز'],['berkane','نهضة بركان'],['horoya','هورويا كوناكري'],['coton sport','كوتون سبورت'],['enyimba','إنييمبا'],['maniema','مانييما يونيون'],['stellenbosch','ستيلينبوش'],['sekhukhune','سيخوخوني يونايتد'],['sagrada','ساغرادا إسبيرانزا'],
 ['real madrid','ريال مدريد'],['barcelona','برشلونة'],['atletico madrid','أتلتيكو مدريد'],['sevilla','إشبيلية'],['villarreal','فياريال'],['valencia','فالنسيا'],['real sociedad','ريال سوسيداد'],['athletic','أتلتيك بلباو'],['betis','ريال بيتيس'],['girona','جيرونا'],['getafe','خيتافي'],['osasuna','أوساسونا'],['celta','سيلتا فيغو'],['mallorca','مايوركا'],['rayo','رايو فاليكانو'],['alaves','ألافيس'],['espanyol','إسبانيول'],['levante','ليفانتي'],['elche','إلتشي'],['oviedo','ريال أوفييدو'],['las palmas','لاس بالماس'],['valladolid','بلد الوليد'],['leganes','ليغانيس'],
 ['arsenal','أرسنال'],['liverpool','ليفربول'],['manchester city','مانشستر سيتي'],['man city','مانشستر سيتي'],['manchester united','مانشستر يونايتد'],['man utd','مانشستر يونايتد'],['chelsea','تشيلسي'],['tottenham','توتنهام'],['spurs','توتنهام'],['newcastle','نيوكاسل يونايتد'],['aston villa','أستون فيلا'],['brighton','برايتون'],['west ham','وست هام'],['brentford','برينتفورد'],['crystal palace','كريستال بالاس'],['fulham','فولهام'],['everton','إيفرتون'],['wolverhampton','ولفرهامبتون'],['wolves','ولفرهامبتون'],['nottingham','نوتنغهام فورست'],['bournemouth','بورنموث'],['leicester','ليستر سيتي'],['ipswich','إيبسويتش تاون'],['southampton','ساوثهامبتون'],['leeds','ليدز يونايتد'],['burnley','بيرنلي'],['sunderland','سندرلاند'],
@@ -284,6 +284,19 @@ function arTeam(n){if(!n)return n;const s=n.toLowerCase().normalize('NFD').repla
   for(let i=0;i<TEAM_AR.length;i++)if(s.includes(TEAM_AR[i][0]))return TEAM_AR[i][1];return n}
 async function fetchJson(u){const ac=new AbortController(),t=setTimeout(()=>ac.abort(),9000);
   try{const r=await fetch(u,{signal:ac.signal});return r.ok?await r.json():null}catch(e){return null}finally{clearTimeout(t)}}
+// the Egyptian league isn't on ESPN's free scoreboard: TheSportsDB's free key carries it (CORS-open, no signup)
+const TSDB='https://www.thesportsdb.com/api/v1/json/123/';
+const small=u=>u?u.replace(/\.(png|jpg|jpeg)$/i,'.$1/small'):u;
+async function egFetch(){
+  const [nx,ps]=await Promise.all([fetchJson(TSDB+'eventsnextleague.php?id=4829'),fetchJson(TSDB+'eventspastleague.php?id=4829')]);
+  const out=[],now=Date.now(),mk=(e,state)=>{const when=+new Date((e.strTimestamp||'')+'Z');if(!when)return;
+    out.push({id:'tsdb'+e.idEvent,lg:'الدوري المصري',hn:e.strHomeTeam||'',an:e.strAwayTeam||'',
+      hi:small(e.strHomeTeamBadge||''),ai:small(e.strAwayTeamBadge||''),
+      hs:state==='post'?String(e.intHomeScore==null?'':e.intHomeScore):'',as:state==='post'?String(e.intAwayScore==null?'':e.intAwayScore):'',
+      state,clock:'',when,eg:1,link:''})};
+  (nx&&nx.events||[]).forEach(e=>{const w=+new Date((e.strTimestamp||'')+'Z');if(w&&w-now<=7*864e5)mk(e,'pre')});
+  (ps&&ps.events||[]).forEach(e=>{const w=+new Date((e.strTimestamp||'')+'Z');if(w&&now-w<=26*36e5)mk(e,'post')});
+  return out}
 async function matchRefresh(force){
   if(!force&&Date.now()-MATCH.at<20*60e3&&MATCH.list.length){renderMatches();return}
   const res=await Promise.allSettled(MATCH_LEAGUES.map(([slug])=>fetchJson('https://site.api.espn.com/apis/site/v2/sports/soccer/'+slug+'/scoreboard')));
@@ -301,10 +314,11 @@ async function matchRefresh(force){
         eg:EG_CLUBS.test(H.team.displayName+' '+A.team.displayName)?1:0,
         link:(e.links&&e.links[0]&&e.links[0].href)||''});
     }catch(_){}})});
+  out.push(...await egFetch());
   if(!out.length){renderMatches();return}                      // every fetch failed: keep the old list
   const rank=m=>m.state==='in'?0:m.state==='pre'?1:2;
   out.sort((a,b)=>rank(a)-rank(b)||(b.eg-a.eg)||(a.state==='post'?b.when-a.when:a.when-b.when));
-  MATCH={at:now,list:out.slice(0,14)};
+  MATCH={at:now,list:out.slice(0,16)};
   try{localStorage.setItem(MATCH_K,JSON.stringify(MATCH))}catch(e){}
   renderMatches();
 }
