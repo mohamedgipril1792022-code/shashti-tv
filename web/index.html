@@ -237,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٤١',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
+const VERSION={n:'١٤٢',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1218,6 +1218,25 @@ function rowOrder(){const o=(UI.rowOrder||[]).filter(k=>ROW_DEF.indexOf(k)>=0);R
 function applyRowOrder(){const m=$('#main');if(!m)return;rowOrder().forEach(k=>{const el=m.querySelector('[data-rk="'+k+'"]');if(el)m.appendChild(el)})}
 function applyUI(){document.documentElement.classList.toggle('light',UI.theme==='light');document.documentElement.classList.toggle('perf',!!UI.perf);document.body.style.zoom=UI.zoom;const m=document.querySelector('meta[name=theme-color]');if(m)m.content=UI.theme==='light'?'#f6f1f1':'#160e10'}
 function rmState(){try{return JSON.parse(Android.remoteInfo()||'{}')}catch(e){return {}}}
+// 🔬 تشخيص المصادر: كل جلب بيتسجل، وكل تحديث بيسجّل بدايته ونهايته وغلطته — بيظهر هنا حتى لو الصفوف فاضية
+function trDiagSave(){try{localStorage.setItem('sajo-trdiag',JSON.stringify({log:TRLOG.slice(-80),stat:TRSTAT}))}catch(e){}}
+function trDiagRender(){
+  const el=$('#trdiag');if(!el)return;
+  const CATN={sar:'مسلسلات عربية',mar:'أفلام عربية',sfr:'مسلسلات أجنبية',mfr:'أفلام أجنبية',str:'تركية'};
+  const t=at=>at?new Date(at).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'—';
+  let h='<b>🔬 تشخيص المصادر</b><br>';
+  if(!TRSTAT.at)h+='مفيش تحديث اشتغل من ساعة ما فتحت التطبيق.<br>';
+  else h+='آخر تحديث بدأ '+t(TRSTAT.at)+' على '+TRSTAT.src+' مواقع — '+(trBusy?'⏳ شغّال دلوقتي…':(TRSTAT.err?'❌ وقع بخطأ: '+esc(TRSTAT.err):(TRSTAT.done?'✅ خلص '+t(TRSTAT.done):'⚠ اتلقط قبل ما يكمل')))+'<br>';
+  const byHost={};TRLOG.forEach(e=>{const hh=hostOf(e.u);(byHost[hh]=byHost[hh]||[]).push(e)});
+  trSources().forEach(s=>{
+    const hh=hostOf(s.url),logs=byHost[hh]||[],ok=logs.filter(x=>x.ok).length;
+    const st=(TR.stats||{})[s.id]||{},cs=['sar','mar','sfr','mfr','str'].filter(k=>st[k]).map(k=>CATN[k]+' '+st[k]).join('، ');
+    h+='• '+esc(s.name||hh)+': '+(logs.length?((ok?'✅ ':'❌ ')+ok+'/'+logs.length+' صفحة ردّت'):'⏳ لسه ماتجربش')+(cs?' — '+cs:'')+'<br>';
+  });
+  const cats={};(TR.list||[]).forEach(x=>cats[x.cat]=(cats[x.cat]||0)+1);
+  h+='الصفوف الحالية: '+['sar','mar','sfr','mfr','str'].map(k=>CATN[k]+' '+(cats[k]||0)).join(' · ');
+  el.innerHTML=h;
+}
 function openSettings(){
   const hasSleep=!!(window.Android&&Android.sleepTimer);let left=0;try{if(hasSleep)left=Android.sleepLeft()}catch(e){}
   openModal(`<h3>⚙ الإعدادات</h3>
@@ -1226,7 +1245,7 @@ function openSettings(){
    <label>تكملة المشاهدة</label><div class="acts"><button class="fbtn" data-nav data-eps="0">بلاطة لكل مسلسل</button><button class="fbtn" data-nav data-eps="1">كل الحلقات</button></div>
    <label>الخلفية السينمائية</label><div class="acts"><button class="fbtn" data-nav data-cn="0">شغالة</button><button class="fbtn" data-nav data-cn="1">مقفولة</button></div>
    <label>🚀 وضع الأداء (للأجهزة الضعيفة)</label><div class="acts"><button class="fbtn" data-nav data-pf="1">شغّال</button><button class="fbtn" data-nav data-pf="0">مقفول</button></div><div class="hint">بيقفل الخلفية السينمائية وكل الحركات والانتقالات — بيخلي التنقل أخف على البوكس.</div>
-   <label>🔥 الجديد والترند (من مواقعك)</label><div class="acts"><button class="fbtn" data-nav data-tn="0">شغّال</button><button class="fbtn" data-nav data-tn="1">مقفول</button><button class="fbtn" data-nav id="trnow">🔄 حدّث دلوقتي</button><button class="fbtn" data-nav id="trpick">☑ اختار المواقع</button></div><div class="hint" id="trsrc"></div>
+   <label>🔥 الجديد والترند (من مواقعك)</label><div class="acts"><button class="fbtn" data-nav data-tn="0">شغّال</button><button class="fbtn" data-nav data-tn="1">مقفول</button><button class="fbtn" data-nav id="trnow">🔄 حدّث دلوقتي</button><button class="fbtn" data-nav id="trpick">☑ اختار المواقع</button></div><div class="hint" id="trsrc"></div><div class="hint" id="trdiag" style="border-top:1px solid #4a272c;margin-top:6px;padding-top:6px;line-height:1.9"></div>
    ${hasSleep?'<label>😴 مؤقّت النوم'+(left>0?' — فاضل '+left+' د':'')+'</label><div class="acts"><button class="fbtn" data-nav data-sl="30">٣٠ د</button><button class="fbtn" data-nav data-sl="60">ساعة</button><button class="fbtn" data-nav data-sl="90">ساعة ونص</button><button class="fbtn del" data-nav data-sl="0">إلغاء</button></div><div class="hint">بعد المدة التطبيق يوقّف الفيديو ويرجع للرئيسية. اضبطه قبل ما تفتح الموقع.</div>':''}
    ${window.Android&&Android.setAutoNext?'<label>▶ الحلقة التالية تلقائيًا</label><div class="acts"><button class="fbtn" data-nav data-an="1">شغّالة</button><button class="fbtn" data-nav data-an="0">مقفولة</button></div><div class="hint">لما الحلقة تخلص، اللي بعدها تفتح لوحدها بعد ٨ ثواني. Back بيلغيها.</div>':''}
    ${window.Android&&Android.remoteInfo?'<label>📱 ريموت الموبايل</label><div class="acts"><button class="fbtn" data-nav data-rm="1">شغّال</button><button class="fbtn" data-nav data-rm="0">مقفول</button></div><div class="hint" id="rmi"></div>':''}
@@ -1253,7 +1272,8 @@ function openSettings(){
   const tse=$('#trsrc');if(tse){const all=sites().filter(s=>trEligible(s)&&siteVisible(s)),pick=all.filter(s=>s.tr===true),src=pick.length?pick:all;
     tse.textContent='الصفوف بتاخد من '+src.length+' موقع من '+all.length+(pick.length?' — انت مختار '+pick.length+' بنفسك، و«اختار المواقع» بتوسّعها':'')+'.';}
   $('#trpick').onclick=openTrPick;
-  $('#trnow').onclick=()=>{if(UI.notrend){toast('الجديد والترند مقفول');return}toast('🔄 بيجيب الجديد…');trRefresh(true)};
+  $('#trnow').onclick=async()=>{if(UI.notrend){toast('الجديد والترند مقفول');return}toast('🔄 بيجيب الجديد…');await trRefresh(true);trDiagRender();toast('خلص — النتيجة تحت في التشخيص')};
+  trDiagRender();
   const rmi=()=>{const el=$('#rmi');if(!el)return;const r=rmState();
     if(!r.on){el.textContent='';return}
     el.innerHTML=r.ip?'افتح من الموبايل (على نفس الواي فاي):<br><b dir="ltr" style="word-break:break-all">http://'+esc(r.ip)+':'+r.port+'/?k='+esc(r.pin)+'</b><br>الرقم السري '+esc(r.pin)+' — بيمنع أي حد تاني على الشبكة. <button class="fbtn" id="np" data-nav style="min-width:0;padding:4px 10px;font-size:13px">غيّر الرقم</button>':'التلفزيون مش متصل بواي فاي.';
@@ -1452,6 +1472,9 @@ function trGet(url,sig){return new Promise(res=>{
   else{const ac=new AbortController(),t=setTimeout(()=>ac.abort(),10000);
     if(sig)sig.addEventListener('abort',()=>ac.abort(),{once:true});
     fetch(url,{signal:ac.signal}).then(r=>r.ok?r.text():'').catch(()=>'').then(x=>{clearTimeout(t);res(x)})}})}
+let TRLOG=[],TRSTAT={at:0,src:0,err:'',cards:0,done:0};
+try{const d=JSON.parse(localStorage.getItem('sajo-trdiag')||'null');if(d){TRLOG=d.log||[];TRSTAT=d.stat||TRSTAT}}catch(e){}
+{const rawGet=trGet;trGet=(u,sg)=>rawGet(u,sg).then(h=>{TRLOG.push({u:String(u),ok:!!h,b:(h||'').length,at:Date.now()});if(TRLOG.length>80)TRLOG.splice(0,TRLOG.length-80);return h})}
 // a card whose page said nothing takes the site's own bias: a series site stays series, a film site stays films,
 // and if the site never says anything either, the group he filed it under decides. Returns the per-category counts.
 // what the card itself says: only an explicit Arabic or foreign marker counts, never a guess
@@ -1494,6 +1517,7 @@ async function trRefresh(force){
   trBusy=true;
   try{
     const src=trSources(),res=[];let i=0;
+    TRLOG.length=0;TRSTAT={at:Date.now(),src:src.length,err:'',cards:0,done:0};trDiagSave();
     // الصفوف تتملى موقع موقع بدل ما تستنى أبطأ موقع: كل موقع يخلص، كروته تنزل الصفوف على طول
     const commit=final=>{
       const per={sar:[],sfr:[],str:[],mar:[],mfr:[]},stats={};
@@ -1522,6 +1546,7 @@ async function trRefresh(force){
         prev.filter(x=>x.cat===k).forEach(x=>{const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);list.push(x)})});
       // الحفظ الجزئي يفضل «قديم» عشان لو البرنامج اتقفل في نص التحديث، أول فتحة تكمّله على طول
       TR={at:final?Date.now():Date.now()-40*60e3,list,stats,v:3,ver:VERSION.n};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}
+      TRSTAT.done=final?Date.now():0;TRSTAT.cards=list.length;trDiagSave();
       trSync();
       return true;
     };
@@ -1564,7 +1589,7 @@ async function trRefresh(force){
       if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
       else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
     }
-  }catch(e){}
+  }catch(e){TRSTAT.err=String(e&&e.message||e).slice(0,200);trDiagSave()}
   trBusy=false;
   const f=focusKey();trSync();restoreFocus(f);
   if(force)toast('🔥 اتحدّث');
