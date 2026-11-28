@@ -1239,7 +1239,7 @@ function openSettings(){
   bx.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>{UI.zoom=+b.dataset.z;saveUI();applyUI();mark()});
   bx.querySelectorAll('[data-eps]').forEach(b=>b.onclick=()=>{UI.allEps=b.dataset.eps==='1';saveUI();mark();render()});
   bx.querySelectorAll('[data-cn]').forEach(b=>b.onclick=()=>{UI.nocine=b.dataset.cn==='1';saveUI();mark();if(UI.nocine)setCine('')});
-  bx.querySelectorAll('[data-pf]').forEach(b=>b.onclick=()=>{UI.perf=b.dataset.pf==='1';saveUI();applyUI();mark();if(UI.perf)setCine('');toast(UI.perf?'🚀 وضع الأداء شغّال':'اتقفل وضع الأداء')});
+  bx.querySelectorAll('[data-pf]').forEach(b=>b.onclick=()=>{UI.perf=b.dataset.pf==='1';saveUI();applyUI();mark();if(UI.perf)setCine('');trSig='';trSync();toast(UI.perf?'🚀 وضع الأداء شغّال':'اتقفل وضع الأداء')});
   bx.querySelectorAll('[data-tn]').forEach(b=>b.classList.toggle('red',(b.dataset.tn==='1')===!!UI.notrend));
   bx.querySelectorAll('[data-tn]').forEach(b=>b.onclick=()=>{UI.notrend=b.dataset.tn==='1';saveUI();bx.querySelectorAll('[data-tn]').forEach(x=>x.classList.toggle('red',(x.dataset.tn==='1')===!!UI.notrend));trSync();if(!UI.notrend)trRefresh(true)});
   $('#trpick').onclick=openTrPick;
