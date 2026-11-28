@@ -235,7 +235,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣٢',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٤٠ ص'};
+const VERSION={n:'١٣٣',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٤٥ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1302,7 +1302,7 @@ window.quickAdd=function(kind,url,title,icon){
   setTimeout(()=>{const f=kind==='site'?$('#fn'):$('#cn2');f&&f.focus()},80);
 };
 /* ---------- trending: the newest cards of your own sites (Arabic / foreign), drifting by themselves ---------- */
-const TRK='sajo-trend';let TR={at:0,list:[]};try{const x=JSON.parse(localStorage.getItem(TRK)||'null');if(x&&x.list)TR=x;if(!TR.stats||TR.v!==2)TR.at=0}catch(e){}   // an old cache has no category counts: fetch again right away
+const TRK='sajo-trend';let TR={at:0,list:[]};try{const x=JSON.parse(localStorage.getItem(TRK)||'null');if(x&&x.list)TR=x;if(!TR.stats||TR.v!==3)TR.at=0}catch(e){}   // an old cache has no category counts: fetch again right away
 const TR_BAD=/youtube|youtu\.be|yalla|kora|koora|kooora|goal|sport|bein|365scores|fotmob|كور|مباريات|رياض|دوري|يوتيوب/i;
 const TR_SPEED=36;   // px per second
 const trEligible=s=>!!s.url&&!TR_BAD.test(hostOf(s.url))&&!TR_BAD.test(s.name||'')&&!TR_BAD.test(s.group||'')&&!s.matchAt;
@@ -1347,7 +1347,7 @@ function trKind(text,s){
   return lat>arb?'fx':'ar';
 }
 const TR_SKIP=/logo|icon|avatar|sprite|flag|placeholder|blank|loading|pixel|\/ads?[\/_.-]|gravatar|emoji/i;
-function trParse(html,base,s){
+function trParse(html,base,s,ty){
   let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
   const host=hostOf(base),out=[],seen=new Set();
   doc.querySelectorAll('a[href]').forEach(a=>{
@@ -1369,7 +1369,41 @@ function trParse(html,base,s){
     const sec=a.closest('section,[class*=section],[class*=block],[class*=widget],[class*=slider],[class*=box]'),sh=sec&&sec.querySelector('h1,h2,h3,h4');
     let path=href.pathname;try{path=decodeURIComponent(path)}catch(e){}
     const secT=sh?sh.textContent:'',ctx=title+' '+path+' '+secT,kk=trKind(ctx,s);
-    out.push({t:title,u:href.href,i:img,k:kk,ty:trCatBase(path,secT,title),g:trGen(ctx)});
+    out.push({t:title,u:href.href,i:img,k:kk,ty:ty||trCatBase(path,secT,title),g:trGen(ctx)});
+  });
+  return out;
+}
+/* the site's own listing pages: مسلسلات / افلام, or whatever it calls them */
+const TR_SEC=[['s',/مسلسل|مسلسلات|series|tvshows?|shows?/i],['m',/فيلم|افلام|أفلام|movies?|films?/i]];
+function trSections(html,base){
+  let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
+  const host=hostOf(base),cand={};
+  doc.querySelectorAll('a[href]').forEach(a=>{
+    let href;try{href=new URL(a.getAttribute('href'),base)}catch(e){return}
+    if(!/^https?:$/.test(href.protocol)||hostOf(href.href)!==host||href.pathname.length<4)return;
+    let path=href.pathname;try{path=decodeURIComponent(path)}catch(e){}
+    if(/\.(jpe?g|png|gif|webp|css|js|xml|mp4)$/i.test(path))return;
+    if(path===decodeURIComponent(new URL(base).pathname))return;
+    const txt=(a.textContent||'').replace(/\s+/g,' ').trim().slice(0,60),hay=txt+' '+path;
+    for(const pair of TR_SEC){
+      if(!pair[1].test(hay))continue;
+      const segs=path.split('/').filter(Boolean).length;
+      // a listing page is short and often says category/section; a card's own page is deep or ends in an id
+      const sc=(segs<=2?2:0)+(/categor|cat\/|section|genre|tag\//i.test(path)?3:0)+(txt.length<=22?2:0)-(/\/\d{3,}\/?$/.test(path)?3:0)-(segs>=4?2:0);
+      const cur=cand[pair[0]];if(!cur||sc>cur.sc)cand[pair[0]]={u:href.href,ty:pair[0],sc:sc};
+      return;
+    }
+  });
+  return ['s','m'].map(k=>cand[k]).filter(Boolean);
+}
+function trNextPage(html,base){
+  let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return ''}
+  const host=hostOf(base);let out='';
+  doc.querySelectorAll('a[href]').forEach(a=>{
+    if(out)return;
+    let href;try{href=new URL(a.getAttribute('href'),base)}catch(e){return}
+    if(hostOf(href.href)!==host)return;
+    if(/\/page\/2\/?$|[?&]paged?=2(&|$)/i.test(href.pathname+href.search))out=href.href;
   });
   return out;
 }
@@ -1394,23 +1428,40 @@ function trAssignCats(l,s){
 }
 let trBusy=false;
 async function trRefresh(force){
-  if(trBusy||UI.notrend)return;
+  if(trBusy||UI.notrend||plOpen)return;   // never pull pages while a video is playing
   if(!force&&Date.now()-TR.at<45*60e3&&TR.list.length)return;
   trBusy=true;
   try{
     const src=trSources(),res=[];let i=0;
-    const work=async()=>{while(i<src.length){const s=src[i++];const h=await trGet(s.url);res.push([s,h?trParse(h,s.url,s):[]])}};
-    await Promise.all([work(),work(),work(),work()]);
+    const one=async s=>{
+      const out=[];
+      const h=await trGet(s.url);
+      if(h)trParse(h,s.url,s).forEach(x=>{x.src='h';out.push(x)});
+      // then the site's own listing pages, so the category rows get its real catalog and not only the homepage highlights
+      const secs=h?trSections(h,s.url):[];
+      let extra=0;
+      for(const sec of secs){
+        if(extra>=2)break;
+        const html=await trGet(sec.u);extra++;
+        if(!html)continue;
+        trParse(html,sec.u,s,sec.ty).forEach(x=>{x.src='c';out.push(x)});
+        const nx=extra<3?trNextPage(html,sec.u):'';
+        if(nx&&nx!==sec.u){const h2=await trGet(nx);extra++;if(h2)trParse(h2,nx,s,sec.ty).forEach(x=>{x.src='c';out.push(x)})}
+      }
+      return out;
+    };
+    const work=async()=>{while(i<src.length){const s=src[i++];res.push([s,await one(s)])}};
+    await Promise.all([work(),work()]);   // two sites at a time: the box stays calm while the rows fill
     const per={sar:[],sfr:[],mar:[],mfr:[]},stats={};
     res.forEach(([s,l])=>{
       const c=trAssignCats(l,s);
       stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
-      ['sar','sfr','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,12).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
+      ['sar','sfr','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,14).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
     const list=[],seenU=new Set();
-    for(let n=0;n<12;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
+    for(let n=0;n<14;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
       const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
       list.push(x)}));
-    if(list.length){TR={at:Date.now(),list,stats,v:2};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
+    if(list.length){TR={at:Date.now(),list,stats,v:3};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
     else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
     else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
   }catch(e){}
@@ -1430,7 +1481,7 @@ function trEligibleList(){
 }
 // sites that lead a category by default (his call). The name or the host has to match, and his own
 // per-site pick still wins over this: ticking a category in a site's settings makes that site lead it.
-const TR_PREF=[[/توب\s*سينما|top\s*-?cinema|topcinema/i,['sfr','mfr']]];
+const TR_PREF=[[/توب\s*سينما|top\s*-?cinema|topcinema/i,['sfr','mfr']],[/عرب\s*سيد|arab\s*s?eed|arabs?eed/i,['sar','mar']]];
 function trPref(s,cat){
   if(!s)return false;
   const h=(s.name||'')+' '+(hostOf(s.url)||'');
@@ -1503,14 +1554,15 @@ function fillRow(row,h,l,opt){
 function renderTrend(){
   const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter;
   const base=hide?[]:trEligibleList();
+  const fresh=base.filter(x=>x.src!=='c');   // the trend row is what the homepage shows as new, not the whole catalog
   // مسلسلاتك: new cards from his sites that belong to a series already in تكملة المشاهدة
   const mkS=mySeriesKeys();
-  const mine=base.filter(x=>{const k=myKey(x.t);if(k.length<4)return false;if(mkS.has(k))return true;
+  const mine=fresh.filter(x=>{const k=myKey(x.t);if(k.length<4)return false;if(mkS.has(k))return true;
     for(const w of mkS){if(w.length>=5&&(k.startsWith(w)||w.startsWith(k)))return true}return false});
   const mySeen=new Set();
   fillRow($('#myRow'),$('#myH'),trMix(mine,mySeen,{cap:6,max:20}),{sub:1});
   // one mixed trend row: عربي وأجنبي في صف واحد
-  fillRow($('#trRow'),$('#trH'),trMix(base,new Set(mySeen),{cap:6,max:30}),{badge:1});
+  fillRow($('#trRow'),$('#trH'),trMix(fresh,new Set(mySeen),{cap:6,max:30}),{badge:1});
   const catSeen=new Set();   // the four rows share one list: a title sits in one category only
   CATS.forEach(c=>{
     const cat=c[0],all=trCatList(cat,base);
