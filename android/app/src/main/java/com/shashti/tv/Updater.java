@@ -65,18 +65,71 @@ public class Updater {
         }).start();
     }
 
+    private static volatile boolean aborted = false;
+
+    private interface Progress { void on(long got, long total); }
+
     private static void download(Activity a) {
-        Toast.makeText(a, "⬇ بنزّل التحديث… ثواني والتثبيت هيفتح لوحده", Toast.LENGTH_LONG).show();
+        aborted = false;
+        final android.widget.ProgressBar pb = new android.widget.ProgressBar(a, null, android.R.attr.progressBarStyleHorizontal);
+        pb.setMax(100); pb.setIndeterminate(true);
+        final AlertDialog dlg = new AlertDialog.Builder(a)
+            .setTitle("⬇ بنزّل التحديث…")
+            .setView(pb)
+            .setNegativeButton("إلغاء", (d, w) -> aborted = true)
+            .setOnCancelListener(d -> aborted = true)
+            .create();
+        // the box's OK dies until a button owns the focus: hand it to «إلغاء» as the dialog opens
+        dlg.setOnShowListener(d -> {
+            android.widget.Button b = dlg.getButton(AlertDialog.BUTTON_NEGATIVE);
+            if (b != null) { b.setFocusable(true); b.requestFocus(); b.post(b::requestFocus); }
+        });
+        dlg.show();
         new Thread(() -> {
             try {
-                byte[] apk = get(APK_URL);
+                byte[] apk = getWithProgress(APK_URL, (got, total) -> a.runOnUiThread(() -> {
+                    if (total > 0) {
+                        pb.setIndeterminate(false);
+                        int pc = (int) (got * 100 / total);
+                        pb.setProgress(pc);
+                        dlg.setTitle("⬇ بنزّل التحديث… " + pc + "%");
+                    }
+                }));
+                dlg.dismiss();
+                if (aborted) return;
                 File f = new File(a.getExternalFilesDir(null), "sajo-tv-update.apk");
                 try (FileOutputStream o = new FileOutputStream(f)) { o.write(apk); }
                 a.runOnUiThread(() -> install(a, f));
             } catch (Exception e) {
-                a.runOnUiThread(() -> Toast.makeText(a, "تعذّر تنزيل التحديث", Toast.LENGTH_LONG).show());
+                a.runOnUiThread(() -> { dlg.dismiss(); if (!aborted) Toast.makeText(a, "تعذّر تنزيل التحديث", Toast.LENGTH_LONG).show(); });
             }
         }).start();
+    }
+
+    private static byte[] getWithProgress(String url, Progress pr) throws Exception {
+        for (int hop = 0; hop < 6; hop++) {
+            if (aborted) throw new Exception("aborted");
+            HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+            c.setInstanceFollowRedirects(false);
+            c.setConnectTimeout(15000);
+            c.setReadTimeout(60000);
+            int code = c.getResponseCode();
+            if (code >= 300 && code < 400) { url = new URL(new URL(url), c.getHeaderField("Location")).toString(); c.disconnect(); continue; }
+            if (code != 200) throw new Exception("HTTP " + code);
+            long total = c.getContentLengthLong();
+            try (InputStream in = c.getInputStream()) {
+                ByteArrayOutputStream bo = new ByteArrayOutputStream();
+                byte[] b = new byte[16384]; int n; long got = 0, last = 0;
+                while ((n = in.read(b)) > 0) {
+                    if (aborted) throw new Exception("aborted");
+                    bo.write(b, 0, n); got += n;
+                    if (got - last > 65536) { last = got; pr.on(got, total); }
+                }
+                pr.on(got, total);
+                return bo.toByteArray();
+            } finally { c.disconnect(); }
+        }
+        throw new Exception("too many redirects");
     }
 
     private static File pending = null;
