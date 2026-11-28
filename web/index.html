@@ -237,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣٧',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
+const VERSION={n:'١٣٨',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1398,6 +1398,13 @@ function trCatCfg(s){
   for(const c of TR_CATALOG)if(c[0].test(h))return c[1];
   return null;
 }
+// فئة القسم من عنوان القسم نفسه («افلام عربي»، «مسلسلات اجنبي»…) — مش تخمين على الكارت
+function trSecCat(hay){const t=String(hay||'');
+  const mv=/فيلم|افلام|أفلام|movie|film/i.test(t),sr=/مسلسل|مسلسلات|series|shows?/i.test(t);
+  if(/تركي|تركى|turkish/i.test(t))return (sr||!mv)?'str':'mfr';
+  if(/مترجم|اجنبي|أجنبي|foreign/i.test(t))return (mv&&!sr)?'mfr':(sr?'sfr':'');
+  if(/عربي|عربى|arab|مصري|مصرى|خليجي/i.test(t))return (mv&&!sr)?'mar':(sr?'sar':'');
+  return ''}
 function trSections(html,base){
   let doc;try{doc=new DOMParser().parseFromString(html,'text/html')}catch(e){return[]}
   const host=hostOf(base),cand={};
@@ -1413,7 +1420,7 @@ function trSections(html,base){
       const segs=path.split('/').filter(Boolean).length;
       // a listing page is short and often says category/section; a card's own page is deep or ends in an id
       const sc=(segs<=2?2:0)+(/categor|cat\/|section|genre|tag\//i.test(path)?3:0)+(txt.length<=22?2:0)-(/\/\d{3,}\/?$/.test(path)?3:0)-(segs>=4?2:0);
-      const cur=cand[pair[0]];if(!cur||sc>cur.sc)cand[pair[0]]={u:href.href,ty:pair[0],sc:sc};
+      const cur=cand[pair[0]];if(!cur||sc>cur.sc)cand[pair[0]]={u:href.href,ty:pair[0],sc:sc,fc:trSecCat(hay)};
       return;
     }
   });
@@ -1451,7 +1458,7 @@ function trPathCat(u){let p='';try{p=decodeURIComponent(new URL(u).pathname).toL
   if(/arabic|عربي|عربى/.test(p))return mv?'mar':(sr?'sar':'');
   if(/foreign|اجنبي|أجنبي|اجنبى/.test(p))return mv?'mfr':(sr?'sfr':'');
   return ''}
-function trAssignCats(l,s){
+function trAssignCats(l,s,loose){
   let ns=0,nm=0;l.forEach(x=>{if(x.ty==='s')ns++;else if(x.ty==='m')nm++});
   const hint=(s.group||'')+' '+(s.name||'');
   const dom=ns!==nm?(ns>nm?'s':'m'):(/مسلسل|series|دراما/i.test(hint)?'s':(/فيلم|movie|افلام|أفلام/i.test(hint)?'m':'m'));
@@ -1466,8 +1473,11 @@ function trAssignCats(l,s){
     // صف «أفلام عربية» فيه فيلم أجنبي أسوأ من صف أقصر.
     const sig=trCardSig(x);
     let cat=x.fc||trPathCat(x.u);
-    if(!cat&&sig&&x.ty!=='?')cat=turk?(ty==='m'?'mfr':'str'):ty+(sig==='fx'?'fr':'ar');
-    if(cat&&/^(mar|sar)$/.test(cat)&&sig==='fx')cat='';   // «مترجم/أجنبي» في العنوان مايدخلش صف عربي أبدًا
+    if(loose)cat=cat||(turk?(ty==='m'?'mfr':'str'):ty+(sig==='fx'?'fr':'ar'));   // آخر حل: صف فاضي أسوأ من صف مش مثالي
+    else{
+      if(!cat&&sig&&x.ty!=='?')cat=turk?(ty==='m'?'mfr':'str'):ty+(sig==='fx'?'fr':'ar');
+      if(cat&&/^(mar|sar)$/.test(cat)&&sig==='fx')cat='';   // «مترجم/أجنبي» في العنوان مايدخلش صف عربي أبدًا
+    }
     x.cat=cat;if(cat)c[cat]=(c[cat]||0)+1});
   return c;
 }
@@ -1503,7 +1513,7 @@ async function trRefresh(force){
       if(cfg&&!got&&h)for(const sec of trSections(h,s.url)){
         if(sec.u===s.url)continue;
         const html=await trGet(sec.u);if(!html)continue;
-        trParse(html,sec.u,s,sec.ty).forEach(x=>{x.src='c';out.push(x)});
+        trParse(html,sec.u,s,sec.ty,sec.fc).forEach(x=>{x.src='c';out.push(x)});
       }
       return out;
     };
@@ -1514,11 +1524,23 @@ async function trRefresh(force){
       const c=trAssignCats(l,s);
       stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
       ['sar','sfr','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
+    // صف رجع فاضي خالص (موقع مارّدش أو اتغيّر): نكمله بالمنطق القديم بدل ما يختفي من الشاشة
+    const empty=['sar','sfr','str','mar','mfr'].filter(k=>!per[k].some(a=>a.length));
+    if(empty.length)res.forEach(([s,l])=>{
+      const saved=l.map(x=>x.cat);
+      trAssignCats(l,s,1);
+      empty.forEach(k=>{if(per[k].some(a=>a.length))return;
+        per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})))});
+      l.forEach((x,i)=>{x.cat=saved[i]});
+    });
     const list=[],seenU=new Set();
     for(let n=0;n<14;n++)['sar','sfr','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
       const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
       list.push(x)}));
-    if(list.length){TR={at:Date.now(),list,stats,v:3,ver:VERSION.n};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
+    if(list.length){const prev=(TR.list||[]);
+      ['sar','sfr','str','mar','mfr'].forEach(k=>{if(list.some(x=>x.cat===k))return;
+        prev.filter(x=>x.cat===k).forEach(x=>{const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);list.push(x)})});
+      TR={at:Date.now(),list,stats,v:3,ver:VERSION.n};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
     else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
     else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
   }catch(e){}
@@ -1608,6 +1630,7 @@ function fillRow(row,h,l,opt){
   mk(false);
   if(!UI.perf&&row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
 }
+const EXTRA_ROWS=0,TURK_ROW=1;   // صف الترند وصف «مسلسلاتك» مقفولين (المطلوب: قوائم الفئات بس). الصف التركي شغّال لحد ما يتقرر
 function renderTrend(){
   const hide=!!($('#q').value||'').trim()||UI.notrend||gfilter;
   const base=hide?[]:trEligibleList();
@@ -1617,11 +1640,13 @@ function renderTrend(){
   const mine=fresh.filter(x=>{const k=myKey(x.t);if(k.length<4)return false;if(mkS.has(k))return true;
     for(const w of mkS){if(w.length>=5&&(k.startsWith(w)||w.startsWith(k)))return true}return false});
   const mySeen=new Set();
-  fillRow($('#myRow'),$('#myH'),trMix(mine,mySeen,{cap:6,max:20}),{sub:1});
+  if(!EXTRA_ROWS){['#myRow','#myH','#trRow','#trH'].forEach(q=>{const e=$(q);if(e)e.hidden=1})}
+  else fillRow($('#myRow'),$('#myH'),trMix(mine,mySeen,{cap:6,max:20}),{sub:1});
   // one mixed trend row: عربي وأجنبي في صف واحد
-  fillRow($('#trRow'),$('#trH'),trMix(fresh,new Set(mySeen),{cap:6,max:30}),{badge:1});
+  if(EXTRA_ROWS)fillRow($('#trRow'),$('#trH'),trMix(fresh,new Set(mySeen),{cap:6,max:30}),{badge:1});
   const catSeen=new Set();   // the four rows share one list: a title sits in one category only
   CATS.forEach(c=>{
+    if(c[0]==='str'&&!TURK_ROW)return;
     const cat=c[0],all=trCatList(cat,base);
     renderGF(c[3],cat,all);
     const sel=(UI.gf||{})[cat]||'';
