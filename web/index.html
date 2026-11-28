@@ -148,6 +148,25 @@ html.light .fbtn.del{background:transparent;color:#d33}
 .row.tr .tile{flex:0 0 clamp(105px,10vw,165px);scroll-snap-align:none}
 .tile.capt.pst .thumb{aspect-ratio:2/3}
 .phone .row.tr .tile{flex-basis:105px}
+/* ---------- polish: glow, depth and motion that stay cheap on the box ---------- */
+body{background:radial-gradient(1100px 480px at 85% -6%,rgba(229,9,20,.08),transparent 60%),radial-gradient(900px 480px at 8% 108%,rgba(229,9,20,.05),transparent 60%),var(--bg)}
+header{box-shadow:0 2px 16px rgba(0,0,0,.4)}
+.logo{text-shadow:0 2px 20px rgba(229,9,20,.3)}
+h2::before{content:"";flex:0 0 auto;width:6px;height:.95em;border-radius:4px;background:linear-gradient(180deg,var(--red),#7a0a10);box-shadow:0 0 12px rgba(229,9,20,.45)}
+.tile:focus-visible,.tile:hover{transform:scale(1.05);box-shadow:0 0 0 3px var(--red),0 0 30px rgba(229,9,20,.4),0 12px 32px rgba(0,0,0,.6)}
+.tile.capt:focus-visible .thumb,.tile.capt:hover .thumb{transform:scale(1.04);box-shadow:0 0 0 3px var(--red),0 0 26px rgba(229,9,20,.4),0 8px 22px rgba(0,0,0,.55)}
+.mcard{transition:transform .15s,box-shadow .15s,border-color .15s}
+.mcard:focus-visible,.mcard:hover{outline:none;transform:translateY(-3px);border-color:var(--red);box-shadow:0 0 0 2px var(--red),0 0 24px rgba(229,9,20,.35),0 10px 24px rgba(0,0,0,.5)}
+.mcard .mst b.live{animation:livePulse 1.6s ease-in-out infinite}
+@keyframes livePulse{50%{opacity:.6}}
+.hbtn,.fbtn{transition:transform .15s,box-shadow .15s,background .15s,color .15s}
+.hbtn:focus-visible,.fbtn:focus-visible{transform:scale(1.05)}
+.row{scrollbar-color:#4a272c transparent}
+.row::-webkit-scrollbar{height:8px}
+.row::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px}
+.row::-webkit-scrollbar-track{background:transparent}
+body::-webkit-scrollbar{width:10px}
+body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px solid var(--bg)}
 </style>
 </head>
 <body>
@@ -176,7 +195,7 @@ html.light .fbtn.del{background:transparent;color:#d33}
   <div id="chips" hidden></div>
   <div class="grid" id="siteGrid"></div>
   <h2 id="mH" hidden>⚽ ماتشات الكورة <small>أهم الماتشات المصرية والعالمية</small></h2>
-  <div class="row" id="matchRow" hidden></div>
+  <div class="row tr" id="matchRow" hidden></div>
 </main>
 <footer><button class="hbtn" id="ab" data-nav hidden></button> <button class="hbtn" id="up" data-nav hidden>🔄 تحديث</button> <button class="hbtn" id="bk" data-nav>💾 نسخة احتياطية</button> <button class="hbtn" id="rs" data-nav>📥 استرجاع</button> <button class="hbtn" id="ar" data-nav>🗂 الأرشيف</button> <button class="hbtn" id="st" data-nav>⚙ إعدادات</button><br><button id="ver" data-nav></button></footer>
 
@@ -291,7 +310,8 @@ function renderMatches(){
   const list=MATCH.list||[];
   h.hidden=row.hidden=!list.length;
   if(!list.length)return;
-  const f=document.createDocumentFragment();
+  row._loop=false;row._half=null;   // content changed: measure the loop again on the next tick
+  const mk=dup=>{const f=document.createDocumentFragment();
   list.forEach(m=>{
     const a=document.createElement('a');a.className='mcard';a.href=m.link||'#';a.target='_blank';a.rel='noopener';a.setAttribute('data-nav','');
     const center=m.state==='pre'?'\u2066'+fmtTm(m.when)+'\u2069':'\u2066'+m.hs+' - '+m.as+'\u2069';
@@ -302,8 +322,11 @@ function renderMatches(){
       (m.ai?'<img src="'+esc(m.ai)+'" alt="" loading="lazy" onerror="this.style.display=\'none\'">':'')+'</div>'+
       '<div class="mvs">'+esc(arTeam(m.hn))+' × '+esc(arTeam(m.an))+'</div>'+
       '<div class="mst">'+st+'</div>';
+    if(dup){a.classList.add('dup');a.removeAttribute('data-nav');a.tabIndex=-1;a.setAttribute('aria-hidden','true')}
     f.appendChild(a)});
-  row.appendChild(f);
+  row.appendChild(f)};
+  mk(false);
+  if(row.scrollWidth>row.clientWidth+30){mk(true);row._loop=true}   // a second copy so the loop has no seam
 }
 
 /* ---------- helpers ---------- */
@@ -1045,7 +1068,7 @@ document.addEventListener('keydown',e=>{
   add([...document.querySelectorAll('#chips .hbtn')]);
   const gridRows={};[...document.querySelectorAll('#siteGrid .tile')].forEach(t=>{const k=Math.round(t.offsetTop/10);(gridRows[k]=gridRows[k]||[]).push(t)});
   Object.keys(gridRows).map(Number).sort((a,b)=>a-b).forEach(k=>add(gridRows[k]));
-  add([...document.querySelectorAll('#matchRow .mcard')]);
+  add([...document.querySelectorAll('#matchRow .mcard:not(.dup)')]);
   add([$('#ab'),$('#up'),$('#bk'),$('#rs'),$('#ar'),$('#st')]);
   add([$('#ver')]);
   let ri=rows.findIndex(row=>row.includes(cur));
@@ -1254,7 +1277,7 @@ const trHalf=r=>{const f=r.querySelector('.tile:not(.dup)'),d=r.querySelector('.
 function trPaused(r){return !!(r._h||r._tt||Date.now()-(r._touch||0)<3500||r.contains(document.activeElement)||$('#modal').classList.contains('open')||document.hidden)}
 function trTick(ts){
   const dt=Math.min(64,ts-(trLast||ts));trLast=ts;trFrame=(trFrame+1)%15;
-  ['#trAr','#trFx'].forEach(id=>{const r=$(id);if(r.hidden||!r._loop)return;
+  ['#trAr','#trFx','#matchRow'].forEach(id=>{const r=$(id);if(r.hidden||!r._loop)return;
     if(trFrame===0){const b=r.getBoundingClientRect();r._vis=!(b.bottom<0||b.top>innerHeight)}   // the position check runs ~4 times a second, not every frame
     if(r._vis===false||trPaused(r)){r._a=null;return}
     if(r._sg==null)r._sg=getComputedStyle(r).direction==='rtl'?-1:1;
@@ -1264,7 +1287,7 @@ function trTick(ts){
     if(r._half>50)r._a%=r._half;
     r.scrollLeft=r._sg*r._a});
   requestAnimationFrame(trTick)}
-['#trAr','#trFx'].forEach(id=>{const r=$(id);
+['#trAr','#trFx','#matchRow'].forEach(id=>{const r=$(id);
   r.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse')r._h=1});r.addEventListener('pointerleave',()=>{r._h=0});
   r.addEventListener('touchstart',()=>{r._tt=1},{passive:true});
   ['touchend','touchcancel'].forEach(ev=>r.addEventListener(ev,()=>{r._tt=0;r._touch=Date.now()},{passive:true}));
