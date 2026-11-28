@@ -237,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٤٠',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
+const VERSION={n:'١٤١',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1494,14 +1494,49 @@ async function trRefresh(force){
   trBusy=true;
   try{
     const src=trSources(),res=[];let i=0;
+    // الصفوف تتملى موقع موقع بدل ما تستنى أبطأ موقع: كل موقع يخلص، كروته تنزل الصفوف على طول
+    const commit=final=>{
+      const per={sar:[],sfr:[],str:[],mar:[],mfr:[]},stats={};
+      res.forEach(([s,l])=>{
+        const c=trAssignCats(l,s);
+        stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
+        ['sar','sfr','str','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
+      // صف رجع فاضي خالص (موقع مارّدش أو اتغيّر): نكمله بالمنطق القديم بدل ما يختفي من الشاشة — في الآخر بس، لما كل المواقع تكون قالت كلمتها
+      if(final){
+        const empty=['sar','sfr','str','mar','mfr'].filter(k=>!per[k].some(a=>a.length));
+        if(empty.length)res.forEach(([s,l])=>{
+          const saved=l.map(x=>x.cat);
+          trAssignCats(l,s,1);
+          empty.forEach(k=>{if(per[k].some(a=>a.length))return;
+            per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})))});
+          l.forEach((x,i)=>{x.cat=saved[i]});
+        });
+      }
+      const list=[],seenU=new Set();
+      for(let n=0;n<14;n++)['sar','sfr','str','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
+        const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
+        list.push(x)}));
+      if(!list.length)return false;
+      const prev=(TR.list||[]);
+      ['sar','sfr','str','mar','mfr'].forEach(k=>{if(list.some(x=>x.cat===k))return;
+        prev.filter(x=>x.cat===k).forEach(x=>{const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);list.push(x)})});
+      // الحفظ الجزئي يفضل «قديم» عشان لو البرنامج اتقفل في نص التحديث، أول فتحة تكمّله على طول
+      TR={at:final?Date.now():Date.now()-40*60e3,list,stats,v:3,ver:VERSION.n};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}
+      trSync();
+      return true;
+    };
     const one=async s=>{
       const out=[];
-      const h=await trGet(s.url);
+      let h=await trGet(s.url);
+      if(!h)h=await trGet(s.url);   // محاولة تانية للرئيسية قبل ما نحكم على الموقع
       if(h)trParse(h,s.url,s).forEach(x=>{x.src='h';out.push(x)});
       // then the site's own catalogue pages, so the rows get its real catalog and not only the homepage highlights
       const cfg=trCatCfg(s),todo=[];
-      if(cfg)cfg.forEach(c=>todo.push({u:new URL(encodeURI(c[0]),s.url).href,ty:c[1],fc:c[2]}));
-      else (h?trSections(h,s.url):[]).forEach(sec=>todo.push({u:sec.u,ty:sec.ty}));
+      // موقع رئيسيته مش بترد: متضيعش دقايق في صفحات أقسامه — غالبًا واقع أو اتنقل
+      if(h){
+        if(cfg)cfg.forEach(c=>todo.push({u:new URL(encodeURI(c[0]),s.url).href,ty:c[1],fc:c[2]}));
+        else trSections(h,s.url).forEach(sec=>todo.push({u:sec.u,ty:sec.ty}));
+      }
       let extra=0,got=0,nexts=0;
       for(const sec of todo){
         if(extra>=5)break;   // كل أقسام الكتالوج اللي عند الموقع، مش أول تلاتة بس
@@ -1523,32 +1558,12 @@ async function trRefresh(force){
       }
       return out;
     };
-    const work=async()=>{while(i<src.length){const s=src[i++];res.push([s,await one(s)])}};
+    const work=async()=>{while(i<src.length){const s=src[i++];res.push([s,await one(s)]);commit(false)}};
     await Promise.all([work(),work()]);   // two sites at a time: the box stays calm while the rows fill
-    const per={sar:[],sfr:[],str:[],mar:[],mfr:[]},stats={};
-    res.forEach(([s,l])=>{
-      const c=trAssignCats(l,s);
-      stats[s.id]=c;   // what this site is strongest in, counted off its own homepage
-      ['sar','sfr','str','mar','mfr'].forEach(k=>per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)}))))});
-    // صف رجع فاضي خالص (موقع مارّدش أو اتغيّر): نكمله بالمنطق القديم بدل ما يختفي من الشاشة
-    const empty=['sar','sfr','str','mar','mfr'].filter(k=>!per[k].some(a=>a.length));
-    if(empty.length)res.forEach(([s,l])=>{
-      const saved=l.map(x=>x.cat);
-      trAssignCats(l,s,1);
-      empty.forEach(k=>{if(per[k].some(a=>a.length))return;
-        per[k].push(l.filter(x=>x.cat===k).slice(0,20).map(x=>Object.assign(x,{sid:s.id,sn:s.name||hostOf(s.url)})))});
-      l.forEach((x,i)=>{x.cat=saved[i]});
-    });
-    const list=[],seenU=new Set();
-    for(let n=0;n<14;n++)['sar','sfr','str','mar','mfr'].forEach(k=>per[k].forEach(a=>{const x=a[n];if(!x)return;
-      const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);   // two cards for one address: once
-      list.push(x)}));
-    if(list.length){const prev=(TR.list||[]);
-      ['sar','sfr','str','mar','mfr'].forEach(k=>{if(list.some(x=>x.cat===k))return;
-        prev.filter(x=>x.cat===k).forEach(x=>{const uu=String(x.u||'').split('?')[0].replace(/\/+$/,'');if(seenU.has(uu))return;seenU.add(uu);list.push(x)})});
-      TR={at:Date.now(),list,stats,v:3,ver:VERSION.n};try{localStorage.setItem(TRK,JSON.stringify(TR))}catch(e){}}
-    else if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
-    else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
+    if(!commit(true)){
+      if(force)toast('مقدرتش أجيب حاجة من المواقع دي');
+      else TR.at=Date.now()-40*60e3;   // nothing came back: try again in ~5 min
+    }
   }catch(e){}
   trBusy=false;
   const f=focusKey();trSync();restoreFocus(f);
