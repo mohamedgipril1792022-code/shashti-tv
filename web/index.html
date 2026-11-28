@@ -237,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣٨',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
+const VERSION={n:'١٣٩',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٥ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -667,7 +667,13 @@ function seriesKey(c){
   return 'a:'+hostOf(c.url)+'|'+t.replace(/[\d٠-٩]+/g,'#').replace(/\s+/g,' ').trim().toLowerCase();
 }
 // the continue row is for series and films: a YouTube video only belongs in it when its title says episode
-const isYtSong=c=>vkey(c.url).indexOf('yt:')===0&&!/حلق|\bep(?:isode)?\.?\s*\d/i.test(String(c.title||''));
+// الأغاني بس هي اللي تتشال من «تكملة المشاهدة»: لازم إشارة موسيقية واضحة في العنوان نفسه.
+// قبل كده كان أي فيديو يوتيوب من غير كلمة «حلقة» يتحسب أغنية، فمسلسل زي «فيفا أطاطا» كان بيختفي.
+const YT_SONG=/(?:^|[\s\-–—|:،])(?:أغنية|اغنية|أغنيه|اغنيه|أغاني|اغاني|مهرجان|ريمكس|remix|lyrics?|كلمات|official\s+(?:music\s+)?video|music\s+video|video\s+clip|كليب|ألبوم|البوم|album|song|موسيقى|موسيقي|instrumental|karaoke|كاريوكي|cover|جينجل|تتر)(?:[\s\-–—|:،.)\]\}"'»]|$)/i;
+const isYtSong=c=>{const u=vkey(c.url);if(u.indexOf('yt:')!==0)return false;
+  const t=String(c.title||'')+' '+String(c.note||'');
+  if(/حلق|\bep(?:isode)?\.?\s*\d|مسلسل|فيلم/i.test(t))return false;   // مسلسل أو فيلم على يوتيوب: يفضل في القائمة
+  return YT_SONG.test(t)};
 function groupOf(c){const k=seriesKey(c);return [...items.values()].filter(o=>o.kind==='cont'&&seriesKey(o)===k).sort((a,b)=>b.lastAt-a.lastAt)}
 function setMany(list){list.forEach(o=>{items.set(o.id,o);if(col){const c=col;cloudWrite(o.id,()=>c.doc(o.id).set(o))}});saveLocal();render()}
 function finishSeries(list){list.forEach(c=>{dismiss(c.url);items.delete(c.id);const h=histOf(c);items.set(h.id,h);if(col){const cc=col;cloudWrite(c.id,()=>cc.doc(c.id).delete());cloudWrite(h.id,()=>cc.doc(h.id).set(h))}});trimHist();saveLocal();render()}
