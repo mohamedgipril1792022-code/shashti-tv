@@ -212,6 +212,8 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
   <div class="gf" id="gf1" hidden></div><div class="row tr" id="c1Row" hidden></div></section>
   <section class="rb" data-rk="sfr"><h2 id="c2H" class="rhead" data-rk="sfr" tabindex="0" role="button" data-nav hidden>🎭 مسلسلات أجنبية<span class="allb">عرض الكل ›</span></h2>
   <div class="gf" id="gf2" hidden></div><div class="row tr" id="c2Row" hidden></div></section>
+  <section class="rb" data-rk="str"><h2 id="c5H" class="rhead" data-rk="str" tabindex="0" role="button" data-nav hidden>🇹🇷 مسلسلات تركية<span class="allb">عرض الكل ›</span></h2>
+  <div class="gf" id="gf5" hidden></div><div class="row tr" id="c5Row" hidden></div></section>
   <section class="rb" data-rk="mar"><h2 id="c3H" class="rhead" data-rk="mar" tabindex="0" role="button" data-nav hidden>🎬 أفلام عربية<span class="allb">عرض الكل ›</span></h2>
   <div class="gf" id="gf3" hidden></div><div class="row tr" id="c3Row" hidden></div></section>
   <section class="rb" data-rk="mfr"><h2 id="c4H" class="rhead" data-rk="mfr" tabindex="0" role="button" data-nav hidden>🍿 أفلام أجنبية<span class="allb">عرض الكل ›</span></h2>
@@ -235,7 +237,7 @@ body::-webkit-scrollbar-thumb{background:#4a272c;border-radius:99px;border:2px s
 
 <script>
 try{if(window.Android&&Android.isPhone&&Android.isPhone())document.documentElement.classList.add('phone')}catch(e){}
-const VERSION={n:'١٣٤',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٤٧ ص'};
+const VERSION={n:'١٣٥',date:'٢٨-١١-٢٠٢٦',created:'السبت ٢٨ نوفمبر ٢٠٢٦ – ٧:٥٠ ص'};
 const LS='shashti-v1';
 let items=new Map();
 let col=null, editMode=false, gfilter='';
@@ -1204,8 +1206,8 @@ function autoBackup(){try{
 }catch(e){}}
 /* ---------- settings: theme + text size ---------- */
 const UIK='shashti-ui';let UI={theme:'dark',zoom:1};try{Object.assign(UI,JSON.parse(localStorage.getItem(UIK)||'{}'))}catch(e){}
-const ROW_LABELS={cont:'▶ تكملة المشاهدة',my:'📺 مسلسلاتك',trend:'🔥 الجديد والترند',sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية',later:'⏳ هتفرج عليه بعدين',visit:'🕘 آخر ما شاهدت',sites:'⭐ مواقعي',matches:'⚽ ماتشات الكورة'};
-const ROW_DEF=['cont','my','trend','sar','sfr','mar','mfr','later','visit','sites','matches'];
+const ROW_LABELS={cont:'▶ تكملة المشاهدة',my:'📺 مسلسلاتك',trend:'🔥 الجديد والترند',sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',str:'🇹🇷 مسلسلات تركية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية',later:'⏳ هتفرج عليه بعدين',visit:'🕘 آخر ما شاهدت',sites:'⭐ مواقعي',matches:'⚽ ماتشات الكورة'};
+const ROW_DEF=['cont','my','trend','sar','sfr','str','mar','mfr','later','visit','sites','matches'];
 function rowOrder(){const o=(UI.rowOrder||[]).filter(k=>ROW_DEF.indexOf(k)>=0);ROW_DEF.forEach(k=>{if(o.indexOf(k)<0)o.push(k)});return o}
 function applyRowOrder(){const m=$('#main');if(!m)return;rowOrder().forEach(k=>{const el=m.querySelector('[data-rk="'+k+'"]');if(el)m.appendChild(el)})}
 function applyUI(){document.documentElement.classList.toggle('light',UI.theme==='light');document.documentElement.classList.toggle('perf',!!UI.perf);document.body.style.zoom=UI.zoom;const m=document.querySelector('meta[name=theme-color]');if(m)m.content=UI.theme==='light'?'#f6f1f1':'#160e10'}
@@ -1321,8 +1323,8 @@ function mySeriesKeys(){const set=new Set();
   return set}
 const trKey=x=>x.t.toLowerCase().replace(/[\u064B-\u0652\u0670]/g,'').replace(/[^\p{L}\p{N}]+/gu,' ').replace(/\s+/g,' ').trim().slice(0,60);   // normalized: the same title written two ways counts once
 /* ---------- the four categories: مسلسلات/أفلام × عربي/أجنبي ---------- */
-const CATS=[['sar','#c1H','#c1Row','#gf1'],['sfr','#c2H','#c2Row','#gf2'],['mar','#c3H','#c3Row','#gf3'],['mfr','#c4H','#c4Row','#gf4']];
-const CAT_T={sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية'};
+const CATS=[['sar','#c1H','#c1Row','#gf1'],['sfr','#c2H','#c2Row','#gf2'],['str','#c5H','#c5Row','#gf5'],['mar','#c3H','#c3Row','#gf3'],['mfr','#c4H','#c4Row','#gf4']];
+const CAT_T={sar:'📺 مسلسلات عربية',sfr:'🎭 مسلسلات أجنبية',str:'🇹🇷 مسلسلات تركية',mar:'🎬 أفلام عربية',mfr:'🍿 أفلام أجنبية'};
 const TR_SERSIG=/مسلسل|مسلسلات|حلق|series|\/tv\/|\/tvshows?\/|\/shows?\/|season|episode|انمي|أنمي/i,TR_MOVSIG=/فيلم|افلام|أفلام|\/movies?\/|\/films?\/|\/film\b/i;
 // series or movie: the link's own path and the section title say it; an episode number settles it
 // '?' = the page said nothing, so the site's own content decides later instead of guessing "movie"
@@ -1422,8 +1424,13 @@ function trAssignCats(l,s){
   let ns=0,nm=0;l.forEach(x=>{if(x.ty==='s')ns++;else if(x.ty==='m')nm++});
   const hint=(s.group||'')+' '+(s.name||'');
   const dom=ns!==nm?(ns>nm?'s':'m'):(/مسلسل|series|دراما/i.test(hint)?'s':(/فيلم|movie|افلام|أفلام/i.test(hint)?'m':'m'));
+  const turkSite=trPref(s,'str');
   const c={};
-  l.forEach(x=>{const ty=(x.ty==='s'||x.ty==='m')?x.ty:dom;x.cat=ty+(x.k==='fx'?'fx':'ar');c[x.cat]=(c[x.cat]||0)+1});
+  l.forEach(x=>{let ty=(x.ty==='s'||x.ty==='m')?x.ty:dom;
+    const turk=turkSite||/تركي|تركى|turkish|torki|\bturk\b/i.test(x.t+' '+(x.u||''));
+    if(turk&&x.ty!=='m')ty='s';   // a Turkish site's unlabeled cards are its series, not its films
+    // Turkish series get their own row; a Turkish film stays under the foreign films
+    x.cat=turk?(ty==='m'?'mfr':'str'):ty+(x.k==='fx'?'fr':'ar');c[x.cat]=(c[x.cat]||0)+1});
   return c;
 }
 let trBusy=false;
@@ -1481,7 +1488,7 @@ function trEligibleList(){
 }
 // sites that lead a category by default (his call). The name or the host has to match, and his own
 // per-site pick still wins over this: ticking a category in a site's settings makes that site lead it.
-const TR_PREF=[[/توب\s*سينما|top\s*-?cinema|topcinema/i,['sfr','mfr']],[/عرب\s*سيد|arab\s*s?eed|arabs?eed/i,['sar','mar']]];
+const TR_PREF=[[/توب\s*سينما|top\s*-?cinema|topcinema/i,['sfr','mfr']],[/عرب\s*سيد|arab\s*s?eed|arabs?eed/i,['sar','mar']],[/توك\s*توك|توك\s*تيك|toc?k\s*-?toc?k|toktok|tiktok/i,['sfr','mfr']],[/شوف\s*تي\s*في|شوف\s*تيفي|شوف\s*تى\s*فى|shoo?f\s*-?tv|shof\s*-?tv/i,['str']]];
 function trPref(s,cat){
   if(!s)return false;
   const h=(s.name||'')+' '+(hostOf(s.url)||'');
